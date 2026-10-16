@@ -1,3 +1,6 @@
+import { InventoryOriginError, validatedStockOrigin, newPhysicalUnitOrigin, assertOriginExpected } from "@/lib/server/inventory-stock-origin";
+import { confirmInventoryCount } from "@/lib/server/inventory-stock-count";
+import { pendingStockCount } from "@/lib/stock-count";
 import { readBillingUnit } from "@/lib/quote-sharing";
 import { readAudienceInput, visibleOnWebFor, type CatalogAudience } from "@/lib/catalog-audience";
 import { randomUUID } from "node:crypto";
@@ -119,6 +122,7 @@ const INVENTORY_ITEM_FIELDS = [
   "categoryId",
   "defaultWarehouseId",
   "defaultLocation",
+  "defaultStockOrigin", "defaultSourceSupplierId",
   "supplierId",
   "purchasedAt",
   "warrantyUntil",
@@ -295,16 +299,18 @@ export async function GET(request: Request) {
       const capacities = await comboCapacitiesForRange({ organizationId, comboIds: [item.id], startsAt, endsAt });
       const capacity = capacities.get(item.id);
       const definition = (await loadComboDefinitions(organizationId, [item.id])).get(item.id);
+      const pending = Boolean(definition?.components.some(pendingStockCount));
       return Response.json({
         availability: {
           inventoryId: item.id,
           name: item.name,
           status: item.status,
           total: capacity?.capacity ?? 0,
+          stockCountStatus: pending ? "PENDING_COUNT" : "CONFIRMED",
           committed: 0,
           maintenance: 0,
-          available: BLOCKED_INVENTORY_STATUSES.includes(item.status) ? 0 : (capacity?.capacity ?? 0),
-          blocked: BLOCKED_INVENTORY_STATUSES.includes(item.status),
+          available: pending || BLOCKED_INVENTORY_STATUSES.includes(item.status) ? 0 : (capacity?.capacity ?? 0),
+          blocked: pending || BLOCKED_INVENTORY_STATUSES.includes(item.status),
           startsAt,
           endsAt,
           conflicts: [],
@@ -342,6 +348,7 @@ export async function GET(request: Request) {
         kind: true,
         status: true,
         quantity: true,
+        stockCountStatus: true,
         incidentHold: true,
         _count: { select: MAINTENANCE_UNITS_SELECT },
       },
@@ -367,7 +374,7 @@ export async function GET(request: Request) {
       const committedNow = rows
         .filter((row) => row.inventoryId === item.id && assignmentIsActiveNow(row, now))
         .reduce((sum, row) => sum + row.quantity, 0);
-      const blocked = BLOCKED_INVENTORY_STATUSES.includes(item.status);
+      const blocked = pendingStockCount(item) || BLOCKED_INVENTORY_STATUSES.includes(item.status);
       const maintenanceNow = maintenanceUnits(item);
       const usable = Math.max(0, item.quantity - maintenanceNow);
       return {
@@ -473,7 +480,7 @@ export async function GET(request: Request) {
     const rows = assignments.filter((assignment) => assignment.inventoryId === item.id);
     const activeNow = rows.filter((row) => assignmentIsActiveNow(row, now));
     const committedNow = activeNow.reduce((sum, row) => sum + row.quantity, 0);
-    const blocked = BLOCKED_INVENTORY_STATUSES.includes(item.status);
+    const blocked = pendingStockCount(item) || BLOCKED_INVENTORY_STATUSES.includes(item.status);
     const maintenanceNow = maintenanceUnits(item);
     const usable = Math.max(0, item.quantity - maintenanceNow);
     const rangeAvailability = range
@@ -525,6 +532,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await requireAdminContext("inventory.write");
   if (!auth.ok) return auth.response;
+  try {
   const { organizationId } = auth.context;
   const body = await readJson(request);
   if (!isJsonObject(body)) return jsonError("Los datos deben ser un objeto JSON.", 400);
@@ -647,6 +655,18 @@ export async function POST(request: Request) {
     return Response.json({ inventory });
   }
 
+  if (kind === "item-confirm-count") {
+    const id = typeof body.id === "string" ? body.id : "";
+    const quantity = typeof body.quantity === "number" ? body.quantity : NaN;
+    if (!id || !Number.isSafeInteger(quantity) || quantity < 0 || quantity > 100_000) return jsonError("Indicá el producto y un conteo entero de 0 a 100.000.", 400);
+    try {
+      const inventory = await db.$transaction((tx) => confirmInventoryCount(tx, auth.context, id, quantity));
+      return Response.json({ inventory });
+    } catch (error) {
+      return jsonError(error instanceof Error ? error.message : "No se pudo confirmar el conteo.", 409);
+    }
+  }
+
   if (kind === "item") {
     const id = typeof body.id === "string" ? body.id : "";
     if (!id) return jsonError("Falta el ítem de inventario.", 400);
@@ -675,6 +695,7 @@ export async function POST(request: Request) {
         billingUnit: true,
         defaultWarehouseId: true,
         defaultLocation: true,
+        defaultStockOrigin: true, defaultSourceSupplierId: true,
         supplierId: true,
         purchasedAt: true,
         warrantyUntil: true,
@@ -692,20 +713,27 @@ export async function POST(request: Request) {
     const trace = await readInventoryTrace(body, { organizationId, currentWarehouseCode: existing.defaultWarehouse?.code, allow: { warehouse: "default" } }, { warehouse: "defaultWarehouseId", location: "defaultLocation" });
     if (!trace.ok) return jsonError(trace.error, trace.status);
     const { location: defaultLocation, ...traceRest } = trace.values;
+    let auditBefore: Record<string, unknown> = existing;
     const inventory = await db.$transaction(async (tx) => {
+      await lockInventoryItems(tx, organizationId, [existing.id]);
+      const fresh = await tx.inventoryItem.findFirstOrThrow({ where: { id: existing.id, organizationId }, omit: { imageData: true } });
+      auditBefore = fresh;
+      const currentOrigin = { origin: fresh.defaultStockOrigin, supplierId: fresh.defaultSourceSupplierId };
+      const origin = await validatedStockOrigin(tx, organizationId, body, "item", currentOrigin);
+      if (origin.changed) assertOriginExpected(body, currentOrigin, origin.value, "item");
       // Categoría + espejo de texto: solo el helper único las escribe.
       const resolved = update.taxonomy ? await resolveInventoryCategory(tx, organizationId, update.taxonomy) : undefined;
       if (resolved === null) return null;
       if (existing.familyId && resolved && resolved.categoryId !== existing.categoryId) return "family-category" as const;
       return tx.inventoryItem.update({
         where: { id: existing.id },
-        data: { ...update.data, ...traceRest, ...(defaultLocation !== undefined ? { defaultLocation } : {}), ...(resolved ? categoryWriteData(resolved) : {}) },
+        data: { ...update.data, ...(origin.changed ? { defaultStockOrigin: origin.value.origin, defaultSourceSupplierId: origin.value.supplierId } : {}), ...traceRest, ...(defaultLocation !== undefined ? { defaultLocation } : {}), ...(resolved ? categoryWriteData(resolved) : {}) },
         omit: { imageData: true },
       });
     });
     if (!inventory) return jsonError("La categoría no existe en esta empresa.", 404);
     if (inventory === "family-category") return jsonError("La categoría de una variante la define su familia: cambiala desde la pestaña «Variantes».", 409);
-    const changes = auditChanges(existing, inventory, INVENTORY_ITEM_FIELDS);
+    const changes = auditChanges(auditBefore, inventory, INVENTORY_ITEM_FIELDS);
     if (changes) {
       await recordAudit({
         context: auth.context,
@@ -750,6 +778,7 @@ export async function POST(request: Request) {
     try {
       unit = await db.$transaction(async (tx) => {
         await lockInventoryItems(tx, organizationId, [item.id]);
+        const origin = await newPhysicalUnitOrigin(tx, organizationId, item.id, body);
         const code = requestedCode || (await nextInventoryUnitCode(tx, organizationId, item.name));
         // Toda unidad nace con depósito: el pedido, el del producto o el principal de la empresa.
         const placement = await resolveUnitPlacement(tx, organizationId, item.id, { warehouseId: trace.values.warehouseId, location: trace.values.location });
@@ -760,6 +789,7 @@ export async function POST(request: Request) {
             inventoryId: item.id,
             code,
             status,
+            ...origin,
             purchaseCost: purchaseCost ?? 0,
             notes: notes || null,
             warehouseId: placement.warehouseId,
@@ -785,7 +815,7 @@ export async function POST(request: Request) {
       entity: "InventoryUnit",
       entityId: unit.id,
       summary: `Agregó la unidad «${unit.code}» a «${item.name}»`,
-      detail: { fields: auditPick(unit, ["code", "status", "purchaseCost", "notes", "warehouseId", "location", "conditionScore", "supplierId"]) },
+      detail: { fields: auditPick(unit, ["code", "stockOrigin", "ownerSupplierId", "status", "purchaseCost", "notes", "warehouseId", "location", "conditionScore", "supplierId"]) },
     });
     return Response.json({ unit }, { status: 201 });
   }
@@ -799,6 +829,7 @@ export async function POST(request: Request) {
         id: true,
         inventoryId: true,
         code: true,
+        stockOrigin: true, ownerSupplierId: true,
         status: true,
         purchaseCost: true,
         notes: true,
@@ -842,9 +873,22 @@ export async function POST(request: Request) {
     }
 
     let unit;
+    let auditBefore: Record<string, unknown> = existing;
     try {
       unit = await db.$transaction(async (tx) => {
         await lockInventoryItems(tx, organizationId, [existing.inventoryId]);
+        const fresh = await tx.inventoryUnit.findFirstOrThrow({ where: { id: existing.id, organizationId } });
+        auditBefore = fresh;
+        const currentOrigin = { origin: fresh.stockOrigin, supplierId: fresh.ownerSupplierId };
+        const origin = await validatedStockOrigin(tx, organizationId, body, "unit", currentOrigin);
+        if (origin.changed) {
+          assertOriginExpected(body, currentOrigin, origin.value, "unit");
+          // Reservations identify a product pool, never a particular physical unit.
+          // Reclassifying its owner while committed would rewrite that pool ambiguously.
+          const committed = await tx.eventInventory.count({ where: { inventoryId: existing.inventoryId, ...committedAssignmentWhere(organizationId) } });
+          if (committed > 0) throw new InventoryOriginError("No se puede cambiar el dueño de una unidad con reservas activas del producto. Liberá o completá esas reservas primero.", 409);
+        }
+        if (origin.changed) Object.assign(data, { stockOrigin: origin.value.origin, ownerSupplierId: origin.value.supplierId });
         await assertUnitsAvailableWithoutIncidents(tx, organizationId, [existing.id], data.status);
         const updated = await tx.inventoryUnit.update({ where: { id: existing.id }, data: { ...data, ...(data.status === "AVAILABLE" ? { incidentCycle: { increment: 1 } } : {}) } });
         // Cambiar el estado cambia la cantidad activa del ítem (issue #112).
@@ -856,7 +900,7 @@ export async function POST(request: Request) {
       if (isUniqueConstraintError(error)) return jsonError("Ese código ya está en uso; probá con otro.", 409);
       throw error;
     }
-    const changes = auditChanges(existing, unit, ["code", "status", "purchaseCost", "notes", "warehouseId", "location", "conditionScore", "supplierId", "purchasedAt", "warrantyUntil"]);
+    const changes = auditChanges(auditBefore, unit, ["code", "stockOrigin", "ownerSupplierId", "status", "purchaseCost", "notes", "warehouseId", "location", "conditionScore", "supplierId", "purchasedAt", "warrantyUntil"]);
     if (changes) {
       await recordAudit({
         context: auth.context,
@@ -895,6 +939,7 @@ export async function POST(request: Request) {
           inventoryId: item.id,
           name: item.name,
           quantity,
+          stockOrigin: "OWNED", ownerSupplierId: null,
           purchaseCost: unitCost ?? 0,
           warehouseId: trace.values.warehouseId,
           location: trace.values.location,
@@ -1226,4 +1271,8 @@ export async function POST(request: Request) {
   }
 
   return jsonError("Operación de inventario desconocida.", 400);
+  } catch (error) {
+    if (error instanceof InventoryOriginError) return jsonError(error.message, error.status);
+    throw error;
+  }
 }

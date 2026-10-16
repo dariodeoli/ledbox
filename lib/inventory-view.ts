@@ -1,3 +1,4 @@
+import { pendingStockCount, type StockCountStatus } from "./stock-count";
 import { effectiveAudience, type CatalogAudience } from "./catalog-audience";
 import type { AdminInventoryAssignmentRow, AdminInventoryAvailabilityNow, AdminInventoryItemRow, AdminInventoryRow, AdminInventoryUnitRow } from "./admin-types";
 
@@ -6,7 +7,7 @@ import type { AdminInventoryAssignmentRow, AdminInventoryAvailabilityNow, AdminI
  * (con unidades y asignaciones) como para la liviana de la pantalla (`?fields=grid`, con los
  * agregados por `groupBy` en `availability`).
  */
-export type InventoryRowLike = Pick<AdminInventoryRow, "id" | "catalogAudience" | "visibleOnWeb"> & {
+export type InventoryRowLike = Pick<AdminInventoryRow, "id" | "catalogAudience" | "visibleOnWeb" | "stockCountStatus"> & {
   combo?: unknown;
   units?: ReadonlyArray<Pick<AdminInventoryUnitRow, "status">>;
   assignments?: AdminInventoryItemRow["assignments"];
@@ -21,11 +22,12 @@ export type InventoryRowLike = Pick<AdminInventoryRow, "id" | "catalogAudience" 
  */
 
 /** Filtro de foco de la lista: las cinco pestañas y los dos que abren los indicadores. */
-export type InventoryFocus = "all" | "combos" | "incidents" | "published" | "hidden" | "free" | "week";
+export type InventoryFocus = "all" | "combos" | "incidents" | "published" | "hidden" | "free" | "week" | "incomplete";
 
 export const INVENTORY_TABS: ReadonlyArray<{ value: InventoryFocus; label: string }> = [
   { value: "all", label: "Todos" },
   { value: "combos", label: "Combos" },
+  { value: "incomplete", label: "Datos por completar" },
   { value: "incidents", label: "Con incidentes" },
   { value: "published", label: "Publicados en tienda" },
   { value: "hidden", label: "Ocultos" },
@@ -126,6 +128,8 @@ export function itemInFocus(item: InventoryRowLike, focus: InventoryFocus, conte
       return isPublished(item);
     case "hidden":
       return !isPublished(item);
+    case "incomplete":
+      return pendingStockCount(item) || Boolean((item.combo as { incomplete?: boolean } | undefined)?.incomplete);
     case "free":
       return item.availability.availableNow > 0;
     case "week": {
@@ -159,7 +163,8 @@ export type StockSummary = {
  * Stock libre / total de una fila. Un combo no tiene unidades propias: su «libre»
  * es lo que se puede armar y no lleva barra. El tono sale del libre real.
  */
-export function stockSummary(item: Pick<InventoryRowLike, "combo" | "availability"> & { quantity: number }, rangeActive: boolean): StockSummary {
+export function stockSummary(item: Pick<InventoryRowLike, "combo" | "availability"> & { quantity: number; stockCountStatus?: StockCountStatus }, rangeActive: boolean): StockSummary {
+  if (pendingStockCount(item)) return { free: null, total: null, percent: null, tone: "warn" };
   const range = item.availability.range ?? null;
   const free = rangeActive ? (range?.available ?? null) : item.availability.availableNow;
   if (item.combo) return { free, total: null, percent: null, tone: free === 0 ? "danger" : "ok" };

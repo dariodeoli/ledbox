@@ -239,8 +239,12 @@ export async function blockersFor(model: TrashModel, id: string, organizationId:
       );
     case "Supplier":
       return pick(
-        await count(tx.supplier.findFirst({ where, select: { _count: { select: { jobs: true, expenses: true, purchaseInvoices: true } } } }) as never),
-        { jobs: "supplierJobs", expenses: "expenses", purchaseInvoices: "purchaseInvoices" },
+        await count(tx.supplier.findFirst({ where, select: { _count: { select: {
+          jobs: true, expenses: true, purchaseInvoices: true,
+          inventoryDefaultSources: { where: { organizationId } },
+          inventoryOwnedUnits: { where: { organizationId } },
+        } } } }) as never),
+        { jobs: "supplierJobs", expenses: "expenses", purchaseInvoices: "purchaseInvoices", inventoryDefaultSources: "inventoryDefaultSources", inventoryOwnedUnits: "inventoryOwnedUnits" },
       );
     case "Promoter":
       return pick(await count(tx.promoter.findFirst({ where, select: { _count: { select: { tasks: true } } } }) as never), { tasks: "tasks" });

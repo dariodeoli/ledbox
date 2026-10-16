@@ -121,6 +121,7 @@ const ITEM_SELECT = {
   sku: true,
   name: true,
   quantity: true,
+  stockCountStatus: true,
   status: true,
   comboIncomplete: true,
   incidentHold: true,
@@ -259,7 +260,7 @@ export async function planEventos(
           }
           const buffers = resolveRentalBuffers(settings, row);
           const available = buildAvailability(
-            { id: row.id, name: row.name, quantity: row.quantity, status: row.status, maintenance: maintenanceUnits(row), buffers },
+            { id: row.id, name: row.name, quantity: row.quantity, stockCountStatus: row.stockCountStatus, status: row.status, maintenance: maintenanceUnits(row), buffers },
             assignments.filter((a) => a.inventoryId === row.id && a.event.id !== existing?.id),
             startsAt,
             endsAt,

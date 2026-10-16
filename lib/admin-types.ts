@@ -1,3 +1,4 @@
+import type { StockOriginValue } from "./inventory-stock-origin";
 /**
  * Tipos del panel: reflejan el contrato real de `/api/admin/*` (handlers en `app/api/admin/`).
  * Se declaran solo los campos que la UI consume; los payloads traen el resto de los escalares.
@@ -1712,6 +1713,9 @@ export function supplierJobBalance(job: { total: number; advance: number; status
 }
 
 export type AdminInventoryRow = {
+  defaultStockOrigin?: StockOriginValue;
+  defaultSourceSupplierId?: string | null;
+  stockCountStatus?: "CONFIRMED" | "PENDING_COUNT";
   /** Archivo organizacional independiente del estado operativo (#161). */
   archivedAt: string | null;
   id: string;
@@ -1788,7 +1792,7 @@ export type AdminInventoryCombo = {
   /** Combos que se pueden armar (ahora o en el rango pedido). */
   capacity: number;
   limiting: { componentId: string; name: string; available: number; perCombo: number } | null;
-  components: Array<{ componentId: string; name: string; category: string; quantity: number; available: number; canMake: number; status: string }>;
+  components: Array<{ componentId: string; name: string; category: string; quantity: number; available: number; canMake: number; status: string; stockCountStatus?: "CONFIRMED" | "PENDING_COUNT" }>;
   /** Juego sin piezas cargadas: no se puede reservar hasta completarlo. */
   incomplete?: boolean;
 };
@@ -1804,6 +1808,7 @@ export type AdminInventoryAssignmentRow = AdminEventAssignmentMovement & {
 };
 
 export type AdminInventoryAvailability = {
+  stockCountStatus?: "CONFIRMED" | "PENDING_COUNT";
   inventoryId: string;
   name: string;
   status: string;
@@ -1825,6 +1830,7 @@ export type AdminInventoryAvailability = {
 
 /** Artículo del inventario vinculado a un ítem del presupuesto (issue #18). */
 export type AdminInventoryLink = {
+  stockCountStatus?: "CONFIRMED" | "PENDING_COUNT";
   imageUrl?: string | null;
   imageMime?: string | null;
   updatedAt?: string;
@@ -1891,6 +1897,8 @@ export type InventoryUnitStatusValue = (typeof INVENTORY_UNIT_STATUSES)[number];
 
 /** Unidad física del ítem, tal como la sirve `/api/admin/inventory` (issue #112). */
 export type AdminInventoryUnitRow = {
+  stockOrigin?: StockOriginValue;
+  ownerSupplierId?: string | null;
   id: string;
   /** Código de inventario único por empresa (`KIO-01`), editable. */
   code: string;

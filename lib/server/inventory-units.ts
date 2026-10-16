@@ -1,3 +1,5 @@
+import { InventoryOriginError, newPhysicalUnitOrigin } from "./inventory-stock-origin";
+import type { StockOriginValue } from "../inventory-stock-origin";
 import { randomUUID } from "node:crypto";
 import type { Prisma, InventoryUnitStatus } from "@prisma/client";
 import { INVENTORY_UNIT_STATUSES } from "@/lib/admin-types";
@@ -88,6 +90,8 @@ export async function nextInventoryUnitCode(
 
 /** Datos opcionales de una unidad nueva (depósito, ubicación, condición, proveedor, compra, garantía y costo). */
 export type NewUnitDetails = {
+  stockOrigin?: StockOriginValue;
+  ownerSupplierId?: string | null;
   /** Depósito activo ya validado contra la empresa; sin él, el del producto o el principal. */
   warehouseId?: string | null;
   location?: string | null;
@@ -130,8 +134,11 @@ export async function createInventoryUnits(
   tx: Prisma.TransactionClient,
   options: { organizationId: string; inventoryId: string; name: string; quantity: number } & NewUnitDetails,
 ): Promise<number> {
+  if (!Number.isSafeInteger(options.quantity) || options.quantity < 0) throw new InventoryOriginError("La cantidad física debe ser un entero mayor o igual a cero.");
+  const quantity = options.quantity;
+  if (quantity === 0) return 0;
   await lockInventoryItems(tx, options.organizationId, [options.inventoryId]);
-  const quantity = Number.isInteger(options.quantity) && options.quantity > 0 ? options.quantity : 1;
+  const origin = await newPhysicalUnitOrigin(tx, options.organizationId, options.inventoryId, options);
   const placement = await resolveUnitPlacement(tx, options.organizationId, options.inventoryId, options);
   for (let index = 0; index < quantity; index += 1) {
     const code = await nextInventoryUnitCode(tx, options.organizationId, options.name);
@@ -142,6 +149,7 @@ export async function createInventoryUnits(
         inventoryId: options.inventoryId,
         code,
         status: "AVAILABLE",
+        ...origin,
         purchaseCost: options.purchaseCost ?? 0,
         notes: null,
         warehouseId: placement.warehouseId,

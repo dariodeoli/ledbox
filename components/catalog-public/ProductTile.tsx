@@ -72,7 +72,7 @@ export function ProductTile({ item, specs, isPackage, showPrices, perUnit, step,
         <p className="cp-tile-meta">{item.sku ? skuLabel(item.sku) : "Sin código"} · {isPackage ? "Juego" : item.category.split("›")[0].trim()}</p>
         <h4 className="cp-tile-name">{item.name}</h4>
         {datum ? <p className="cp-tile-datum" data-testid={pieces ? "catalog-pieces" : "catalog-dimensions"}>{datum}</p> : null}
-        {item.availability && !low ? <p className="cp-tile-avail" data-tone={item.availability}>{AVAILABILITY_HINT_LABEL[item.availability as AvailabilityHint]}</p> : null}
+        {item.availability && !low ? <p className="cp-tile-avail" data-tone={item.availability}>{item.stockCountStatus === "PENDING_COUNT" ? "Consultar disponibilidad · pendiente de conteo" : AVAILABILITY_HINT_LABEL[item.availability as AvailabilityHint]}</p> : null}
         {saving ? (
           <p className="cp-tile-sub" data-testid="catalog-package"><strong className="cp-tile-save" data-testid="catalog-saving">Ahorrás {formatGs(saving.savings)}</strong> · Por separado <s>{formatGs(saving.unitSum)}</s></p>
         ) : tierHint ? (

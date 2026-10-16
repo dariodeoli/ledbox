@@ -1,5 +1,18 @@
 # Guía reutilizable para preparar e importar empresas en LedBox
 
+## Contrato actual del candidato2.1.137
+
+La evidencia histórica de abajo se conserva como tal. Para nuevas cargas usar [catalogo-ejemplo.json](ejemplos/catalogo-ejemplo.json), que contiene datos ficticios y no debe aplicarse sin reemplazarlos.
+
+- Stock físico nuevo: `cantidad: 0` es cero confirmado; null/ausente es pendiente de conteo, sin unidades ficticias. En existentes, null conserva su conteo. Importar menos nunca elimina unidades.
+- El resultado de estados informa los cambios realmente guardados; reservas posteriores al preview pueden impedir parte del objetivo. El JSON de preview se serializa con los nombres externos antes de aplicar: mantenimiento, tarifas y origen deben sobrevivir ese recorrido.
+- Crear sólo nuevos conserva fichas existentes, tarifas, unidades, fotos y metadata existente de categorías/colecciones. No equivale todavía a actualización selectiva por campo.
+- `deposito` y `ubicacion` se aplican a unidades nuevas; altas físicas cero/null conservan esos defaults para un futuro conteo. Un mismo producto repartido entre depósitos se administra por unidades/movimientos, no duplicando el código en el catálogo.
+- Propio, consignado físico y alquiler externo son conceptos separados del proveedor de compra y del conteo. Históricos sin origen no se reclasifican automáticamente; defaults sólo se copian a unidades nuevas.
+- El reporte «Unidades por depósito» identifica unidad, estado, depósito, ubicación y dueño. No es un respaldo restaurable completo de empresa; #246 sigue pendiente.
+- Convertir una unidad a combo no puede descartar reservas, historial ni datos propios de sus unidades (incluido depósito/propietario). La vista previa y el escritor comparten esta protección. Los casos que requieren conservar esas unidades necesitan resolución explícita y siguen bajo #249.
+
+
 Basada en la carga real de La Vajilla Alquileres, EventOS v2.1.121, 15/10/2026. Distingue requisitos de preparación, comportamiento observado y funciones aún no probadas.
 
 > Nota del equipo: las secciones marcadas «Comportamiento v2.1.121» describen lo observado en esa versión. Los arreglos posteriores (stock sin contar, juego incompleto, precio a consultar) se documentan en «Cambios desde v2.1.121» al final.
@@ -165,11 +178,11 @@ Tres campos enteros ≥ 0 por producto: `en_mantenimiento`, `danadas` y `perdida
 | Combo con composición completa | null | La disponibilidad depende de sus componentes. |
 | Juego con composición incompleta | null | componentes: []; anotar piezas faltantes. |
 
-Cambio posterior: **cantidad null sigue creando 1 unidad por defecto**; es una decisión del dueño y no cambió.
+Cambio #245: **cantidad null/ausente en un producto nuevo queda Pendiente conteo y no crea unidades; cantidad0 es cero confirmado**. En productos existentes, null conserva el conteo y las unidades.
 
 No confundir «capacidad 8 personas», «incluye 8 sillas» y «stock de 8 juegos». No poner 1, 0 ni un número grande para rellenar stock desconocido.
 
-Comportamiento v2.1.121: cantidad null creaba 1 unidad por defecto (en La Vajilla, 304 productos; el panel mostró 1833 unidades que no acreditan existencias reales). El dueño decidió conservarlas hasta el conteo, y ese comportamiento se mantiene.
+Comportamiento v2.1.121: cantidad null creaba 1 unidad por defecto (en La Vajilla, 304 productos; el panel mostró 1833 unidades que no acreditan existencias reales). Las unidades históricas se conservan hasta revisión explícita; la migración #245 no las borra ni las reclasifica. Las altas nuevas ya no fabrican esa unidad por defecto.
 
 ## 6. Precios y moneda
 

@@ -11,7 +11,7 @@ import { AdminImageBox } from "../AdminImageBox";
 
 /** Vínculo listo para guardar: solo los campos que el API acepta y dibuja. */
 function inventoryLinkOf(item: AdminInventoryItemRow): AdminInventoryLink {
-  return { id: item.id, name: item.name, sku: item.sku, category: item.category, quantity: item.quantity, status: item.status, imageUrl: item.imageUrl, listPrice: item.listPrice, priceTiers: (item.priceTiers ?? []).filter((tier) => tier.audience === "RETAIL"), _count: { components: item.combo ? item.combo.components.length : 0 }, billingUnit: item.billingUnit };
+  return { stockCountStatus: item.stockCountStatus, id: item.id, name: item.name, sku: item.sku, category: item.category, quantity: item.quantity, status: item.status, imageUrl: item.imageUrl, listPrice: item.listPrice, priceTiers: (item.priceTiers ?? []).filter((tier) => tier.audience === "RETAIL"), _count: { components: item.combo ? item.combo.components.length : 0 }, billingUnit: item.billingUnit };
 }
 
 /**
@@ -79,8 +79,8 @@ export function InventoryLinkPicker({
             <strong>{selected.name}</strong>
             <small className="admin-cell-sub">
               {" "}
-              · {selected.category}{selectedRow?.combo ? " · combo" : ` · ${formatNumber(selected.quantity)} unidades`}
-              {selectedFree !== null
+              · {selected.category}{selectedRow?.stockCountStatus === "PENDING_COUNT" ? " · Pendiente conteo" : selectedRow?.combo ? " · combo" : ` · ${formatNumber(selected.quantity)} unidades`}
+              {selectedRow?.stockCountStatus !== "PENDING_COUNT" && selectedFree !== null
                 ? selectedRow?.combo
                   ? ` · ${comboCapacityLabel(selectedFree).toLowerCase()} ${range ? "en el rango" : "ahora"}`
                   : ` · ${inventoryAvailabilityLabel(selectedFree)} ${range ? "en el rango" : "ahora"}`
@@ -116,7 +116,7 @@ export function InventoryLinkPicker({
               <small className="admin-cell-sub"> · {item.combo ? "Combo · " : ""}{item.category}{item.sku ? ` · ${item.sku}` : ""}</small>
             </span>
             <span className="admin-link-free" data-tone={blocked || available === 0 ? "warn" : undefined}>
-              {blocked
+              {item.stockCountStatus === "PENDING_COUNT" ? "Pendiente conteo" : blocked
                 ? inventoryStatusLabel(item.status)
                 : item.combo
                   ? `${comboCapacityLabel(available)} ${range ? "en el rango" : "ahora"}`

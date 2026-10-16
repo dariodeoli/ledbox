@@ -23,12 +23,13 @@ import {
  * visible; crear una gemela con otro nombre rompería la `key` única, y dejar el producto en una
  * categoría archivada la haría desaparecer de los selectores sin que nadie lo note.
  *
+ * CREATE_ONLY usa preserveExisting: no reactiva archivadas ni modifica sus datos.
  * Todo va acotado por empresa: un id ajeno no existe (404 para quien llama).
  */
 
 type Tx = Prisma.TransactionClient;
 
-export type ResolvedCategory = { categoryId: string; text: string; parentName: string; childName: string | null };
+export type ResolvedCategory = { categoryId: string; text: string; parentName: string; childName: string | null; created?: boolean };
 
 export type ResolveCategoryInput = {
   /** Categoría existente por id (se valida contra la empresa). */
@@ -52,8 +53,14 @@ async function reactivate<T extends { id: string; parentId: string | null; archi
 }
 
 /** Busca o crea una categoría por `key` (sin pisarse con otro proceso: ON CONFLICT DO NOTHING). Una archivada se reactiva. */
-async function findOrCreate(tx: Tx, organizationId: string, name: string, parent: { id: string; name: string } | null) {
+async function findOrCreate(tx: Tx, organizationId: string, name: string, parent: { id: string; name: string; archivedAt?: Date | null } | null, preserveExisting = false) {
   const key = parent ? categoryPathKey(parent.name, name) : categoryKey(name);
+  if (preserveExisting) {
+    const inserted = await tx.inventoryCategory.createMany({ data: [{ id: `cat_${randomUUID()}`, organizationId, name, parentId: parent?.id ?? null, key, archivedAt: parent?.archivedAt ?? null }], skipDuplicates: true });
+    await tx.$queryRaw`SELECT "id" FROM "InventoryCategory" WHERE "organizationId" = ${organizationId} AND "key" = ${key} FOR KEY SHARE`;
+    const row = await tx.inventoryCategory.findFirstOrThrow({ where: { organizationId, key } });
+    return { ...row, created: inserted.count > 0 };
+  }
   const existing = await tx.inventoryCategory.findFirst({ where: { organizationId, key } });
   if (existing) return reactivate(tx, organizationId, existing);
   await tx.inventoryCategory.createMany({
@@ -64,19 +71,19 @@ async function findOrCreate(tx: Tx, organizationId: string, name: string, parent
 }
 
 /** Resuelve (o crea) la categoría de un producto y devuelve el id y el texto espejo. `null` = el id no es de esta empresa. */
-export async function resolveInventoryCategory(tx: Tx, organizationId: string, input: ResolveCategoryInput): Promise<ResolvedCategory | null> {
+export async function resolveInventoryCategory(tx: Tx, organizationId: string, input: ResolveCategoryInput, options: { preserveExisting?: boolean } = {}): Promise<ResolvedCategory | null> {
   if (input.categoryId) {
     const found = await tx.inventoryCategory.findFirst({ where: { id: input.categoryId, organizationId }, include: { parent: true } });
     if (!found) return null;
-    await reactivate(tx, organizationId, found);
+    if (!options.preserveExisting) await reactivate(tx, organizationId, found);
     const parentName = found.parent ? found.parent.name : found.name;
     const childName = found.parent ? found.name : null;
     return { categoryId: found.id, text: categoryLabel(parentName, childName), parentName, childName };
   }
   const path = parseCategoryInput(input.category, input.subcategory);
-  const parent = await findOrCreate(tx, organizationId, path.parent, null);
-  const leaf = path.child ? await findOrCreate(tx, organizationId, path.child, parent) : parent;
-  return { categoryId: leaf.id, text: categoryLabel(parent.name, path.child ? leaf.name : null), parentName: parent.name, childName: path.child ? leaf.name : null };
+  const parent = await findOrCreate(tx, organizationId, path.parent, null, options.preserveExisting);
+  const leaf = path.child ? await findOrCreate(tx, organizationId, path.child, parent, options.preserveExisting) : parent;
+  return { categoryId: leaf.id, text: categoryLabel(parent.name, path.child ? leaf.name : null), parentName: parent.name, childName: path.child ? leaf.name : null, ...(options.preserveExisting ? { created: "created" in leaf && Boolean(leaf.created) } : {}) };
 }
 
 /** Datos de `InventoryItem` que escribe el helper: `categoryId` + espejo `category`. */

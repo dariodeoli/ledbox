@@ -121,7 +121,7 @@ Reglas:
 3. "deposito" y "ubicacion": dejalos en null salvo que el catálogo diga dónde se guarda el producto ("deposito" es el código del depósito, por ejemplo "D1"; "ubicacion" es estante y nivel, por ejemplo "E3-B2").
 4. "tipo": "unidad" para un producto suelto; "juego" para un conjunto armado con otros productos del catálogo (ej. un living con sofá y mesas).
 5. Juegos y componentes: un juego lleva en "componentes" la lista { "codigo", "cantidad" } de los productos que lo forman. Cada código de componente tiene que existir también como producto en el catálogo. Un juego NO puede ser componente de otro juego. Una unidad lleva "componentes": [].
-6. "cantidad": entero con el stock si el catálogo lo dice; si no, null. En los juegos va null (la capacidad sale de los componentes).
+6. "cantidad": entero de0 o más con el stock si el catálogo lo dice;0 sólo si está confirmado sin existencias. Si no se conoce, null (Pendiente conteo, no crea unidades). En los juegos va null (la capacidad sale de los componentes).
 7. "precio": guaraníes (PYG) como número entero, sin puntos, sin "Gs" y sin decimales (660000, no "660.000"). Si el catálogo no trae precio, null. Nunca conviertas otras monedas: dejá null y anotalo en "dudas".
 8. "cobro": "dia" (precio por día de alquiler) salvo que el catálogo diga que el precio es total por evento (entonces "evento").
 8b. "precios_dias": solo si el catálogo trae un precio especial por cantidad de días (ej. "5 días por 300.000"): lista de { "desde_dias": 5, "modo": "total", "precio": 300000 }. "modo": "dia" si el precio es por cada día, "total" si es el total del período. Si no hay, [] o null.
@@ -166,7 +166,7 @@ export const IMPORT_MODULES: Readonly<Record<ImportModuleId, ImportModule>> = {
     instructions: [
       "Completá una fila por producto, debajo de la fila de ejemplo (podés borrarla).",
       "No cambies los encabezados ni el orden de las columnas.",
-      "Mismo código que un producto ya cargado = se actualiza; un código nuevo = se crea.",
+      "Un código nuevo se crea. Los existentes se conservan con «Crear sólo nuevos» o se actualizan si elegís «Crear y actualizar».",
       "Categoría y subcategoría van en columnas separadas (o juntas en «categoria» como «Vajilla / Copas»). Si no existen, se crean; si ya existen, se usan sin duplicar.",
       "Depósito (código, por ejemplo D1) y ubicación (por ejemplo E3-B2) son opcionales: sin ellos las unidades nuevas van al depósito principal.",
       "Los precios van en guaraníes, números enteros, sin símbolos.",

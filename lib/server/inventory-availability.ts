@@ -1,3 +1,4 @@
+import { pendingStockCount, PENDING_STOCK_MESSAGE, type StockCountStatus } from "../stock-count";
 import { randomUUID } from "node:crypto";
 import { Prisma, type InventoryStatus, type InventoryUnitStatus } from "@prisma/client";
 import { db } from "./db";
@@ -83,6 +84,7 @@ export type AssignmentRecord = {
 
 /** Ítem mínimo para calcular disponibilidad (no hace falta la fila completa). */
 export type AvailabilityItem = {
+  stockCountStatus?: StockCountStatus;
   id: string;
   name: string;
   quantity: number;
@@ -103,6 +105,7 @@ export type AvailabilityConflict = {
 };
 
 export type RangeAvailability = {
+  stockCountStatus?: StockCountStatus;
   inventoryId: string;
   name: string;
   status: InventoryStatus;
@@ -450,7 +453,7 @@ export function buildAvailability(
       };
     });
   const committed = conflicts.reduce((sum, conflict) => sum + conflict.quantity, 0);
-  const blocked = BLOCKED_INVENTORY_STATUSES.includes(item.status);
+  const blocked = pendingStockCount(item) || BLOCKED_INVENTORY_STATUSES.includes(item.status);
   // El stock libre descuenta las unidades en mantenimiento (issue #112): no se
   // pueden asignar aunque el ítem esté disponible.
   const usable = Math.max(0, item.quantity - item.maintenance);
@@ -459,6 +462,7 @@ export function buildAvailability(
     name: item.name,
     status: item.status,
     total: item.quantity,
+    stockCountStatus: item.stockCountStatus ?? "CONFIRMED",
     committed,
     maintenance: item.maintenance,
     available: blocked ? 0 : Math.max(0, usable - committed),
@@ -479,7 +483,11 @@ export async function availabilityForRange(options: {
   client?: AvailabilityClient;
 }): Promise<RangeAvailability> {
   const buffers = options.item.buffers ?? resolveRentalBuffers(await loadRentalSettings(options.organizationId, options.client), options.item as { bufferBeforeMin?: number | null; bufferAfterMin?: number | null });
-  const item = { ...options.item, buffers };
+  // Minimal selectors from old callers must not silently erase count knowledge.
+  const count = options.item.stockCountStatus === undefined
+    ? await (options.client ?? db).inventoryItem.findFirst({ where: { id: options.item.id, organizationId: options.organizationId }, select: { stockCountStatus: true } })
+    : null;
+  const item = { ...options.item, stockCountStatus: options.item.stockCountStatus ?? count?.stockCountStatus, buffers };
   const rows = await loadAssignments(item.id, options.organizationId, options.excludeId, options.client, {
     startsAt: options.startsAt, endsAt: options.endsAt, bufferMinutes: item.buffers.beforeMin + item.buffers.afterMin,
   });
@@ -669,6 +677,7 @@ export async function commitInventoryAssignment(options: {
       ]);
       if (!event) return { ok: false, reason: "event-missing" } as const;
       if (!item) return { ok: false, reason: "item-missing" } as const;
+      if (pendingStockCount(item)) return { ok: false, reason: "conflict", message: PENDING_STOCK_MESSAGE } as const;
       if (BLOCKED_INVENTORY_STATUSES.includes(item.status)) {
         return { ok: false, reason: "blocked", item: { id: item.id, name: item.name, status: item.status } } as const;
       }
@@ -791,6 +800,7 @@ export function insufficientMessage(result: Extract<CommitAssignmentResult, { re
     ? ` En el rango: ${availability.conflicts.map((conflict) => `${conflict.eventName} (${conflict.quantity})`).join(", ")}.`
     : "";
   const where = result.open ? "sin fechas definidas (se toma como ocupado siempre)" : `entre ${rangeLabel(availability.startsAt, availability.endsAt)}`;
+  if (availability.stockCountStatus === "PENDING_COUNT") return PENDING_STOCK_MESSAGE;
   return `Sin disponibilidad: pediste ${result.quantity} y hay ${availability.available} de ${availability.total} libres ${where}.${detail}`;
 }
 
@@ -1326,6 +1336,7 @@ export async function reserveBudgetInventory(options: {
                 category: true,
                 categoryId: true,
                 quantity: true,
+                stockCountStatus: true,
                 status: true,
                 incidentHold: true,
                 _count: { select: { ...MAINTENANCE_UNITS_SELECT, components: true } },

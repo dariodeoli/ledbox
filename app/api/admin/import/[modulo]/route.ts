@@ -4,7 +4,7 @@ import { jsonError } from "@/lib/server/http";
 import { rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { canImportCatalog } from "@/lib/admin-policy";
-import { CATALOG_LIMITS, normalizeCatalog, parseCatalogJson, type CatalogCategory, type CatalogCollection, type CatalogProduct, type ImportProblem } from "@/lib/import-catalog";
+import { CATALOG_LIMITS, catalogProductForJson, normalizeCatalog, parseCatalogJson, type CatalogCategory, type CatalogCollection, type CatalogProduct, type ImportProblem } from "@/lib/import-catalog";
 import { claimImportLote, readBodyLimited, settleImportLote } from "@/lib/server/import-lote";
 import { importModule, type ImportModule } from "@/lib/import-modules";
 import { readSheetFile, templateCsv, templateXlsx } from "@/lib/server/import-tabular";
@@ -163,6 +163,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
   // Eventos con productos: validación y aplicación propias (lib/server/import-eventos*.ts).
   if (module.id === "eventos") return importarEventos(module, context, form, accion);
 
+  const modeRaw = textOf(form, "modo");
+  if (modeRaw && modeRaw !== "CREATE_ONLY" && modeRaw !== "UPSERT") return jsonError("Elegí crear sólo nuevos o crear y actualizar.", 400);
+  const importMode = modeRaw === "CREATE_ONLY" ? "CREATE_ONLY" as const : "UPSERT" as const;
+
   const source = await readSource(module, form, accion, context);
   if (!source.ok) return source.response;
 
@@ -182,12 +186,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
       throw error;
     }
   }
-  const input: ImportInput = { products: source.products, categories: source.categories, collections: source.collections, parseProblems: source.problems, photos, photoProblems };
+  const input: ImportInput = { products: source.products, categories: source.categories, collections: source.collections, parseProblems: source.problems, photos, photoProblems, importMode };
 
   if (accion === "preview") {
     const plan = await previewCatalog(organizationId, input);
     return Response.json({
-      catalogo: { empresa: source.empresa, moneda: "PYG", productos: source.products, ...(source.categories.length ? { categorias: source.categories.map((category) => ({ nombre: category.subcategoria ? `${category.categoria} / ${category.subcategoria}` : category.categoria, foto: category.foto, orden: category.orden })) } : {}), ...(source.collections.length ? { colecciones: source.collections.map((collection) => ({ nombre: collection.nombre, descripcion: collection.descripcion, foto: collection.foto, orden: collection.orden })) } : {}) },
+      importMode,
+      catalogo: { empresa: source.empresa, moneda: "PYG", productos: source.products.map(catalogProductForJson), ...(source.categories.length ? { categorias: source.categories.map((category) => ({ nombre: category.subcategoria ? `${category.categoria} / ${category.subcategoria}` : category.categoria, foto: category.foto, orden: category.orden })) } : {}), ...(source.collections.length ? { colecciones: source.collections.map((collection) => ({ nombre: collection.nombre, descripcion: collection.descripcion, foto: collection.foto, orden: collection.orden })) } : {}) },
       resumen: plan.summary,
       problemas: plan.problems,
       estados:
@@ -212,7 +217,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
         codigo: item.product.codigo,
         nombre: item.product.nombre,
         accion: item.accion,
-        detalle: [
+        conservado: input.importMode === "CREATE_ONLY" && Boolean(item.existingId) && item.accion === "omitir",
+        esCombo: item.esCombo,
+        stockCountStatus: item.stockCountStatus,
+        countBefore: item.countBefore,
+        countAfter: item.countAfter,
+        detalle: input.importMode === "CREATE_ONLY" && item.existingId && item.accion === "omitir" ? "Sin cambios" : [
           item.incompleto ? "Juego incompleto (sin piezas)" : item.esCombo ? `Juego de ${item.product.componentes.length} componente${item.product.componentes.length === 1 ? "" : "s"}` : "Unidad",
           item.convertir ? "unidad que pasa a juego" : null,
           item.product.precio ? `Gs ${item.product.precio.toLocaleString("es-PY")}` : "precio a consultar",

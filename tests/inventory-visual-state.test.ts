@@ -25,6 +25,7 @@ test("cada fila del mapa tiene un caso real: estado, tono e ícono", () => {
   const cases: Array<[string, InventoryStateInput, string, string, string]> = [
     ["archived", base({ archivedAt: "2026-10-01T00:00:00Z" }), "neutral", "archive", "Archivado"],
     ["out-of-service", base({ status: "MAINTENANCE" }), "info", "wrench", "Fuera de servicio"],
+    ["pending-count", base({ stockCountStatus: "PENDING_COUNT", quantity: 0, availability: { availableNow: 0 } }), "warn", "inventory", "Pendiente conteo"],
     ["overdue", base({ availability: { overduePending: 3, availableNow: 0 } }), "danger", "alert", "Vencida"],
     ["rented", base({ availability: { availableNow: 0, committedNow: 40 } }), "danger", "truck", "Alquilado"],
     ["damaged", base({ availability: { availableNow: 0, unitsByStatus: { DAMAGED: 5, AVAILABLE: 35 } } }), "warn", "alert", "Dañado"],
@@ -111,7 +112,7 @@ test("el filtro de estado usa las claves del mapa y «reservado»", () => {
   assert.equal(inventoryStateMatches(rented, "ALL"), true);
   assert.deepEqual(
     INVENTORY_STATE_FILTER_OPTIONS.map((option) => option.value),
-    ["archived", "out-of-service", "overdue", "rented", "damaged", "maintenance", "available", "reserved"],
+    ["archived", "out-of-service", "pending-count", "overdue", "rented", "damaged", "maintenance", "available", "reserved"],
   );
 });
 

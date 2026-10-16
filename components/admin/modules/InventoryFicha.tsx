@@ -1,4 +1,7 @@
 "use client";
+import { InventoryOriginFields } from "./InventoryOriginFields";
+import { STOCK_ORIGIN_LABELS, type StockOrigin } from "@/lib/inventory-stock-origin";
+import { InventoryCountPanel } from "./InventoryCountPanel";
 
 import { tierLabel, tierPreview, previewDays, tiersForAudience, type PriceTier } from "@/lib/price-tiers";
 import { useEffect, useId, useMemo, useState } from "react";
@@ -121,6 +124,8 @@ export type InventoryRangeControls = {
 
 /** Formulario de una unidad: código, estado, costo, notas y, desde el rediseño E1, depósito, ubicación, condición y compra. */
 const EMPTY_UNIT_FORM = {
+  stockOrigin: "",
+  ownerSupplierId: "",
   code: "",
   status: "AVAILABLE",
   purchaseCost: "",
@@ -327,7 +332,7 @@ export function InventoryFicha({
   /** Alta inline sin abandonar la ficha ni los cambios pendientes del producto. */
   function addInventoryUnit() {
     setUnitDialog(null);
-    setUnitForm({ ...EMPTY_UNIT_FORM, warehouseId: item.defaultWarehouseId ?? "", location: item.defaultLocation ?? "" });
+    setUnitForm({ ...EMPTY_UNIT_FORM, stockOrigin: item.defaultStockOrigin === "EXTERNAL_RENTAL" ? "" : item.defaultStockOrigin ?? "", ownerSupplierId: item.defaultStockOrigin === "CONSIGNED" ? item.defaultSourceSupplierId ?? "" : "", warehouseId: item.defaultWarehouseId ?? "", location: item.defaultLocation ?? "" });
     setUnitDialogError("");
     setUnitEditorOpen(true);
   }
@@ -355,6 +360,8 @@ export function InventoryFicha({
     setUnitEditorOpen(true);
     setUnitForm({
       code: unit.code,
+      stockOrigin: unit.stockOrigin ?? "",
+      ownerSupplierId: unit.ownerSupplierId ?? "",
       status: unit.status,
       purchaseCost: (unit.purchaseCost ?? 0) > 0 ? String(unit.purchaseCost) : "",
       notes: unit.notes ?? "",
@@ -388,6 +395,9 @@ export function InventoryFicha({
       ...(unitDialog ? { id: unitDialog.id } : { inventoryId: item.id }),
       ...(code ? { code } : {}),
       status: unitForm.status,
+      stockOrigin: unitForm.stockOrigin || null,
+      ownerSupplierId: unitForm.ownerSupplierId || null,
+      ...(unitDialog ? { expectedStockOrigin: unitDialog.stockOrigin ?? null, expectedOwnerSupplierId: unitDialog.ownerSupplierId ?? null } : {}),
       purchaseCost: cost ?? 0,
       notes: unitForm.notes,
       // Depósito (siempre tiene uno), ubicación, condición, proveedor y fechas: vacío en una unidad que se edita = quitar.
@@ -537,7 +547,7 @@ export function InventoryFicha({
               ) : (
                 <>
                   <div>
-                    <dt>Unidades</dt>
+                    <dt>{item.stockCountStatus === "PENDING_COUNT" ? "Unidades registradas · total pendiente" : "Unidades"}</dt>
                     <dd>{formatNumber(item.quantity)}</dd>
                   </div>
                   <div>
@@ -572,6 +582,7 @@ export function InventoryFicha({
       <TabPanel active={tab === "datos"} id={panelId("datos")} tab={tabId("datos")}>
 <AdminDialogSection title="Datos" stack>
         <ProductDataSection item={item} taxonomy={taxonomy} />
+        {item.stockCountStatus === "PENDING_COUNT" && !isCombo ? <InventoryCountPanel key={item.id} id={item.id} registered={item.quantity} writable={writable} onChanged={onChanged} /> : null}
       </AdminDialogSection>
       <ProductStorefrontPanel itemId={item.id} name={item.name} mainImageUrl={item.imageUrl ?? null} writable={writable} onChanged={onChanged} />
 </TabPanel>
@@ -634,10 +645,10 @@ export function InventoryFicha({
           ) : (
             <>
               <AdminNote tone={rangeAvailability && rangeAvailability.available === 0 ? "error" : undefined}>
-                {rangeAvailability
+                {rangeAvailability?.stockCountStatus === "PENDING_COUNT" ? "Pendiente conteo: no se puede prometer disponibilidad hasta confirmar las unidades." : rangeAvailability
                   ? `${inventoryAvailabilityLabel(rangeAvailability.available, "free", true)} de ${formatNumber(rangeAvailability.total)} entre ${dayRangeLabel(from, to)}.`
                   : "Sin datos de disponibilidad para el rango."}
-                {rangeAvailability?.blocked
+                {rangeAvailability?.blocked && rangeAvailability.stockCountStatus !== "PENDING_COUNT"
                   ? ` «${rangeAvailability.name}» está ${rangeAvailability.status === "MAINTENANCE" ? "en mantenimiento" : "retirado"}: no se puede asignar.`
                   : ""}
                 {rangeAvailability && rangeAvailability.conflicts.length > 0
@@ -750,6 +761,7 @@ export function InventoryFicha({
           {unitError ? <AdminNote tone="error">{unitError}</AdminNote> : null}
           {writable && unitEditorOpen ? (
             <form className="admin-form" aria-label={unitDialog ? `Editar unidad ${unitDialog.code}` : "Agregar unidad"} onSubmit={(event) => void submitUnitDialog(event)}>
+              <InventoryOriginFields physicalUnit origin={unitForm.stockOrigin} supplierId={unitForm.ownerSupplierId} suppliers={taxonomy.suppliers} disabled={unitDialogBusy} onChange={next => setUnitForm(current => ({ ...current, stockOrigin: next.origin, ownerSupplierId: next.supplierId }))} />
               <TextField
                 label="Código de unidad"
                 help={INVENTORY_FIELD_HELP.code}
@@ -875,7 +887,10 @@ export function InventoryFicha({
                         onToggle={() => toggleUnit(unit.id)}
                       />
                     ) : null}
-                    <span className="admin-code">{unit.code}</span>
+                    <span className="admin-cell-stack">
+                      <span className="admin-code">{unit.code}</span>
+                      <small className="admin-cell-sub">{unit.stockOrigin ? STOCK_ORIGIN_LABELS[unit.stockOrigin as StockOrigin] : "Origen sin revisar"}{unit.ownerSupplierId ? ` · ${taxonomy.suppliers.find(supplier => supplier.id === unit.ownerSupplierId)?.name ?? "Dueño guardado"}` : ""}</small>
+                    </span>
                   </AdminCell>
                   <AdminCell title={writable ? `Cambiar estado de ${unit.code}` : inventoryStatusLabel(unit.status)}>
                     {writable ? (
@@ -1021,8 +1036,8 @@ export function InventoryFicha({
                     <small className="admin-cell-sub"> · {component.category}</small>
                   </AdminCell>
                   <AdminCell end>{formatNumber(component.quantity)}</AdminCell>
-                  <AdminCell end>{formatNumber(component.available)}</AdminCell>
-                  <AdminCell end>{formatNumber(component.canMake)}</AdminCell>
+                  <AdminCell end>{component.stockCountStatus === "PENDING_COUNT" ? "Pendiente conteo" : formatNumber(component.available)}</AdminCell>
+                  <AdminCell end>{component.stockCountStatus === "PENDING_COUNT" ? "—" : formatNumber(component.canMake)}</AdminCell>
                 </AdminRow>
               ))}
             </AdminTable>

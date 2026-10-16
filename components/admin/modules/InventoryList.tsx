@@ -54,6 +54,7 @@ function isOvercommitted(item: AdminInventoryGridRow, rangeActive: boolean): boo
 /** Libres sobre el total: «12/40» con la barra segmentada (hoy) o el medidor del rango (con «Disponible desde/hasta»). */
 function StockCell({ item, rangeActive }: { item: AdminInventoryGridRow; rangeActive: boolean }) {
   const visual = inventoryVisualState(item, { combo: Boolean(item.combo) });
+  if (item.stockCountStatus === "PENDING_COUNT") return <span>Pendiente conteo</span>;
   if (rangeActive || item.combo) return <StockMeter summary={stockSummary(item, rangeActive)} combo={Boolean(item.combo)} />;
   return (
     <span className="admin-meter admin-inv-stock">

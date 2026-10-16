@@ -39,6 +39,7 @@ import { ThemePortal } from "./ThemePortal";
  */
 
 export type CatalogItemView = {
+  stockCountStatus?: "CONFIRMED" | "PENDING_COUNT";
   id: string;
   name: string;
   category: string;

@@ -764,6 +764,13 @@ enum SupplierWorkStatus {
   CANCELLED
 }
 
+/// Ownership/procurement, independent of InventoryKind and stock count certainty.
+enum InventoryStockOrigin {
+  OWNED
+  CONSIGNED
+  EXTERNAL_RENTAL
+}
+
 enum InventoryKind {
   REUSABLE
   CONSUMABLE
@@ -1571,6 +1578,8 @@ model Supplier {
   purchaseInvoices PurchaseInvoice[]
   inventoryItems   InventoryItem[]
   inventoryUnits   InventoryUnit[]
+  inventoryDefaultSources InventoryItem[] @relation("InventoryDefaultSource")
+  inventoryOwnedUnits InventoryUnit[] @relation("InventoryUnitOwner")
 
   archivedAt   DateTime?
   archivedById String?
@@ -1873,7 +1882,17 @@ model BankStatementRow {
   @@index([movementId])
 }
 
+enum StockCountStatus {
+  CONFIRMED
+  PENDING_COUNT
+}
+
 model InventoryItem {
+  /// Defaults for future additions only; null preserves unreviewed legacy data.
+  defaultStockOrigin InventoryStockOrigin?
+  defaultSourceSupplierId String?
+  defaultSourceSupplier Supplier? @relation("InventoryDefaultSource", fields: [defaultSourceSupplierId], references: [id], onDelete: NoAction)
+
   id                 String               @id
   organizationId     String
   name               String
@@ -1900,6 +1919,8 @@ model InventoryItem {
   /// Cantidad = unidades activas (issue #112): se sincroniza con `units`
   /// (las retiradas no cuentan) para no romper los contratos existentes.
   quantity           Int                  @default(1)
+  /// Explicit knowledge of the count; zero does not mean unknown.
+  stockCountStatus   StockCountStatus     @default(CONFIRMED)
   replacementCost    Int                  @default(0)
   dailyCost          Int                  @default(0)
   /// Precios de venta en guaraníes (issues #90 y #110). Cada frente tiene su
@@ -1990,6 +2011,7 @@ model InventoryItem {
   deleteReason String?
   anonymizedAt DateTime?
 
+  @@index([defaultSourceSupplierId])
   @@unique([organizationId, sku])
   @@index([organizationId, familyId])
   @@index([status, category])
@@ -2002,6 +2024,11 @@ model InventoryItem {
 /// (único por empresa, autogenerado y editable), su estado y su costo, para
 /// saber cuál es cuál. `quantity` del ítem refleja las unidades activas.
 model InventoryUnit {
+  /// Physical ownership; EXTERNAL_RENTAL is forbidden for permanent units.
+  stockOrigin InventoryStockOrigin?
+  ownerSupplierId String?
+  ownerSupplier Supplier? @relation("InventoryUnitOwner", fields: [ownerSupplierId], references: [id], onDelete: NoAction)
+
   id             String              @id
   organizationId String
   inventoryId    String
@@ -2031,6 +2058,7 @@ model InventoryUnit {
   inventory      InventoryItem       @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
   incidents      InventoryIncident[]
 
+  @@index([ownerSupplierId])
   @@unique([organizationId, code])
   @@index([inventoryId, status])
   @@index([inventoryId, warehouseId, status])

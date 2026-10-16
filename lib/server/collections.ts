@@ -150,8 +150,15 @@ export async function upsertCollectionByName(
   tx: Prisma.TransactionClient,
   organizationId: string,
   entry: { nombre: string; descripcion?: string | null; orden?: number | null },
+  options: { preserveExisting?: boolean } = {},
 ): Promise<{ id: string; created: boolean }> {
   const slugBase = collectionSlug(entry.nombre);
+  if (options.preserveExisting) {
+    const inserted = await tx.collection.createMany({ data: [{ id: randomUUID(), organizationId, name: entry.nombre, slug: slugBase, description: entry.descripcion ?? null, sortOrder: entry.orden ?? 0 }], skipDuplicates: true });
+    await tx.$queryRaw`SELECT "id" FROM "Collection" WHERE "organizationId" = ${organizationId} AND "slug" = ${slugBase} FOR KEY SHARE`;
+    const row = await tx.collection.findFirstOrThrow({ where: { organizationId, slug: slugBase }, select: { id: true } });
+    return { id: row.id, created: inserted.count > 0 };
+  }
   const existing = await tx.collection.findFirst({ where: { organizationId, slug: slugBase }, select: { id: true } });
   if (existing) {
     const data: Prisma.CollectionUpdateManyMutationInput = {};

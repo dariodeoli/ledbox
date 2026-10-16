@@ -1,0 +1,85 @@
+{
+  "empresa": "EJEMPLO FICTICIO — reemplazar por tu empresa",
+  "moneda": "PYG",
+  "categorias": [
+    {
+      "nombre": "Mobiliario / Sillas",
+      "foto": null,
+      "orden": 1
+    },
+    {
+      "nombre": "Vajilla / Copas",
+      "foto": null,
+      "orden": 2
+    }
+  ],
+  "productos": [
+    {
+      "codigo": "EJ-SILLA",
+      "nombre": "Ejemplo · silla propia",
+      "categoria": "Mobiliario",
+      "subcategoria": "Sillas",
+      "tipo": "unidad",
+      "cantidad": 4,
+      "precio": null,
+      "cobro": "dia",
+      "deposito": "D1",
+      "ubicacion": "E3-B2",
+      "origen_stock": "propio",
+      "tercero": null,
+      "componentes": [],
+      "foto": null,
+      "dudas": "Ejemplo ficticio; confirmar precio real antes de usar."
+    },
+    {
+      "codigo": "EJ-CERO",
+      "nombre": "Ejemplo · artículo sin existencias",
+      "categoria": "Vajilla",
+      "subcategoria": "Copas",
+      "tipo": "unidad",
+      "cantidad": 0,
+      "precio": null,
+      "cobro": "evento",
+      "deposito": "D1",
+      "ubicacion": null,
+      "origen_stock": "propio",
+      "tercero": null,
+      "componentes": [],
+      "foto": null,
+      "dudas": null
+    },
+    {
+      "codigo": "EJ-CONTAR",
+      "nombre": "Ejemplo · pendiente de conteo",
+      "categoria": "Mobiliario",
+      "subcategoria": "Sillas",
+      "tipo": "unidad",
+      "cantidad": null,
+      "precio": null,
+      "cobro": "dia",
+      "deposito": "D1",
+      "ubicacion": null,
+      "componentes": [],
+      "foto": null,
+      "dudas": "Contar existencias; no se promete stock hasta confirmarlo."
+    },
+    {
+      "codigo": "EJ-COMBO",
+      "nombre": "Ejemplo · juego de cuatro sillas",
+      "categoria": "Mobiliario",
+      "subcategoria": "Sillas",
+      "tipo": "juego",
+      "cantidad": null,
+      "precio": null,
+      "cobro": "evento",
+      "componentes": [
+        {
+          "codigo": "EJ-SILLA",
+          "cantidad": 4
+        }
+      ],
+      "foto": null,
+      "dudas": "Composición sólo ilustrativa; cargar la real. Precio pendiente, no sumar piezas automáticamente."
+    }
+  ]
+}

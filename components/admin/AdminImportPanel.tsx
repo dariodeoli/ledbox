@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { adminApiGet, adminApiUpload, clearAdminApiCache } from "@/lib/admin-api";
 import { IMPORT_MODULES, type ImportModuleId } from "@/lib/import-modules";
 import { CATALOG_LIMITS, DUDA_MOTIVO_LABEL } from "@/lib/import-catalog";
+import type { CatalogImportMode } from "@/lib/import-catalog";
 import { AdminButtonLink, AdminBadge, AdminButton, AdminDialog } from "./AdminUI";
 import { FileField, SearchField, SegmentedField, SelectField, TextAreaField } from "./AdminFields";
 
@@ -16,8 +17,8 @@ import { FileField, SearchField, SegmentedField, SelectField, TextAreaField } fr
 
 type Tarjeta = { clave: string; etiqueta: string; valor: number };
 type Problema = { nivel: "error" | "aviso"; tipo: string; codigo: string | null; mensaje: string; motivo?: string };
-type Fila = { codigo: string; nombre: string; accion: "crear" | "actualizar" | "omitir"; detalle: string };
-type Preview = { catalogo: unknown; estados?: string | null; tarjetas: Tarjeta[]; problemas: Problema[]; filas: Fila[]; zip: boolean };
+type Fila = { conservado?: boolean; esCombo?: boolean; stockCountStatus?: "CONFIRMED" | "PENDING_COUNT"; countBefore?: number | null; countAfter?: number | null; codigo: string; nombre: string; accion: "crear" | "actualizar" | "omitir"; detalle: string };
+type Preview = { importMode?: CatalogImportMode; catalogo: unknown; estados?: string | null; tarjetas: Tarjeta[]; problemas: Problema[]; filas: Fila[]; zip: boolean };
 type Resultado = {
   lote: string;
   creados: Array<{ id: string; etiqueta: string }>;
@@ -41,6 +42,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
   const modulo = IMPORT_MODULES[moduloId];
   const url = `/api/admin/import/${modulo.id}`;
   const [camino, setCamino] = useState<Camino>("planilla");
+  const [importMode, setImportMode] = useState<CatalogImportMode>("CREATE_ONLY");
   const [planilla, setPlanilla] = useState<File | null>(null);
   const [json, setJson] = useState<File | null>(null);
   const [zip, setZip] = useState<File | null>(null);
@@ -71,6 +73,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
   function formulario(accion: "preview" | "apply"): FormData {
     const form = new FormData();
     form.set("accion", accion);
+    if (modulo.id === "productos") form.set("modo", importMode);
     if (accion === "apply") {
       form.set("catalogo", JSON.stringify(preview?.catalogo ?? {}));
       form.set("lote", lote);
@@ -190,6 +193,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
 
   return (
     <AdminDialog
+      contentKey={resultado ? "result" : preview ? "preview" : `source-${camino}`}
       title={`Importar ${modulo.label.toLowerCase()}`}
       icon="upload"
       size="lg"
@@ -237,7 +241,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
               ))}
             </ul>
           ) : null}
-          <p className="admin-field-hint">Lote {resultado.lote.slice(0, 8)} auditado. Reimportar el mismo archivo actualiza, no duplica.</p>
+          <p className="admin-field-hint">Lote {resultado.lote.slice(0, 8)} auditado. {modulo.id === "productos" && importMode === "CREATE_ONLY" ? "Los códigos existentes se conservan sin cambios." : "Reimportar el mismo archivo actualiza, no duplica."}</p>
         </div>
       ) : preview ? (
         <div className="admin-import">
@@ -249,6 +253,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
               </div>
             ))}
           </div>
+          {preview.importMode ? <p className="admin-field-hint">{preview.importMode === "CREATE_ONLY" ? "Sólo nuevos: los códigos existentes y sus datos se conservan." : "Crear nuevos y actualizar existentes."}</p> : null}
           {preview.estados ? <p className="admin-field-hint">{preview.estados}</p> : null}
           {errores.length > 0 ? (
             <section aria-label="Errores">
@@ -302,11 +307,11 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
             <ul className="admin-import-rows">
               {preview.filas.map((fila) => (
                 <li key={fila.codigo}>
-                  <AdminBadge tone={ACCION_TONO[fila.accion]}>{ACCION_TEXTO[fila.accion]}</AdminBadge>
+                  <AdminBadge tone={fila.conservado ? "neutral" : ACCION_TONO[fila.accion]}>{fila.conservado ? "Conservar" : ACCION_TEXTO[fila.accion]}</AdminBadge>
                   <span className="admin-import-row-main">
                     <strong>{fila.codigo}</strong> {fila.nombre}
                   </span>
-                  <span className="admin-field-hint">{fila.detalle}</span>
+                  <span className="admin-field-hint">{fila.detalle}{modulo.id === "productos" && !fila.esCombo && fila.stockCountStatus ? fila.conservado ? ` · Stock: ${fila.stockCountStatus === "PENDING_COUNT" ? "pendiente de conteo" : fila.countBefore ?? "—"}` : ` · Stock: ${fila.countBefore === null ? "desconocido" : fila.countBefore ?? "—"} → ${fila.stockCountStatus === "PENDING_COUNT" ? "pendiente de conteo" : fila.countAfter ?? "—"}` : ""}</span>
                 </li>
               ))}
             </ul>
@@ -327,6 +332,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
               { value: "ia", label: "IA de LedBox" },
             ]}
           />
+          {modulo.id === "productos" ? <SelectField label="Productos existentes" size="full" value={importMode} onChange={(value) => setImportMode(value as CatalogImportMode)} options={[{ value: "CREATE_ONLY", label: "Crear sólo productos nuevos" }, { value: "UPSERT", label: "Crear nuevos y actualizar existentes" }]} hint="Crear sólo nuevos conserva íntegros los códigos existentes, su stock, tarifas y fotos." /> : null}
           {camino === "planilla" ? (
             <>
               <p className="admin-field-hint">Descargá la plantilla con las columnas exactas, completala y subila en .xlsx o .csv.</p>

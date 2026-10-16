@@ -1,3 +1,7 @@
+import { readImportStockOrigin, type OriginPair } from "../inventory-stock-origin";
+import { validatedStockOrigin } from "./inventory-stock-origin";
+import { confirmInventoryCount } from "./inventory-stock-count";
+import { UNIT_CONVERSION_METADATA } from "./inventory-unit-conversion";
 /**
  * «Importar catálogo»: vista previa y aplicación contra la base.
  *
@@ -21,6 +25,7 @@ import { replaceAudienceTiers } from "@/lib/server/price-tier-store";
 import { addItemsToCollection, COLLECTION_PHOTO_WIDTH, upsertCollectionByName } from "@/lib/server/collections";
 import { prepareImage } from "@/lib/server/covers";
 import { collectionSlug } from "@/lib/collections";
+import { categoryPathKey } from "@/lib/inventory-categories";
 import { prepareCategoryPhoto, setCategoryImage } from "@/lib/server/category-image";
 import { preparePhoto, type PreparedPhoto } from "@/lib/server/import-photos";
 import {
@@ -31,6 +36,7 @@ import {
   stateTargetsOf,
   type AdjustableState,
   type UnitStateCounts,
+  type UnitStateTargets,
   type CatalogCategory,
   type CatalogCollection,
   type CatalogPlan,
@@ -79,12 +85,21 @@ const IMPORT_NOTE = "Importación";
  * sincronizada; además un incidente abierto («Importación») al salir de servicio, que se resuelve
  * cuando la unidad vuelve a estar disponible. Nunca toca unidades RETIRED.
  */
+export type AppliedUnitStates = {
+  solicitados: UnitStateTargets;
+  aplicados: Record<AdjustableState, number>;
+  devueltos: Record<AdjustableState, number>;
+  noAplicados: number;
+  motivo: string | null;
+};
 async function applyUnitStates(tx: Tx, context: AuditContext, inventoryId: string, itemName: string, targets: ReturnType<typeof stateTargetsOf>) {
   const units = await tx.inventoryUnit.findMany({ where: { organizationId: context.organizationId, inventoryId, status: { in: ["AVAILABLE", ...ADJUSTABLE_STATES] } }, orderBy: { code: "asc" }, select: { id: true, code: true, status: true } });
   const counts: UnitStateCounts = { AVAILABLE: 0, MAINTENANCE: 0, DAMAGED: 0, LOST: 0 };
   for (const unit of units) counts[unit.status as keyof UnitStateCounts] += 1;
   const committed = (await committedQuantities(tx, context.organizationId, [inventoryId])).get(inventoryId) ?? 0;
   const plan = planUnitStates({ counts, nuevas: 0, comprometidas: committed, targets });
+  const applied: Record<AdjustableState, number> = { MAINTENANCE: 0, DAMAGED: 0, LOST: 0 };
+  const returnedCounts: Record<AdjustableState, number> = { MAINTENANCE: 0, DAMAGED: 0, LOST: 0 };
   const change = async (unit: { id: string; code: string; status: string }, to: "AVAILABLE" | AdjustableState) => {
     const before = { status: unit.status };
     if (to === "AVAILABLE") {
@@ -93,9 +108,11 @@ async function applyUnitStates(tx: Tx, context: AuditContext, inventoryId: strin
         data: { status: "RESOLVED", resolvedAt: new Date(), resolvedById: context.user.id },
       });
       await tx.inventoryUnit.update({ where: { id: unit.id }, data: { status: to, incidentCycle: { increment: 1 } } });
+      returnedCounts[before.status as AdjustableState] += 1;
     } else {
       const unitCycle = await beginInventoryUnitIncidentCycle(tx, context.organizationId, unit.id);
       await tx.inventoryUnit.update({ where: { id: unit.id }, data: { status: to } });
+      applied[to] += 1;
       await tx.inventoryIncident.create({
         data: { id: randomUUID(), organizationId: context.organizationId, inventoryId, unitId: unit.id, unitCycle, kind: INCIDENT_KIND_OF[to], quantity: 1, status: "OPEN", notes: IMPORT_NOTE, openedById: context.user.id },
       });
@@ -124,6 +141,9 @@ async function applyUnitStates(tx: Tx, context: AuditContext, inventoryId: strin
     }
   }
   await syncInventoryQuantity(tx, inventoryId);
+  const noAplicados = Math.max(0, plan.pedidas - ADJUSTABLE_STATES.reduce((sum, state) => sum + applied[state], 0));
+  return { solicitados: { ...targets }, aplicados: applied, devueltos: returnedCounts, noAplicados,
+    motivo: noAplicados ? "Las unidades necesarias están asignadas a eventos vigentes o futuros; las reservas se conservaron." : null } satisfies AppliedUnitStates;
 }
 
 /** Lo que hay en la empresa para esos códigos (incluye la papelera). */
@@ -131,14 +151,14 @@ export async function loadExisting(organizationId: string, codes: string[]): Pro
   const rows = codes.length
     ? await dbWithDeleted.inventoryItem.findMany({
         where: { organizationId, sku: { in: codes } },
-        select: { id: true, sku: true, name: true, deletedAt: true, comboIncomplete: true, _count: { select: { components: true, units: true, assignments: true } } },
+        select: { id: true, sku: true, name: true, deletedAt: true, comboIncomplete: true, stockCountStatus: true, quantity: true, defaultStockOrigin: true, defaultSourceSupplierId: true, _count: { select: { components: true, units: true, assignments: true } } },
       })
     : [];
   // Unidades con historial (fuera de servicio, retiradas, perdidas o con incidentes): decide si una unidad se puede convertir en juego.
   const history = rows.length
     ? await dbWithDeleted.inventoryUnit.groupBy({
         by: ["inventoryId"],
-        where: { organizationId, inventoryId: { in: rows.map((row) => row.id) }, OR: [{ status: { not: "AVAILABLE" } }, { incidents: { some: {} } }] },
+        where: { organizationId, inventoryId: { in: rows.map((row) => row.id) }, OR: [{ status: { not: "AVAILABLE" } }, { incidents: { some: {} } }, ...UNIT_CONVERSION_METADATA] },
         _count: { _all: true },
       })
     : [];
@@ -165,6 +185,10 @@ export async function loadExisting(organizationId: string, codes: string[]): Pro
                 isCombo: row._count.components > 0,
                 inTrash: row.deletedAt !== null,
                 units: row._count.units,
+                activeUnits: row.quantity,
+                defaultStockOrigin: row.defaultStockOrigin,
+                defaultSourceSupplierId: row.defaultSourceSupplierId,
+                stockCountStatus: row.stockCountStatus,
                 incompleto: row.comboIncomplete,
                 reservas: row._count.assignments,
                 unidadesConHistorial: historyById.get(row.id) ?? 0,
@@ -179,6 +203,7 @@ export async function loadExisting(organizationId: string, codes: string[]): Pro
 }
 
 export type ImportInput = {
+  importMode?: import("@/lib/import-catalog").CatalogImportMode;
   products: CatalogProduct[];
   parseProblems: ImportProblem[];
   /** Fotos del ZIP por clave; `null` si no se subió ZIP. */
@@ -193,8 +218,17 @@ export type ImportInput = {
 /** Vista previa: no escribe nada. */
 export async function previewCatalog(organizationId: string, input: ImportInput): Promise<CatalogPlan> {
   const existing = await loadExisting(organizationId, codesToLookUp(input.products));
+  const supplierIds = [...new Set(input.products.flatMap(product => {
+    const third = product.originInput?.tercero;
+    return third && typeof third === "object" && !Array.isArray(third) && typeof (third as Record<string, unknown>).id === "string" ? [(third as { id: string }).id.trim()] : [];
+  }))];
+  // Existing origin defaults can also reference a supplier without repeating it in JSON.
+  for (const item of existing.values()) if (item.defaultSourceSupplierId) supplierIds.push(item.defaultSourceSupplierId);
+  const suppliers = supplierIds.length ? await db.supplier.findMany({ where: { organizationId, id: { in: supplierIds }, active: true }, select: { id: true } }) : [];
   const warehouses = await db.warehouse.findMany({ where: { organizationId, archivedAt: null }, select: { code: true } });
   return planCatalog({
+    supplierIds: new Set(suppliers.map(supplier => supplier.id)),
+    importMode: input.importMode,
     warehouseCodes: new Set(warehouses.map((warehouse) => warehouse.code)),
     products: input.products,
     parseProblems: input.parseProblems,
@@ -224,10 +258,13 @@ export type ApplyResult = {
   fallidos: ApplyFailure[];
   summary: CatalogPlan["summary"];
   problems: ImportProblem[];
+  estadosAplicados: Array<AppliedUnitStates & { codigo: string }>;
+  tarjetas: Array<{ etiqueta: string; valor: number }>;
+  avisos: Array<{ codigo: string; mensaje: string }>;
 };
 
 type Tx = Prisma.TransactionClient;
-type Outcome = { id: string; created: boolean; photo: boolean };
+type Outcome = { id: string; created: boolean; photo: boolean; states?: AppliedUnitStates };
 
 /** Alcance del producto: visible en la web (RETAIL) salvo que el dueño ya lo haya abierto a otro público. */
 const visibilityData = (current: { catalogAudience: string | null; visibleOnWeb: boolean } | null) =>
@@ -243,12 +280,23 @@ const specData = (product: Parameters<typeof catalogSpecs>[0]) => {
   return { ...(capacity !== null ? { capacity } : {}), ...(dimensions ? { dimensions } : {}) };
 };
 
+/** Resolve only explicit JSON keys and revalidate IDs under the writer transaction. */
+async function checkedCatalogOrigin(tx: Tx, organizationId: string, planned: PlannedProduct, current: OriginPair, existing: boolean): Promise<OriginPair> {
+  if (!planned.product.originInput) return current;
+  const parsed = readImportStockOrigin(planned.product.originInput, current);
+  if (!parsed.ok) throw new Error(parsed.error);
+  if (existing && (current.origin !== planned.stockOrigin.origin || current.supplierId !== planned.stockOrigin.supplierId || parsed.value.origin !== current.origin || parsed.value.supplierId !== current.supplierId)) throw new Error("El origen o el tercero cambió: recargá y revisalo desde la ficha. La importación no reclasifica unidades.");
+  // Empty current forces validation even when the explicit supplied ID is unchanged.
+  const checked = await validatedStockOrigin(tx, organizationId, { defaultStockOrigin: parsed.value.origin, defaultSourceSupplierId: parsed.value.supplierId }, "item");
+  return checked.value;
+}
+
 /** Escribe el alta o la actualización de un producto-unidad dentro de una transacción. */
-async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProduct, photo: PreparedPhoto | null): Promise<Outcome> {
+async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProduct, photo: PreparedPhoto | null, preserveExisting = false): Promise<Outcome> {
   const { organizationId } = context;
   const { product } = planned;
   // Categoría y subcategoría: se crean o se asocian con el helper único (sin duplicar padre ni hija).
-  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria });
+  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria }, { preserveExisting });
   if (!category) throw new Error("No se pudo resolver la categoría.");
   const warehouse = product.deposito ? await findWarehouseByCode(tx, organizationId, product.deposito) : null;
   const baseData = {
@@ -266,17 +314,20 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
     if (!locked.has(planned.existingId)) throw new Error("El producto ya no existe en esta empresa.");
     const current = await tx.inventoryItem.findFirst({
       where: { id: planned.existingId, organizationId },
-      select: { catalogAudience: true, visibleOnWeb: true, imageData: true, quantity: true, comboIncomplete: true, _count: { select: { components: true } } },
+      select: { catalogAudience: true, visibleOnWeb: true, imageData: true, quantity: true, stockCountStatus: true, defaultStockOrigin: true, defaultSourceSupplierId: true, comboIncomplete: true, _count: { select: { components: true } } },
     });
     if (!current) throw new Error("El producto ya no existe en esta empresa.");
     if (current._count.components > 0 || current.comboIncomplete) throw new Error("Ahora es un juego en el inventario; no se cambia el tipo por importación.");
+    if (current.defaultStockOrigin !== "EXTERNAL_RENTAL" && current.stockCountStatus === "PENDING_COUNT" && product.cantidad !== null && product.cantidad < current.quantity) throw new Error("El conteo es menor que las unidades registradas: revisá sus estados o retiros antes de confirmar.");
+    const origin = await checkedCatalogOrigin(tx, organizationId, planned, { origin: current.defaultStockOrigin ?? null, supplierId: current.defaultSourceSupplierId ?? null }, true);
+    if (origin.origin === "EXTERNAL_RENTAL" && product.cantidad !== null && product.cantidad > current.quantity) throw new Error("El alquiler externo no permite crear stock físico por importación.");
     const photoChanged = Boolean(photo) && !sameBytes(current.imageData, photo!.data);
     await tx.inventoryItem.update({
       where: { id: planned.existingId },
       data: { ...baseData, ...visibilityData(current), ...(photoChanged ? { imageData: photo!.data, imageMime: photo!.mime } : {}) },
     });
     // Nunca se retiran unidades: solo se completan hasta la cantidad del archivo.
-    if (product.cantidad !== null && current.quantity < product.cantidad) {
+    if (current.stockCountStatus !== "PENDING_COUNT" && product.cantidad !== null && current.quantity < product.cantidad) {
       await createInventoryUnits(tx, {
         organizationId,
         inventoryId: planned.existingId,
@@ -286,11 +337,14 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
         ...(product.ubicacion ? { location: product.ubicacion } : {}),
       });
     }
+    if (origin.origin !== "EXTERNAL_RENTAL" && product.cantidad !== null && current.stockCountStatus === "PENDING_COUNT") await confirmInventoryCount(tx, context, planned.existingId, product.cantidad, { ...(warehouse ? { warehouseId: warehouse.id } : {}), ...(product.ubicacion ? { location: product.ubicacion } : {}) });
     if (product.preciosDias?.length) await replaceAudienceTiers(tx, organizationId, planned.existingId, "RETAIL", product.preciosDias);
     const targets = stateTargetsOf(product);
-    if (Object.keys(targets).length > 0) await applyUnitStates(tx, context, planned.existingId, product.nombre, targets);
-    return { id: planned.existingId, created: false, photo: photoChanged };
+    const states = Object.keys(targets).length > 0 ? await applyUnitStates(tx, context, planned.existingId, product.nombre, targets) : undefined;
+    return { id: planned.existingId, created: false, photo: photoChanged, states };
   }
+  const origin = await checkedCatalogOrigin(tx, organizationId, planned, { origin: null, supplierId: null }, false);
+  if (origin.origin === "EXTERNAL_RENTAL" && planned.unidades > 0) throw new Error("El alquiler externo no crea unidades físicas.");
   const id = randomUUID();
   await tx.inventoryItem.create({
     data: {
@@ -299,13 +353,18 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
       sku: product.codigo,
       kind: "REUSABLE",
       quantity: planned.unidades,
+      defaultStockOrigin: origin.origin,
+      defaultSourceSupplierId: origin.supplierId,
+      stockCountStatus: origin.origin === "EXTERNAL_RENTAL" ? "CONFIRMED" : product.cantidad === null ? "PENDING_COUNT" : "CONFIRMED",
+      ...(warehouse ? { defaultWarehouseId: warehouse.id } : {}),
+      ...(product.ubicacion ? { defaultLocation: product.ubicacion } : {}),
       ...baseData,
       listPrice: product.precio ?? 0,
       ...visibilityData(null),
       ...(photo ? { imageData: photo.data, imageMime: photo.mime } : {}),
     },
   });
-  await createInventoryUnits(tx, {
+  if (planned.unidades > 0) await createInventoryUnits(tx, {
     organizationId,
     inventoryId: id,
     name: product.nombre,
@@ -315,14 +374,14 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
   });
   if (product.preciosDias?.length) await replaceAudienceTiers(tx, organizationId, id, "RETAIL", product.preciosDias);
   const targets = stateTargetsOf(product);
-  if (Object.keys(targets).length > 0) await applyUnitStates(tx, context, id, product.nombre, targets);
-  return { id, created: true, photo: Boolean(photo) };
+  const states = Object.keys(targets).length > 0 ? await applyUnitStates(tx, context, id, product.nombre, targets) : undefined;
+  return { id, created: true, photo: Boolean(photo), states };
 }
 
 /** Alta de un juego sin piezas: combo incompleto, sin stock propio ni unidades. Los datos finos los completa `writeComboMeta`. */
-async function createIncompleteGame(tx: Tx, organizationId: string, planned: PlannedProduct): Promise<string> {
+async function createIncompleteGame(tx: Tx, organizationId: string, planned: PlannedProduct, preserveExisting = false): Promise<string> {
   const { product } = planned;
-  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria });
+  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria }, { preserveExisting });
   if (!category) throw new Error("No se pudo resolver la categoría.");
   const id = randomUUID();
   await tx.inventoryItem.create({
@@ -332,12 +391,13 @@ async function createIncompleteGame(tx: Tx, organizationId: string, planned: Pla
 }
 
 /** Actualiza los datos propios de un combo (nombre, precio, descripción, visibilidad, foto). */
-async function writeComboMeta(tx: Tx, organizationId: string, id: string, planned: PlannedProduct, photo: PreparedPhoto | null): Promise<boolean> {
+async function writeComboMeta(tx: Tx, organizationId: string, id: string, planned: PlannedProduct, photo: PreparedPhoto | null, preserveExisting = false): Promise<boolean> {
   const { product } = planned;
+  if (product.originInput && Object.values(product.originInput).some(value => value !== null && value !== undefined)) throw new Error("El origen de un combo se deriva de sus componentes.");
   const current = await tx.inventoryItem.findFirst({ where: { id, organizationId }, select: { catalogAudience: true, visibleOnWeb: true, imageData: true } });
   if (!current) throw new Error("El juego ya no existe en esta empresa.");
   const photoChanged = Boolean(photo) && !sameBytes(current.imageData, photo!.data);
-  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria });
+  const category = await resolveInventoryCategory(tx, organizationId, { category: product.categoria, subcategory: product.subcategoria }, { preserveExisting });
   if (!category) throw new Error("No se pudo resolver la categoría.");
   await tx.inventoryItem.update({
     where: { id },
@@ -419,12 +479,46 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
   };
 
   const label = (item: PlannedProduct) => `${item.product.codigo} · ${item.product.nombre}`;
+  const estadosAplicados: ApplyResult["estadosAplicados"] = [];
   const note = (outcome: Outcome, item: PlannedProduct) => {
+    if (outcome.states) estadosAplicados.push({ codigo: item.product.codigo, ...outcome.states });
     idByCode.set(item.product.codigo, outcome.id);
     if (outcome.created) created.push({ id: outcome.id, etiqueta: label(item) });
     else updated += 1;
     if (outcome.photo) photosSaved += 1;
   };
+
+  let categoryPhotos = 0;
+  const applyCategories = async () => {
+  // Categorías declaradas: se crean si faltan, `orden` llena sortOrder y la foto se guarda por nombre normalizado.
+  for (const entry of plan.categories) {
+    const { category } = entry;
+    const name = category.subcategoria ? `${category.categoria} › ${category.subcategoria}` : category.categoria;
+    try {
+      if (input.importMode === "CREATE_ONLY" && await db.inventoryCategory.findFirst({ where: { organizationId, key: categoryPathKey(category.categoria, category.subcategoria) }, select: { id: true } })) continue;
+      let prepared: Awaited<ReturnType<typeof prepareCategoryPhoto>> | null = null;
+      const bytes = entry.foto && input.photos ? input.photos.get(entry.foto) : undefined;
+      if (bytes) {
+        prepared = await prepareCategoryPhoto(bytes);
+      }
+      const saved = await db.$transaction(async (tx) => {
+        const resolved = await resolveInventoryCategory(tx, organizationId, { category: category.categoria, subcategory: category.subcategoria }, { preserveExisting: input.importMode === "CREATE_ONLY" });
+        if (!resolved) throw new Error("No se pudo resolver la categoría.");
+        if (input.importMode === "CREATE_ONLY" && !resolved.created) return { changed: false, photoError: null };
+        if (category.orden !== null) await tx.inventoryCategory.update({ where: { id: resolved.categoryId }, data: { sortOrder: category.orden } });
+        const changed = prepared?.ok ? await setCategoryImage(tx, organizationId, resolved.categoryId, prepared.photo) : false;
+        return { changed, photoError: prepared && !prepared.ok ? prepared.error : null };
+      });
+      if (saved.changed) categoryPhotos += 1;
+      if (saved.photoError) failures.push({ codigo: `categoría ${name}`, mensaje: `La foto «${category.foto}» no se guardó: ${saved.photoError}` });
+    } catch (error) {
+      console.error(`[import-catalogo] categoría ${name}:`, error instanceof Error ? error.message : error);
+      failures.push({ codigo: `categoría ${name}`, mensaje: error instanceof Error ? error.message : "No se pudo guardar la categoría." });
+    }
+  }
+
+  };
+  if (input.importMode === "CREATE_ONLY") await applyCategories();
 
   // Fase 1: productos-unidad, en bloques. Las fotos se procesan fuera de la transacción.
   const units = planned.filter((item) => !item.esCombo);
@@ -439,7 +533,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
       const outcomes = await db.$transaction(
         async (tx) => {
           const list: Array<[PlannedProduct, Outcome]> = [];
-          for (const item of block) list.push([item, await writeUnitItem(tx, context, item, blockPhotos.get(item.product.codigo) ?? null)]);
+          for (const item of block) list.push([item, await writeUnitItem(tx, context, item, blockPhotos.get(item.product.codigo) ?? null, input.importMode === "CREATE_ONLY")]);
           return list;
         },
         { timeout: 60_000, maxWait: 10_000 },
@@ -449,7 +543,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
       console.error("[import-catalogo] Bloque revertido, se reintenta producto por producto:", blockError instanceof Error ? blockError.message : blockError);
       for (const item of block) {
         try {
-          const outcome = await db.$transaction((tx) => writeUnitItem(tx, context, item, blockPhotos.get(item.product.codigo) ?? null), { timeout: 30_000 });
+          const outcome = await db.$transaction((tx) => writeUnitItem(tx, context, item, blockPhotos.get(item.product.codigo) ?? null, input.importMode === "CREATE_ONLY"), { timeout: 30_000 });
           note(outcome, item);
         } catch (error) {
           const message = isUniqueConstraintError(error) ? `Ya existe un producto con el código ${item.product.codigo}.` : error instanceof Error ? error.message : "No se pudo importar.";
@@ -479,7 +573,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
         if (item.product.componentes.length === 0) {
           // Juego sin piezas en el archivo: nuevo = juego incompleto; existente = solo se actualizan sus datos.
           if (!item.existingId) {
-            comboId = await db.$transaction((tx) => createIncompleteGame(tx, organizationId, item), { timeout: 30_000 });
+            comboId = await db.$transaction((tx) => createIncompleteGame(tx, organizationId, item, input.importMode === "CREATE_ONLY"), { timeout: 30_000 });
             isNew = true;
             idByCode.set(code, comboId);
             created.push({ id: comboId, etiqueta: label(item) });
@@ -499,6 +593,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
               data: { name: item.product.nombre, category: item.product.categoria, subcategory: item.product.subcategoria, sku: code, prices: item.product.precio ? { listPrice: item.product.precio } : {} },
               components,
               convertFromUnit: item.convertir,
+              preserveExistingCategory: input.importMode === "CREATE_ONLY",
             });
             if (!saved.ok) {
               failures.push({ codigo: code, mensaje: saved.message });
@@ -512,7 +607,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
           }
         }
         const photo = await photoOf(item);
-        const photoChanged = await db.$transaction((tx) => writeComboMeta(tx, organizationId, comboId!, item, photo), { timeout: 30_000 });
+        const photoChanged = await db.$transaction((tx) => writeComboMeta(tx, organizationId, comboId!, item, photo, input.importMode === "CREATE_ONLY"), { timeout: 30_000 });
         idByCode.set(code, comboId!);
         combosDone += 1;
         if (!isNew) updated += 1;
@@ -526,31 +621,7 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     }
   }
 
-  // Categorías declaradas: se crean si faltan, `orden` llena sortOrder y la foto se guarda por nombre normalizado.
-  let categoryPhotos = 0;
-  for (const entry of plan.categories) {
-    const { category } = entry;
-    const name = category.subcategoria ? `${category.categoria} › ${category.subcategoria}` : category.categoria;
-    try {
-      let prepared: Awaited<ReturnType<typeof prepareCategoryPhoto>> | null = null;
-      const bytes = entry.foto && input.photos ? input.photos.get(entry.foto) : undefined;
-      if (bytes) {
-        prepared = await prepareCategoryPhoto(bytes);
-        if (!prepared.ok) failures.push({ codigo: `categoría ${name}`, mensaje: `La foto «${category.foto}» no se guardó: ${prepared.error}` });
-      }
-      const saved = await db.$transaction(async (tx) => {
-        const resolved = await resolveInventoryCategory(tx, organizationId, { category: category.categoria, subcategory: category.subcategoria });
-        if (!resolved) throw new Error("No se pudo resolver la categoría.");
-        if (category.orden !== null) await tx.inventoryCategory.update({ where: { id: resolved.categoryId }, data: { sortOrder: category.orden } });
-        if (prepared?.ok) return setCategoryImage(tx, organizationId, resolved.categoryId, prepared.photo);
-        return false;
-      });
-      if (saved) categoryPhotos += 1;
-    } catch (error) {
-      console.error(`[import-catalogo] categoría ${name}:`, error instanceof Error ? error.message : error);
-      failures.push({ codigo: `categoría ${name}`, mensaje: error instanceof Error ? error.message : "No se pudo guardar la categoría." });
-    }
-  }
+  if (input.importMode !== "CREATE_ONLY") await applyCategories();
 
   // Fotos extra: después de los productos (necesitan su id). Cada foto se procesa una vez aunque la compartan varios.
   let extraPhotosSaved = 0;
@@ -590,27 +661,42 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
   }
   for (const entry of plan.collections) {
     try {
+      const preserveMetadata = input.importMode === "CREATE_ONLY" && Boolean(await db.collection.findFirst({ where: { organizationId, slug: collectionSlug(entry.nombre) }, select: { id: true } }));
       let prepared: Awaited<ReturnType<typeof prepareImage>> | null = null;
-      const bytes = entry.foto && input.photos ? input.photos.get(entry.foto) : undefined;
+      const bytes = !preserveMetadata && entry.foto && input.photos ? input.photos.get(entry.foto) : undefined;
       if (bytes) {
         prepared = await prepareImage(bytes, COLLECTION_PHOTO_WIDTH);
-        if (!prepared.ok) failures.push({ codigo: `colección ${entry.nombre}`, mensaje: `La foto no se guardó: ${prepared.error}` });
       }
-      await db.$transaction(async (tx) => {
-        const row = await upsertCollectionByName(tx, organizationId, { nombre: entry.nombre, descripcion: entry.descripcion, orden: entry.orden });
-        await addItemsToCollection(tx, organizationId, row.id, memberIds.get(collectionSlug(entry.nombre)) ?? []);
-        if (prepared?.ok) {
+      const changed = await db.$transaction(async (tx) => {
+        const row = await upsertCollectionByName(tx, organizationId, { nombre: entry.nombre, descripcion: entry.descripcion, orden: entry.orden }, { preserveExisting: input.importMode === "CREATE_ONLY" });
+        const added = await addItemsToCollection(tx, organizationId, row.id, memberIds.get(collectionSlug(entry.nombre)) ?? []);
+        if (prepared?.ok && (input.importMode !== "CREATE_ONLY" || row.created)) {
           await tx.collection.updateMany({ where: { id: row.id, organizationId }, data: { imageData: prepared.data, imageMime: prepared.mime } });
           collectionPhotos += 1;
         }
+        const canChangeMetadata = input.importMode !== "CREATE_ONLY" || row.created;
+        return { changed: canChangeMetadata || added > 0, photoError: canChangeMetadata && prepared && !prepared.ok ? prepared.error : null };
       });
-      collectionsTouched += 1;
+      if (changed.changed) collectionsTouched += 1;
+      if (changed.photoError) failures.push({ codigo: `colección ${entry.nombre}`, mensaje: `La foto no se guardó: ${changed.photoError}` });
     } catch (error) {
       console.error(`[import-catalogo] colección ${entry.nombre}:`, error instanceof Error ? error.message : error);
       failures.push({ codigo: `colección ${entry.nombre}`, mensaje: error instanceof Error ? error.message : "No se pudo guardar la colección." });
     }
   }
 
+  // Preview was read before taking item locks. Report only committed changes:
+  // concurrent reservations or a reverted block must not appear as applied.
+  const codesApplied = new Set(estadosAplicados.map(row => row.codigo));
+  const problems = plan.problems.filter(row => row.tipo !== "estado-incompleto" || !row.codigo || !codesApplied.has(row.codigo));
+  for (const row of estadosAplicados) if (row.noAplicados) problems.push({ nivel: "aviso", tipo: "estado-incompleto", codigo: row.codigo, fila: null,
+    mensaje: `${row.codigo}: no se pudieron aplicar ${row.noAplicados} cambios de estado. ${row.motivo}` });
+  const summary = { ...plan.summary,
+    estadosMantenimiento: estadosAplicados.reduce((sum, row) => sum + row.aplicados.MAINTENANCE, 0),
+    estadosDanadas: estadosAplicados.reduce((sum, row) => sum + row.aplicados.DAMAGED, 0),
+    estadosPerdidas: estadosAplicados.reduce((sum, row) => sum + row.aplicados.LOST, 0),
+    estadosDisponibles: estadosAplicados.reduce((sum, row) => sum + ADJUSTABLE_STATES.reduce((total, state) => total + row.devueltos[state], 0), 0),
+  };
   const result: ApplyResult = {
     lote: input.lote,
     creados: created,
@@ -623,8 +709,17 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     fotosColeccion: collectionPhotos,
     omitidos: plan.summary.omitidos + failedProducts.size,
     fallidos: failures,
-    summary: plan.summary,
-    problems: plan.problems,
+    summary,
+    problems,
+    estadosAplicados,
+    tarjetas: [
+      { etiqueta: "Creados", valor: created.length }, { etiqueta: "Actualizados", valor: updated },
+      { etiqueta: "Juegos", valor: combosDone }, { etiqueta: "Fotos", valor: photosSaved },
+      { etiqueta: "Omitidos", valor: plan.summary.omitidos + failedProducts.size },
+      { etiqueta: "A mantenimiento", valor: summary.estadosMantenimiento }, { etiqueta: "Dañadas", valor: summary.estadosDanadas },
+      { etiqueta: "Perdidas", valor: summary.estadosPerdidas }, { etiqueta: "A disponible", valor: summary.estadosDisponibles },
+    ],
+    avisos: problems.filter(row => row.nivel === "aviso").map(row => ({ codigo: row.codigo ?? "Catálogo", mensaje: row.mensaje })),
   };
 
   // Auditoría en lote (mismo patrón que la Carga con IA: entidad IaCarga, `lote` anulable por /api/admin/ia/anular).

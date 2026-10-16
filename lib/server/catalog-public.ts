@@ -1,3 +1,4 @@
+import { loadComboDefinitions } from "./inventory-combos";
 import { resolveOrganizationSlugId } from "./organization-slugs";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { BillingUnit, InventoryStatus } from "@prisma/client";
@@ -187,6 +188,7 @@ export async function loadStorefront(context: PublicCatalogContext): Promise<Pub
 
 /** Artículo tal como lo ve el público: sin costos, sin stock exacto, sin notas. */
 export type PublicCatalogItem = {
+  stockCountStatus?: "CONFIRMED" | "PENDING_COUNT";
   id: string;
   name: string;
   category: string;
@@ -216,6 +218,7 @@ export type PublicCatalogItem = {
 };
 
 type CatalogRow = {
+  stockCountStatus?: "CONFIRMED" | "PENDING_COUNT";
   id: string;
   name: string;
   category: string;
@@ -259,6 +262,7 @@ export async function loadVisibleRows(organizationId: string, list: PriceList, i
       imageMime: true,
       updatedAt: true,
       quantity: true,
+      stockCountStatus: true,
       status: true,
       billingUnit: true,
       listPrice: true,
@@ -310,7 +314,7 @@ export async function hintsFor(organizationId: string, rows: readonly CatalogRow
   const hints = new Map<string, AvailabilityHint>();
   for (const row of rows) {
     const availability = buildAvailability(
-      { id: row.id, name: row.name, quantity: row.quantity, status: row.status, maintenance: maintenanceUnits(row), buffers: resolveRentalBuffers(settings, row) },
+      { id: row.id, name: row.name, quantity: row.quantity, stockCountStatus: row.stockCountStatus, status: row.status, maintenance: maintenanceUnits(row), buffers: resolveRentalBuffers(settings, row) },
       byItem.get(row.id) ?? [],
       range.startsAt,
       range.endsAt,
@@ -325,6 +329,8 @@ export async function loadPublicCatalogItems(context: PublicCatalogContext, rang
   const rows = await loadVisibleRows(context.organization.id, context.priceList);
   const hints = range ? await hintsFor(context.organization.id, rows, range) : null;
   const ids = rows.map((row) => row.id);
+  const definitions = await loadComboDefinitions(context.organization.id, ids);
+  const pending = (row: CatalogRow) => row.stockCountStatus === "PENDING_COUNT" || Boolean(definitions.get(row.id)?.components.some((part) => part.stockCountStatus === "PENDING_COUNT"));
   const packages = context.settings.publicShowPrices ? await loadPackages(context, ids) : new Map<string, NonNullable<PublicCatalogItem["package"]>>();
   // Una consulta por tema (sin los bytes de las fotos): galería y colecciones de todo el catálogo juntas.
   const [galleries, memberships] = await Promise.all([
@@ -343,7 +349,8 @@ export async function loadPublicCatalogItems(context: PublicCatalogContext, rang
     capacity: row.capacity,
     dimensions: row.dimensions?.trim() || null,
     price: context.settings.publicShowPrices ? catalogPriceFor(row, context.priceList) : null,
-    availability: hints?.get(row.id) ?? null,
+    stockCountStatus: pending(row) ? "PENDING_COUNT" : "CONFIRMED",
+    availability: pending(row) ? "CONSULT" : hints?.get(row.id) ?? null,
     gallery: galleries.get(row.id) ?? [],
     tags: row.tags,
     featured: row.featured,
