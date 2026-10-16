@@ -62,10 +62,17 @@ test("explicit zero confirmation does not call unit creation and records knowled
   const f = confirmationFixture(); await f.confirm(0); assert.equal(f.state().creates, 0); assert.equal(f.state().item.stockCountStatus, "CONFIRMED"); assert.equal(f.state().audits.length, 1);
   await f.confirm(0); assert.equal(f.state().audits.length, 1); assert.equal(f.state().locked, 2);
 });
-test("confirmation creates only the deficit; lower or invalid totals do not mutate registered units", async () => {
-  const f = confirmationFixture("registered"); await assert.rejects(f.confirm(2), /menor/); assert.equal(f.state().changes.length, 0); assert.equal(f.state().creates, 0);
+test("preflight rejects a declared total below registered units without confirming or mutating", async () => {
+  const f = confirmationFixture("registered"); await assert.rejects(f.confirm(2), /menor/); assert.equal(f.state().changes.length, 0); assert.equal(f.state().creates, 0); assert.equal(f.state().item.stockCountStatus, "PENDING_COUNT");
   await f.confirm(5); assert.equal(f.state().creates, 2); assert.equal(f.state().item.quantity, 5); assert.equal(f.state().audits.length, 1);
   for (const bad of [-1, 1.2, 100001]) await assert.rejects(f.confirm(bad)); assert.equal(f.state().creates, 2);
+});
+test("the panel presents total confirmation as a manual declaration, not a physical count", () => {
+  const panel = readFileSync("components/admin/modules/InventoryCountPanel.tsx", "utf8");
+  assert.match(panel, /Confirmar un total es una declaración manual; no ejecuta ni acredita un conteo físico/);
+  assert.match(panel, /label="Total declarado"/);
+  assert.match(panel, /Confirmar total/);
+  assert.doesNotMatch(panel, /conteo físico (completado|registrado|verificado)/i);
 });
 test("count confirmation refuses foreign or combo items without writes", async () => {
   for (const mode of ["foreign", "combo"]) { const f = confirmationFixture(mode); await assert.rejects(f.confirm(1)); assert.equal(f.state().creates, 0); assert.equal(f.state().audits.length, 0); }
