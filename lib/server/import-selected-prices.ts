@@ -65,7 +65,7 @@ export async function previewSelectedPrices(context: AuditContext, raw: unknown)
             errors.push("El código no existe activo en esta empresa; este modo no crea productos.");
         if (current)
             expected.push({ fila: row.fila, id: current.item.id, fingerprint: current.fingerprint });
-        filas.push({ fila: row.fila, codigo: row.codigo, nombre: current?.item.name ?? row.codigo, accion: errors.length ? "omitir" : "actualizar", detalle: errors.join(" ") || (current?.item.familyId && changedFields(row).length ? "Sólo precios; la variante pasa a precio propio." : "Sólo los precios elegidos; el resto se conserva."), cambios: current ? differences(row, current.values) : [], errores: errors });
+        filas.push({ fila: row.fila, codigo: row.codigo, nombre: current?.item.name ?? row.codigo, accion: errors.length ? "omitir" : "actualizar", detalle: errors.join(" ") || (current?.item.familyId && !current.item.variantOwnPrice && differences(row, current.values).some(c => requestHashOf({ value: c.antes }) !== requestHashOf({ value: c.despues })) ? "Sólo precios; la variante pasa a precio propio." : "Sólo los precios elegidos; el resto se conserva."), cambios: current ? differences(row, current.values) : [], errores: errors });
     }
     const hash = requestHashOf({ catalogo: raw });
     const confirmationToken = await new SignJWT({ organizationId: context.organizationId, actorId: context.user.id, hash, expected })

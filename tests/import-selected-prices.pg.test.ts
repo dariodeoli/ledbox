@@ -108,6 +108,10 @@ test("selective prices: signed preview CAS, atomic receipts, tenant, replay, pre
         assert.equal(sibling.listPrice, 1000);
         const variantAudit = await db.auditLog.findFirstOrThrow({ where: { organizationId: org, entityId: own.id } });
         assert.deepEqual((variantAudit.detail as any).changes.variantOwnPrice, { from: false, to: true });
+        const sameVariant = { productos: [{ codigo: "V2", cambios: { listPrice: { op: "REPLACE", value: 1000 } } }] };
+        const svp = await inspect(sameVariant); assert.ok(!svp.filas[0].detalle.includes("pasa a precio propio"));
+        const svr = await (await applySelectedPrices(ctx, sameVariant, svp.confirmationToken, randomUUID(), request)).json(); assert.equal(svr.filasPrecio[0].estado, "conservada");
+        assert.equal((await db.inventoryItem.findUniqueOrThrow({ where: { id: variants[1].id } })).variantOwnPrice, false);
         const bad = { productos: [{ codigo: "MISSING", cambios: { listPrice: { op: "CLEAR" } } }, { codigo: "A", cambios: { cantidad: { op: "CLEAR" } } }] };
         const bp = await inspect(bad);
         const br = await (await applySelectedPrices(ctx, bad, bp.confirmationToken, randomUUID(), request)).json();
