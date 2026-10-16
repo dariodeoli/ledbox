@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { CityField, EmailField, MoneyField, PhoneField, SelectField, TextAreaField, TextField } from "@/components/admin/AdminFields";
 import { deliveryExtraApplies, deliveryRateText } from "@/lib/delivery-zones";
 import { PRICE_AMOUNT_MAX, PRICE_COMMENT_MAX, parsePriceAmount } from "@/lib/price-request";
@@ -12,6 +12,7 @@ import { EventPicker } from "./EventPicker";
 import { ProductPlaceholder, XIcon } from "./StoreIcons";
 import { Stepper } from "./Stepper";
 import { skuLabel } from "./ProductTile";
+import { useModalBehavior } from "./ThemePortal";
 
 /**
  * Pedido (carrito): cajón de 480 px en escritorio y hoja inferior en móvil. Arriba van las FECHAS del evento (dentro del
@@ -81,26 +82,7 @@ export function CartDrawer(props: {
   const attempt = useRef<{ key: string; payload: string } | null>(null);
   const dialog = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    dialog.current?.focus();
-    const previous = document.activeElement as HTMLElement | null;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") props.onClose();
-      if (event.key === "Tab" && dialog.current) {
-        const nodes = [...dialog.current.querySelectorAll<HTMLElement>("a[href],button:not([disabled]),input:not([tabindex='-1']),textarea,select")].filter((node) => node.offsetParent !== null);
-        if (nodes.length === 0) return;
-        const firstNode = nodes[0];
-        const lastNode = nodes[nodes.length - 1];
-        if (event.shiftKey && (document.activeElement === firstNode || document.activeElement === dialog.current)) { event.preventDefault(); lastNode.focus(); }
-        else if (!event.shiftKey && document.activeElement === lastNode) { event.preventDefault(); firstNode.focus(); }
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    const lock = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = lock; previous?.focus?.(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useModalBehavior(dialog, props.onClose);
 
   // El lugar del evento: dirección o referencia + ciudad y departamento (el departamento se completa al elegir la ciudad).
   const location = [place.trim(), city.trim(), department.trim()].filter(Boolean).join(", ");
