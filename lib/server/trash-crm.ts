@@ -172,20 +172,29 @@ async function lockAny(tx: Tx, model: CrmModel, id: string, organizationId: stri
 /** Borrado definitivo: bloqueos → 409 `{ blockers }` (el presupuesto no ofrece anonimizar); si no hay, borra la fila. */
 export async function purgeCrm(model: CrmModel, id: string, input: PurgeInput, context: AuditContext): Promise<void> {
   const reason = readPurgeReason(input.reason);
-  await dbWithDeleted.$transaction(async (tx) => {
-    const blockers = await purgeBlockers(model, id, context.organizationId, tx); // FOR UPDATE + 404 ajeno
-    const row = await loadTrashed(tx, model, id, context.organizationId);
-    if (!namesMatch(input.confirmName, row.label)) throw new TrashError("El nombre escrito no coincide.", 400);
-    if (blockers.length) {
-      if (model === "Budget") {
-        throw new TrashError("Un presupuesto con firma, cobro, comprobante, factura o fuera de borrador no se borra definitivamente: conservalo en la papelera.", 409, blockers);
+  try {
+    await dbWithDeleted.$transaction(async (tx) => {
+      const blockers = await purgeBlockers(model, id, context.organizationId, tx); // FOR UPDATE + 404 ajeno
+      const row = await loadTrashed(tx, model, id, context.organizationId);
+      if (!namesMatch(input.confirmName, row.label)) throw new TrashError("El nombre escrito no coincide.", 400);
+      if (blockers.length) {
+        if (model === "Budget") {
+          throw new TrashError("Un presupuesto con firma, cobro, comprobante, factura o fuera de borrador no se borra definitivamente: conservalo en la papelera.", 409, blockers);
+        }
+        throw blockedError(blockers);
       }
-      throw blockedError(blockers);
+      const delegate = (tx as unknown as Record<string, { delete(args: unknown): Promise<unknown> }>)[DELEGATE[model]];
+      await delegate.delete({ where: { id } });
+      await recordAudit({ context, action: "purge", entity: model, entityId: id, summary: `Borró definitivamente ${NOUN[model].toLowerCase()} «${row.label}»`, detail: { fields: { reason } } }, tx);
+    });
+  } catch (error) {
+    // NO ACTION keeps ownership history intact if a reference arrives between
+    // the blocker read and commit. Report a conflict, never clear that owner.
+    if (model === "Supplier" && error && typeof error === "object" && "code" in error && error.code === "P2003") {
+      throw new TrashError("El proveedor tiene vínculos de inventario o historial que impiden eliminarlo. Recargá la papelera y conservá esos datos.", 409);
     }
-    const delegate = (tx as unknown as Record<string, { delete(args: unknown): Promise<unknown> }>)[DELEGATE[model]];
-    await delegate.delete({ where: { id } });
-    await recordAudit({ context, action: "purge", entity: model, entityId: id, summary: `Borró definitivamente ${NOUN[model].toLowerCase()} «${row.label}»`, detail: { fields: { reason } } }, tx);
-  });
+    throw error;
+  }
 }
 
 /** Anonimizar lo eliminado: PII fuera, historial contable intacto. Exige el nombre y el motivo. */

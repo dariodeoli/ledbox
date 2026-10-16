@@ -127,6 +127,8 @@ const BLOCKER_TEXT: Record<string, (count: number) => string> = {
   pendingJobs: (n) => `Tiene ${plural(n, "trabajo de proveedor pendiente", "trabajos de proveedor pendientes")}`,
   futureTasks: (n) => `Tiene ${plural(n, "tarea en un evento futuro", "tareas en eventos futuros")}`,
   tasks: (n) => `Tiene ${plural(n, "tarea asignada", "tareas asignadas")}`,
+  inventoryDefaultSources: (n) => `Es el origen predeterminado de ${plural(n, "producto de inventario", "productos de inventario")}`,
+  inventoryOwnedUnits: (n) => `Es dueño de ${plural(n, "unidad física", "unidades físicas")}`,
   supplierJobs: (n) => `Tiene ${plural(n, "trabajo de proveedor", "trabajos de proveedor")}`,
   expenses: (n) => `Tiene ${plural(n, "gasto", "gastos")}`,
   purchaseInvoices: (n) => `Tiene ${plural(n, "factura de compra", "facturas de compra")}`,
