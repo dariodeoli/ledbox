@@ -86,9 +86,9 @@ export function StoreHeaderControls({ nav, cart, slug, cartScope, searchHref }: 
           </a>
         ) : null}
         {cart === "button" ? (
-          <button type="button" className="cp-hd-cart" aria-label={label} onClick={() => { setMenu(false); window.dispatchEvent(new Event("cp:open-cart")); }}>{pill}</button>
+          <button type="button" className="cp-hd-cart" data-store-cart-trigger aria-label={label} onClick={() => { setMenu(false); window.dispatchEvent(new Event("cp:open-cart")); }}>{pill}</button>
         ) : cart ? (
-          <a className="cp-hd-cart" href={cart.href} aria-label={label}>{pill}</a>
+          <a className="cp-hd-cart" data-store-cart-trigger href={cart.href} aria-label={label}>{pill}</a>
         ) : null}
         {nav.length > 0 ? (
           <button ref={toggle} type="button" className="cp-hd-burger" aria-expanded={menu} aria-controls="cp-hd-menu" aria-label={menu ? "Cerrar menú" : "Abrir menú"} onClick={() => setMenu((value) => !value)}>

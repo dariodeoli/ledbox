@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import ts from 'typescript';
+import * as React from 'react';
+import {mountOverlay} from '../lib/overlay-lifecycle';
+import {overlayDocument} from './helpers/overlay-dom';
+test('contact handoff restores stable store trigger when cart opener was unmounted, without reopening cart',()=>{
+ const source=ts.createSourceFile('contact.tsx',readFileSync('components/catalog-public/ContactPanel.tsx','utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+ const fn=source.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='ContactPanel')!;
+ let options:any;
+ const draw=runInNewContext(ts.transpileModule(fn.getText(source).replace(/^export /,'')+';ContactPanel;',{compilerOptions:{target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText,{React,useState:(v:any)=>[v,()=>{}],useRef:()=>({current:null}),useModalBehavior:(_ref:any,_close:any,opts:any)=>options=opts,TextField:'text',EmailField:'email',PhoneField:'phone',XIcon:'icon'});
+ const tree=draw({slug:'fixture',storeName:'Fixture',getCart(){},onClose(){},onSaved(){}});
+ const f=overlayDocument(),cart=f.panel();const oldOpener=cart.last;oldOpener.focus();const contact=f.panel();
+ const stable=f.el('BUTTON'),hidden=f.el('BUTTON');hidden.visible=false;f.doc.body.append(stable,hidden);
+ const scope={querySelectorAll:()=>[hidden,stable]};
+ const all=(n:any):any[]=>Array.isArray(n)?n.flatMap(all):n?.props?[n,...all(n.props.children)]:[];
+ all(tree).find(n=>n.props['data-testid']==='save-cart-dialog').props.ref({closest:()=>scope});
+ const release=mountOverlay(contact.root as any,{opener:oldOpener as any,fallbackFocus:options.fallbackFocus});cart.root.remove();release();
+ assert.equal(f.doc.activeElement,stable);assert.equal(f.doc.body.style.overflow,'auto');assert.equal(cart.root.isConnected,false);
+ const other=f.el('BUTTON');f.doc.body.append(other);other.focus();const normal=mountOverlay(contact.root as any,{fallbackFocus:options.fallbackFocus});normal();assert.equal(f.doc.activeElement,other,'live original opener retains priority');
+ assert.match(readFileSync('components/overlays/useModalBehavior.ts','utf8'),/fallbackFocus: options.fallbackFocus/);
+ for(const path of ['StoreHeaderControls','OrderBar'])assert.match(readFileSync(`components/catalog-public/${path}.tsx`,'utf8'),/data-store-cart-trigger/);
+});
