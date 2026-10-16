@@ -83,6 +83,7 @@ test("actual import writer never calls createInventoryUnits for zero or unknown;
  const fn = sf.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === "writeUnitItem")!;
  let current: any = null; const created: any[] = [], updated: any[] = []; let unitCalls = 0, confirmed = 0, tierCalls = 0; let confirmedPlacement: any;
  const write = runInNewContext(ts.transpileModule(fn.getText(sf).replace(/^export /, "") + ";writeUnitItem;", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, {
+   checkedCatalogOrigin: async () => ({ origin: null, supplierId: null }),
    resolveInventoryCategory: async () => ({ text: "General", categoryId: "category" }), categoryWriteData: () => ({ category: "General" }),
    specData: () => ({}), billingUnitOf: () => "DAILY", visibilityData: () => ({}), sameBytes: () => false,
    lockInventoryItems: async () => new Set(["item"]), randomUUID: () => "new-item",

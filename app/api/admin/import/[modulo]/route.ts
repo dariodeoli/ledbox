@@ -4,7 +4,7 @@ import { jsonError } from "@/lib/server/http";
 import { rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { canImportCatalog } from "@/lib/admin-policy";
-import { CATALOG_LIMITS, normalizeCatalog, parseCatalogJson, type CatalogCategory, type CatalogCollection, type CatalogProduct, type ImportProblem } from "@/lib/import-catalog";
+import { CATALOG_LIMITS, catalogProductForJson, normalizeCatalog, parseCatalogJson, type CatalogCategory, type CatalogCollection, type CatalogProduct, type ImportProblem } from "@/lib/import-catalog";
 import { claimImportLote, readBodyLimited, settleImportLote } from "@/lib/server/import-lote";
 import { importModule, type ImportModule } from "@/lib/import-modules";
 import { readSheetFile, templateCsv, templateXlsx } from "@/lib/server/import-tabular";
@@ -192,7 +192,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ mod
     const plan = await previewCatalog(organizationId, input);
     return Response.json({
       importMode,
-      catalogo: { empresa: source.empresa, moneda: "PYG", productos: source.products, ...(source.categories.length ? { categorias: source.categories.map((category) => ({ nombre: category.subcategoria ? `${category.categoria} / ${category.subcategoria}` : category.categoria, foto: category.foto, orden: category.orden })) } : {}), ...(source.collections.length ? { colecciones: source.collections.map((collection) => ({ nombre: collection.nombre, descripcion: collection.descripcion, foto: collection.foto, orden: collection.orden })) } : {}) },
+      catalogo: { empresa: source.empresa, moneda: "PYG", productos: source.products.map(catalogProductForJson), ...(source.categories.length ? { categorias: source.categories.map((category) => ({ nombre: category.subcategoria ? `${category.categoria} / ${category.subcategoria}` : category.categoria, foto: category.foto, orden: category.orden })) } : {}), ...(source.collections.length ? { colecciones: source.collections.map((collection) => ({ nombre: collection.nombre, descripcion: collection.descripcion, foto: collection.foto, orden: collection.orden })) } : {}) },
       resumen: plan.summary,
       problemas: plan.problems,
       estados:

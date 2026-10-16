@@ -1,3 +1,4 @@
+import { readImportStockOrigin, type OriginPair } from "./inventory-stock-origin";
 /**
  * «Importar catálogo»: contrato y reglas puras (sin React, sin base, sin Node).
  *
@@ -55,6 +56,8 @@ export type CatalogComponent = { codigo: string; cantidad: number };
 export type CatalogImportMode = "CREATE_ONLY" | "UPSERT";
 
 export type CatalogProduct = {
+  /** Only explicit JSON keys; resolved against existing defaults in the plan. */
+  originInput?: Record<string, unknown>;
   codigo: string;
   nombre: string;
   /** Categoría principal. «Categoría / Subcategoría» en una sola columna se separa acá. */
@@ -128,6 +131,17 @@ export type CatalogCategory = {
   fila: number;
 };
 
+/** Preserve portable JSON keys through the preview → apply round trip. */
+export function catalogProductForJson(product: CatalogProduct): Record<string, unknown> {
+  const { originInput, enMantenimiento, preciosDias, fila: _fila, ...rest } = product;
+  return {
+    ...rest,
+    en_mantenimiento: enMantenimiento,
+    ...(preciosDias !== undefined ? { precios_dias: preciosDias.map(tier => ({ desde_dias: tier.fromDays, modo: tier.mode === "TOTAL" ? "total" : "dia", precio: tier.price })) } : {}),
+    ...originInput,
+  };
+}
+
 export type CatalogDoc = { empresa: string | null; moneda: string; productos: CatalogProduct[]; categorias: CatalogCategory[]; colecciones: CatalogCollection[] };
 
 export type ProblemKind =
@@ -139,6 +153,7 @@ export type ProblemKind =
   | "precios-dias-invalido"
   | "precio-invalido"
   | "precio-cero"
+  | "stock-origen-invalido"
   | "cantidad-invalida"
   | "estado-invalido"
   | "estado-excede"
@@ -569,6 +584,7 @@ function normalizeProduct(raw: unknown, index: number, problems: ImportProblem[]
   const dudas = text(row.dudas, 500);
   if (dudas) problems.push({ ...problem("aviso", "duda", codigo, fila, `${nombre}: ${dudas}`), motivo: dudaMotivo(dudas) });
   return {
+    ...(Object.hasOwn(row, "origen_stock") || Object.hasOwn(row, "tercero") ? { originInput: { ...(Object.hasOwn(row, "origen_stock") ? { origen_stock: row.origen_stock } : {}), ...(Object.hasOwn(row, "tercero") ? { tercero: row.tercero } : {}) } } : {}),
     codigo,
     nombre,
     categoria: categoryPath.parent,
@@ -708,6 +724,8 @@ export type ExistingItem = {
   inTrash: boolean;
   units: number;
   activeUnits?: number;
+  defaultStockOrigin?: OriginPair["origin"];
+  defaultSourceSupplierId?: string | null;
   stockCountStatus?: "CONFIRMED" | "PENDING_COUNT";
   /** Juego importado sin piezas (combo incompleto): es un juego aunque todavía no tenga componentes. */
   incompleto?: boolean;
@@ -780,6 +798,7 @@ export function planUnitStates(options: { counts: UnitStateCounts; nuevas: numbe
 }
 
 export type PlannedProduct = {
+  stockOrigin: OriginPair;
   stockCountStatus: "CONFIRMED" | "PENDING_COUNT";
   countBefore: number | null;
   countAfter: number | null;
@@ -849,6 +868,8 @@ export type CatalogPlan = { items: PlannedProduct[]; categories: PlannedCategory
 export function planCatalog(options: {
   /** CREATE_ONLY conserva enteros los productos existentes; ausencia = contrato anterior. */
   importMode?: CatalogImportMode;
+  /** Active supplier IDs belonging to this company; never matched by name or RUC. */
+  supplierIds?: ReadonlySet<string>;
   products: ReadonlyArray<CatalogProduct>;
   parseProblems?: ReadonlyArray<ImportProblem>;
   existing: ReadonlyMap<string, ExistingItem>;
@@ -888,6 +909,7 @@ export function planCatalog(options: {
     const incompleto = esCombo && !hasComponents(product) && !existing?.isCombo;
     const base: PlannedProduct = {
       product,
+      stockOrigin: { origin: existing?.defaultStockOrigin ?? null, supplierId: existing?.defaultSourceSupplierId ?? null },
       stockCountStatus: esCombo ? "CONFIRMED" : product.cantidad === null ? existing?.stockCountStatus ?? (existing ? "CONFIRMED" : "PENDING_COUNT") : "CONFIRMED",
       countBefore: existing && existing.stockCountStatus !== "PENDING_COUNT" ? existing.activeUnits ?? existing.units : null,
       countAfter: esCombo ? null : product.cantidad === null ? existing ? existing.stockCountStatus === "PENDING_COUNT" ? null : existing.activeUnits ?? existing.units : null : Math.max(existing?.activeUnits ?? existing?.units ?? 0, product.cantidad),
@@ -909,11 +931,30 @@ export function planCatalog(options: {
       return { ...base, accion: "omitir", esCombo: existingIsGame, incompleto: Boolean(existing.incompleto), stockCountStatus: existing.stockCountStatus ?? "CONFIRMED", countBefore: count, countAfter: count };
     }
 
-    if (existing?.stockCountStatus === "PENDING_COUNT" && !esCombo && product.cantidad !== null && product.cantidad < (existing.activeUnits ?? existing.units)) {
+    if (existing?.stockCountStatus === "PENDING_COUNT" && existing.defaultStockOrigin !== "EXTERNAL_RENTAL" && !esCombo && product.cantidad !== null && product.cantidad < (existing.activeUnits ?? existing.units)) {
       problems.push(problem("error", "cantidad-invalida", product.codigo, product.fila, `${product.nombre}: el conteo es menor que las unidades registradas. Revisá sus estados o retiros antes de confirmar; no se elimina ninguna unidad.`));
       return { ...base, accion: "omitir", stockCountStatus: "PENDING_COUNT", countAfter: null };
     }
 
+
+    const explicitOrigin = product.originInput && Object.values(product.originInput).some(value => value !== null && value !== undefined);
+    const origin = readImportStockOrigin(esCombo ? {} : product.originInput ?? {}, esCombo ? { origin: null, supplierId: null } : base.stockOrigin);
+    const failOrigin = (message: string) => {
+      problems.push(problem("error", "stock-origen-invalido", product.codigo, product.fila, `${product.nombre}: ${message}`));
+      return { ...base, accion: "omitir" as const };
+    };
+    if (!origin.ok) return failOrigin(origin.error);
+    if (esCombo && explicitOrigin) return failOrigin("El origen de un combo se deriva de sus componentes; no admite origen_stock ni tercero propios.");
+    if (product.originInput && origin.value.supplierId && options.supplierIds && !options.supplierIds.has(origin.value.supplierId)) return failOrigin("El tercero no existe o no está activo en esta empresa. Elegilo por su id; el nombre no identifica proveedores.");
+    if (!esCombo && existing && product.originInput && (origin.value.origin !== base.stockOrigin.origin || origin.value.supplierId !== base.stockOrigin.supplierId)) return failOrigin("El origen o el tercero difiere del producto existente: revisalo desde su ficha; importar no cambia el dueño ni reclasifica unidades.");
+    base.stockOrigin = esCombo ? { origin: null, supplierId: null } : origin.value;
+    if (!esCombo && origin.value.origin === "EXTERNAL_RENTAL") {
+      const registered = existing?.activeUnits ?? existing?.units ?? 0;
+      if (product.cantidad !== null && product.cantidad > registered) return failOrigin("El alquiler externo no crea stock físico. La cantidad no puede aumentar por importación.");
+      if (!existing && [product.enMantenimiento, product.danadas, product.perdidas].some(value => value !== null && value > 0)) return failOrigin("El alquiler externo no tiene unidades físicas para asignar estados.");
+      if (!existing) { base.unidades = 0; base.countAfter = 0; base.stockCountStatus = "CONFIRMED"; }
+      else { base.stockCountStatus = existing.stockCountStatus ?? "CONFIRMED"; base.countAfter = base.stockCountStatus === "PENDING_COUNT" ? null : registered; }
+    }
 
     if (product.tipo === "juego" && !hasComponents(product)) {
       problems.push(

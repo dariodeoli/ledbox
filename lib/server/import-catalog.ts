@@ -1,3 +1,5 @@
+import { readImportStockOrigin, type OriginPair } from "../inventory-stock-origin";
+import { validatedStockOrigin } from "./inventory-stock-origin";
 import { confirmInventoryCount } from "./inventory-stock-count";
 import { UNIT_CONVERSION_METADATA } from "./inventory-unit-conversion";
 /**
@@ -149,7 +151,7 @@ export async function loadExisting(organizationId: string, codes: string[]): Pro
   const rows = codes.length
     ? await dbWithDeleted.inventoryItem.findMany({
         where: { organizationId, sku: { in: codes } },
-        select: { id: true, sku: true, name: true, deletedAt: true, comboIncomplete: true, stockCountStatus: true, quantity: true, _count: { select: { components: true, units: true, assignments: true } } },
+        select: { id: true, sku: true, name: true, deletedAt: true, comboIncomplete: true, stockCountStatus: true, quantity: true, defaultStockOrigin: true, defaultSourceSupplierId: true, _count: { select: { components: true, units: true, assignments: true } } },
       })
     : [];
   // Unidades con historial (fuera de servicio, retiradas, perdidas o con incidentes): decide si una unidad se puede convertir en juego.
@@ -184,6 +186,8 @@ export async function loadExisting(organizationId: string, codes: string[]): Pro
                 inTrash: row.deletedAt !== null,
                 units: row._count.units,
                 activeUnits: row.quantity,
+                defaultStockOrigin: row.defaultStockOrigin,
+                defaultSourceSupplierId: row.defaultSourceSupplierId,
                 stockCountStatus: row.stockCountStatus,
                 incompleto: row.comboIncomplete,
                 reservas: row._count.assignments,
@@ -214,8 +218,16 @@ export type ImportInput = {
 /** Vista previa: no escribe nada. */
 export async function previewCatalog(organizationId: string, input: ImportInput): Promise<CatalogPlan> {
   const existing = await loadExisting(organizationId, codesToLookUp(input.products));
+  const supplierIds = [...new Set(input.products.flatMap(product => {
+    const third = product.originInput?.tercero;
+    return third && typeof third === "object" && !Array.isArray(third) && typeof (third as Record<string, unknown>).id === "string" ? [(third as { id: string }).id.trim()] : [];
+  }))];
+  // Existing origin defaults can also reference a supplier without repeating it in JSON.
+  for (const item of existing.values()) if (item.defaultSourceSupplierId) supplierIds.push(item.defaultSourceSupplierId);
+  const suppliers = supplierIds.length ? await db.supplier.findMany({ where: { organizationId, id: { in: supplierIds }, active: true }, select: { id: true } }) : [];
   const warehouses = await db.warehouse.findMany({ where: { organizationId, archivedAt: null }, select: { code: true } });
   return planCatalog({
+    supplierIds: new Set(suppliers.map(supplier => supplier.id)),
     importMode: input.importMode,
     warehouseCodes: new Set(warehouses.map((warehouse) => warehouse.code)),
     products: input.products,
@@ -268,6 +280,17 @@ const specData = (product: Parameters<typeof catalogSpecs>[0]) => {
   return { ...(capacity !== null ? { capacity } : {}), ...(dimensions ? { dimensions } : {}) };
 };
 
+/** Resolve only explicit JSON keys and revalidate IDs under the writer transaction. */
+async function checkedCatalogOrigin(tx: Tx, organizationId: string, planned: PlannedProduct, current: OriginPair, existing: boolean): Promise<OriginPair> {
+  if (!planned.product.originInput) return current;
+  const parsed = readImportStockOrigin(planned.product.originInput, current);
+  if (!parsed.ok) throw new Error(parsed.error);
+  if (existing && (current.origin !== planned.stockOrigin.origin || current.supplierId !== planned.stockOrigin.supplierId || parsed.value.origin !== current.origin || parsed.value.supplierId !== current.supplierId)) throw new Error("El origen o el tercero cambió: recargá y revisalo desde la ficha. La importación no reclasifica unidades.");
+  // Empty current forces validation even when the explicit supplied ID is unchanged.
+  const checked = await validatedStockOrigin(tx, organizationId, { defaultStockOrigin: parsed.value.origin, defaultSourceSupplierId: parsed.value.supplierId }, "item");
+  return checked.value;
+}
+
 /** Escribe el alta o la actualización de un producto-unidad dentro de una transacción. */
 async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProduct, photo: PreparedPhoto | null, preserveExisting = false): Promise<Outcome> {
   const { organizationId } = context;
@@ -291,11 +314,13 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
     if (!locked.has(planned.existingId)) throw new Error("El producto ya no existe en esta empresa.");
     const current = await tx.inventoryItem.findFirst({
       where: { id: planned.existingId, organizationId },
-      select: { catalogAudience: true, visibleOnWeb: true, imageData: true, quantity: true, stockCountStatus: true, comboIncomplete: true, _count: { select: { components: true } } },
+      select: { catalogAudience: true, visibleOnWeb: true, imageData: true, quantity: true, stockCountStatus: true, defaultStockOrigin: true, defaultSourceSupplierId: true, comboIncomplete: true, _count: { select: { components: true } } },
     });
     if (!current) throw new Error("El producto ya no existe en esta empresa.");
     if (current._count.components > 0 || current.comboIncomplete) throw new Error("Ahora es un juego en el inventario; no se cambia el tipo por importación.");
-    if (current.stockCountStatus === "PENDING_COUNT" && product.cantidad !== null && product.cantidad < current.quantity) throw new Error("El conteo es menor que las unidades registradas: revisá sus estados o retiros antes de confirmar.");
+    if (current.defaultStockOrigin !== "EXTERNAL_RENTAL" && current.stockCountStatus === "PENDING_COUNT" && product.cantidad !== null && product.cantidad < current.quantity) throw new Error("El conteo es menor que las unidades registradas: revisá sus estados o retiros antes de confirmar.");
+    const origin = await checkedCatalogOrigin(tx, organizationId, planned, { origin: current.defaultStockOrigin ?? null, supplierId: current.defaultSourceSupplierId ?? null }, true);
+    if (origin.origin === "EXTERNAL_RENTAL" && product.cantidad !== null && product.cantidad > current.quantity) throw new Error("El alquiler externo no permite crear stock físico por importación.");
     const photoChanged = Boolean(photo) && !sameBytes(current.imageData, photo!.data);
     await tx.inventoryItem.update({
       where: { id: planned.existingId },
@@ -312,12 +337,14 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
         ...(product.ubicacion ? { location: product.ubicacion } : {}),
       });
     }
-    if (product.cantidad !== null && current.stockCountStatus === "PENDING_COUNT") await confirmInventoryCount(tx, context, planned.existingId, product.cantidad, { ...(warehouse ? { warehouseId: warehouse.id } : {}), ...(product.ubicacion ? { location: product.ubicacion } : {}) });
+    if (origin.origin !== "EXTERNAL_RENTAL" && product.cantidad !== null && current.stockCountStatus === "PENDING_COUNT") await confirmInventoryCount(tx, context, planned.existingId, product.cantidad, { ...(warehouse ? { warehouseId: warehouse.id } : {}), ...(product.ubicacion ? { location: product.ubicacion } : {}) });
     if (product.preciosDias?.length) await replaceAudienceTiers(tx, organizationId, planned.existingId, "RETAIL", product.preciosDias);
     const targets = stateTargetsOf(product);
     const states = Object.keys(targets).length > 0 ? await applyUnitStates(tx, context, planned.existingId, product.nombre, targets) : undefined;
     return { id: planned.existingId, created: false, photo: photoChanged, states };
   }
+  const origin = await checkedCatalogOrigin(tx, organizationId, planned, { origin: null, supplierId: null }, false);
+  if (origin.origin === "EXTERNAL_RENTAL" && planned.unidades > 0) throw new Error("El alquiler externo no crea unidades físicas.");
   const id = randomUUID();
   await tx.inventoryItem.create({
     data: {
@@ -326,7 +353,9 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
       sku: product.codigo,
       kind: "REUSABLE",
       quantity: planned.unidades,
-      stockCountStatus: product.cantidad === null ? "PENDING_COUNT" : "CONFIRMED",
+      defaultStockOrigin: origin.origin,
+      defaultSourceSupplierId: origin.supplierId,
+      stockCountStatus: origin.origin === "EXTERNAL_RENTAL" ? "CONFIRMED" : product.cantidad === null ? "PENDING_COUNT" : "CONFIRMED",
       ...(planned.unidades === 0 && warehouse ? { defaultWarehouseId: warehouse.id } : {}),
       ...(planned.unidades === 0 && product.ubicacion ? { defaultLocation: product.ubicacion } : {}),
       ...baseData,
@@ -364,6 +393,7 @@ async function createIncompleteGame(tx: Tx, organizationId: string, planned: Pla
 /** Actualiza los datos propios de un combo (nombre, precio, descripción, visibilidad, foto). */
 async function writeComboMeta(tx: Tx, organizationId: string, id: string, planned: PlannedProduct, photo: PreparedPhoto | null, preserveExisting = false): Promise<boolean> {
   const { product } = planned;
+  if (product.originInput && Object.values(product.originInput).some(value => value !== null && value !== undefined)) throw new Error("El origen de un combo se deriva de sus componentes.");
   const current = await tx.inventoryItem.findFirst({ where: { id, organizationId }, select: { catalogAudience: true, visibleOnWeb: true, imageData: true } });
   if (!current) throw new Error("El juego ya no existe en esta empresa.");
   const photoChanged = Boolean(photo) && !sameBytes(current.imageData, photo!.data);
