@@ -792,3 +792,11 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - El resumen del producto usa indicadores más chicos. Precios, tarifas y costos quedan en una sola grilla compacta, sin cortar sus condiciones; la foto y los estados aprovechan mejor el espacio en celular.
 - Antes de enviar un presupuesto se muestra cada línea con su cantidad y capacidad comprobada para las fechas del evento. Las líneas que comparten inventario explican el pedido máximo; los datos desconocidos y los movimientos pendientes quedan por confirmar.
 - Si falla la comprobación de inventario, no se presenta disponibilidad acreditada ni se registra una auditoría de aprobación. Consultar disponibilidad sigue sin reservar unidades ni enviar correos.
+
+## v2.1.143 — 2026-10-16
+
+- Selección por página o de todos los resultados filtrados en Inventario, Clientes, Proveedores, Promotoras, Presupuestos y Eventos. Se pueden excluir registros y el alcance permanece visible al cambiar filtros.
+- Archivar o enviar a papelera una selección reutiliza las validaciones de cada registro. Los bloqueos y resultados inciertos se muestran por fila; un intento incierto detiene el lote sin repetir acciones automáticamente. La recuperación sigue disponible para administradores en Ajustes → Eliminados.
+- La selección completa recorre páginas verificadas, sin quedarse sólo con los primeros resultados. Cambiar de empresa descarta la selección; los permisos se comprueban también en el servidor.
+- Fecha del evento, días e invitados quedan alineados en la tienda y la preorden, también en celular, con los campos compactos y los atajos de fecha conservados.
+- La papelera explica que el plazo configura la elegibilidad para el vaciado al abrir Eliminados; no promete una hora exacta de borrado.
