@@ -95,9 +95,9 @@ export async function POST(request: Request) {
     availability = await checkBudgetSendAvailability({ organizationId, budgetId, expectedUpdatedAt: budget.updatedAt, context: auth.context });
   } catch (error) {
     if (error instanceof SendAvailabilityChangedError) return jsonError(error.message, 409, "availability_preview_required");
-    return jsonError("No pudimos comprobar la disponibilidad. Reintentá la vista previa; no se envió ningún correo.", 503, "availability_preview_required");
+    return jsonError("No pudimos comprobar la disponibilidad. Esta comprobación no intentó enviar el correo; consultá el resultado del intento antes de preparar otro.", 503, "availability_preview_required");
   }
-  if (availability.review.state === "error") return jsonError("No pudimos comprobar la disponibilidad. Reintentá la vista previa; no se envió ningún correo.", 503, "availability_preview_required");
+  if (availability.review.state === "error") return jsonError("No pudimos comprobar la disponibilidad. Esta comprobación no intentó enviar el correo; consultá el resultado del intento antes de preparar otro.", 503, "availability_preview_required");
 
   const identity = await mailIdentityFor(organizationId);
   const content = buildBudgetMail({

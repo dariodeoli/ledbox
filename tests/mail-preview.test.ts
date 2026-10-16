@@ -20,7 +20,7 @@ const unsafe = '<script>alert("x")</script> & Ana';
  * (DB, session, transport, audit) are doubles. No PG/client generation/provider. */
 function fixture(secret: string | undefined = "offline-preview-secret-not-a-real-credential") {
   const state = { organizationId: "tenant", actorId: "actor", denied: false, from: "EventOS <offline@example.invalid>",
-    availabilityCalls: 0, availabilityState: "available", availabilityRevision: "revision-1", queries: 0, sent: [] as Record<string, any>[], audits: [] as Record<string, any>[], outcome: "sent" };
+    availabilityCalls: 0, throwAvailability: false, availabilityState: "available", availabilityRevision: "revision-1", queries: 0, sent: [] as Record<string, any>[], audits: [] as Record<string, any>[], outcome: "sent" };
   const budget = { id: "budget", organizationId: "tenant", title: unsafe, publicToken: "ABCD-EFGH-JKLM-NPQR-STUV", status: "SENT",
     updatedAt: new Date("2026-10-10T12:00:00Z"), archivedAt: null, deletedAt: null,
     subtotal: 100000, discount: 0, total: 100000, advanceAmount: 0, paymentTerms: null, installmentsJson: [],
@@ -69,6 +69,7 @@ function fixture(secret: string | undefined = "offline-preview-secret-not-a-real
       SendAvailabilityChangedError: class extends Error {},
       checkBudgetSendAvailability: async () => {
         state.availabilityCalls++;
+        if (state.throwAvailability) throw new Error("Offline calculation failure");
         return { review: { state: state.availabilityState, revision: state.availabilityRevision, checkedAt: new Date().toISOString(), range: null, checkedLines: 1, unlinkedLines: 0, warnings: [] }, fingerprint: `${state.availabilityState}-${state.availabilityRevision}` };
       },
     },
@@ -249,7 +250,15 @@ test("real adopted preview component isolates HTML and escapes envelope/plain te
 test("availability errors block sends; new warnings/revisions invalidate consent and replay skips calculation", async () => {
   const f = fixture();
   f.state.availabilityState = "error";
-  assert.equal((await f.request({ preview: true })).response.status, 503);
+  const failedReview = await f.request({ preview: true });
+  assert.equal(failedReview.response.status, 503);
+  assert.match(failedReview.data.error, /Esta comprobación no intentó enviar el correo/);
+  assert.doesNotMatch(failedReview.data.error, /no se envió ningún correo/);
+  f.state.throwAvailability = true;
+  const thrownReview = await f.request({ preview: true });
+  assert.equal(thrownReview.response.status, 503);
+  assert.equal(thrownReview.data.error, failedReview.data.error, "ambas ramas conservan el mensaje acotado a esta comprobación");
+  f.state.throwAvailability = false;
   assert.equal(f.state.sent.length, 0);
   f.state.availabilityState = "available";
   const { data: initial } = await f.request({ preview: true });
