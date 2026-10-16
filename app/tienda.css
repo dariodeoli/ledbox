@@ -875,6 +875,7 @@
 @media (max-width: 767px) {
   .cp-theme .cp-event-fields { gap: var(--sp-2); }
   .cp-theme .cp-event-fields .admin-field-label { min-height: 2.6em; }
+  .cp-theme .cp-event-date > .admin-icon { top: calc(var(--fs-12) * 2.6 + 15px); }
   .cp-theme .cp-event-date { flex-basis: 140px; width: 140px; }
   .cp-theme .cp-event-days { flex-basis: 80px; width: 80px; }
   .cp-theme .cp-event-guests { flex-basis: 76px; width: 76px; }
