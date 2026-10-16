@@ -643,6 +643,9 @@ export function ProveedoresModule() {
         }
       >
         {jobError && jobPanel === null ? <AdminNote tone="error">{jobError}</AdminNote> : null}
+        <AdminNote>
+          Este registro sigue el trabajo y sus pagos; por sí solo no confirma cantidades ni fechas de suministro, ni reserva equipos para el evento.
+        </AdminNote>
 
         {writable && jobPanel?.mode === "create" ? (
           <AdminDialog
