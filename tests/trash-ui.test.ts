@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { filterClientSelection } from "../lib/admin-crm-selection";
+import type { AdminClientRow } from "../lib/admin-types";
 import { ADMIN_ROUTES, isAdminRoute } from "../lib/admin-routes";
 import { adminModuleVisible, canManageTrash, canWriteOperations } from "../lib/admin-policy";
 import { EVENT_ARCHIVABLE_STATUSES as SERVER_ARCHIVABLE, namesMatch as serverNamesMatch, normalizeName as serverNormalize } from "../lib/server/trash-ops";
@@ -247,7 +249,16 @@ test("lo archivado no cuenta en dashboard, resumen, calendario ni contadores del
 test("clientes: los saldos cuentan también a los archivados (la plata no se archiva)", () => {
   const source = readFileSync(join(process.cwd(), "components/admin/modules/ClientesModule.tsx"), "utf8");
   assert.match(source, /withBalance: all\.withBalance, balanceAmount: all\.balanceAmount/);
-  assert.match(source, /owing \? allClients/);
+  assert.match(source, /filterClientSelection\(allClients \?\? \[\], \{ query, segment, kpi, filter \}\)/);
+  const rows = [
+    { id: "archived-debt", name: "Archivado con deuda", archivedAt: "2026-10-01", type: "FINAL", metrics: { balance: 10, overdue: 5 } },
+    { id: "archived-clear", name: "Archivado sin deuda", archivedAt: "2026-10-01", type: "FINAL", metrics: { balance: 0, overdue: 0 } },
+    { id: "live-debt", name: "Vigente con deuda", archivedAt: null, type: "FINAL", metrics: { balance: 20, overdue: 0 } },
+  ] as AdminClientRow[];
+  const scope = { query: "", segment: "ALL" as const, kpi: null, filter: "ALL" };
+  assert.deepEqual(filterClientSelection(rows, scope).map(row => row.id), ["live-debt"]);
+  assert.deepEqual(filterClientSelection(rows, { ...scope, kpi: "BALANCE" }).map(row => row.id), ["archived-debt", "live-debt"]);
+  assert.deepEqual(filterClientSelection(rows, { ...scope, filter: "OVERDUE" }).map(row => row.id), ["archived-debt"]);
 });
 
 test("Eliminados compacta acciones de tabla y conserva texto y click de Restaurar en tarjetas", async () => {
