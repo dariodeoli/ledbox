@@ -103,7 +103,7 @@ test("sólo teclado puede refrescar atajos todos fuera de rango al cruzar median
   const changes: string[] = [];
   const render = actual("DateShortcuts", {
     Date: ClockDate,
-    dateShortcuts,
+    dateShortcuts: (props: Parameters<typeof dateShortcuts>[0]) => dateShortcuts({ ...props, now: props?.now ?? new Date(clock) }),
     useState: (initial: () => Date) => { state ??= initial(); return [state, (next: Date) => { state = next; }]; },
   });
   const props = { kind: "date", value: "", min: "2026-10-17", label: "Fecha del evento", onChange: (next: string) => changes.push(next) };
