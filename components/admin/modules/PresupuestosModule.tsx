@@ -1,4 +1,6 @@
 "use client";
+
+import { SEND_AVAILABILITY_NOTICE, SEND_AVAILABILITY_CONSENT, sendAvailabilityLabel } from "@/lib/budget-send-availability";
 import { PaymentDetailsDialog } from "./PaymentDetailsDialog";
 import { ClientIdentityView, clientComboboxOption } from "../ClientIdentity";
 import { budgetMailNotice, type BudgetMailReply } from "@/lib/budget-mail-receipt";
@@ -756,6 +758,7 @@ export function PresupuestosModule() {
   const [sendMessage, setSendMessage] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
   const [sendPreview, setSendPreview] = useState<MailPreview | null>(null);
+  const [sendAvailabilityAccepted, setSendAvailabilityAccepted] = useState(false);
   const [sendAttemptId, setSendAttemptId] = useState<string | null>(null);
   const [newSendAttempt, setNewSendAttempt] = useState(false);
   /** Demo: correo que no salió, con su vista previa. */
@@ -1328,14 +1331,18 @@ export function PresupuestosModule() {
         budgetId: sendBudget.id,
         to,
         message: sendMessage.trim() || undefined,
-        ...(sendPreview ? { confirm: true, confirmationToken: sendPreview.confirmationToken } : { preview: true }),
+        ...(sendPreview ? { confirm: true, confirmationToken: sendPreview.confirmationToken, acceptAvailabilityWarnings: sendAvailabilityAccepted } : { preview: true }),
       });
       if (!result.ok) {
+        // Conservar el recibo: otra pestaña puede haber reclamado este token
+        // entre el lookup inicial y un conflicto de disponibilidad. Consultar
+        // primero; preparar otro intento sigue requiriendo la acción explícita.
         if (!sendAttemptId && !sendPreview?.attemptId) setSendPreview(null);
         setSendError(result.error);
         return;
       }
       if (result.data.status === "preview" && "confirmationToken" in result.data) {
+        setSendAvailabilityAccepted(false);
         setSendPreview(result.data);
         return;
       }
@@ -1989,7 +1996,7 @@ export function PresupuestosModule() {
                 type="button"
                 busy={sendBusy}
                 busyLabel={sendAttemptId ? "Consultando…" : sendPreview ? "Enviando…" : "Preparando…"}
-                disabled={(!sendAttemptId && (!sendBudget.publicToken || !emailValid(sendTo) || sendDatesDirty)) || linkBusy || sendDatesBusy}
+                disabled={(!sendAttemptId && (!sendBudget.publicToken || !emailValid(sendTo) || sendDatesDirty)) || linkBusy || sendDatesBusy || (!sendAttemptId && Boolean(sendPreview?.availability && sendPreview.availability.state !== "available") && !sendAvailabilityAccepted)}
                 onClick={() => void sendBudgetMail()}
               >
                 {sendAttemptId ? "Consultar resultado" : sendPreview ? "Confirmar y enviar presupuesto" : "Previsualizar correo"}
@@ -2063,6 +2070,13 @@ export function PresupuestosModule() {
 
           </AdminDialogSection>
 
+          {sendPreview?.availability ? <AdminDialogSection title="Disponibilidad antes de enviar" stack>
+            <AdminNote>{sendAvailabilityLabel(sendPreview.availability.state)}. {SEND_AVAILABILITY_NOTICE}</AdminNote>
+            <p className="admin-dialog-text">Revisado: {formatDateTime(sendPreview.availability.checkedAt)}.</p>
+            {sendPreview.availability.range ? <p className="admin-dialog-text">Rango comprobado: {formatDateTime(sendPreview.availability.range.startsAt)} → {formatDateTime(sendPreview.availability.range.endsAt)}.</p> : null}
+            {sendPreview.availability.warnings.map((warning, index) => <p className="admin-dialog-text" key={`${warning.code}-${warning.itemId ?? index}`}><strong>{warning.name}:</strong> {warning.message}</p>)}
+            {sendPreview.availability.state !== "available" ? <CheckboxField text={SEND_AVAILABILITY_CONSENT} checked={sendAvailabilityAccepted} disabled={sendBusy || Boolean(sendAttemptId)} onChange={setSendAvailabilityAccepted} /> : null}
+          </AdminDialogSection> : null}
           {sendPreview ? (
             <AdminDialogSection title="Vista previa" stack>
               <AdminMailPreview preview={sendPreview} />

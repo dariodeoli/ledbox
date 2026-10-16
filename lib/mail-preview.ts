@@ -13,9 +13,12 @@ export const SIMULATED_WHATSAPP_NOTICE = "Así se vería el mensaje";
 export const MAIL_UNCERTAIN_PREFIX = "Resultado no confirmado: ";
 export const uncertainMailError = (value: string | null | undefined) => Boolean(value?.startsWith(MAIL_UNCERTAIN_PREFIX));
 
+import type { BudgetSendAvailability } from "./budget-send-availability";
+
 /** Payload real generado por el servidor; el navegador no aporta HTML al envío. */
 export type MailPreview = {
   status: "preview";
+  availability?: BudgetSendAvailability;
   from: string;
   to: string;
   subject: string;

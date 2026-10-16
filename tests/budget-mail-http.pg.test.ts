@@ -18,10 +18,10 @@ test("budget mail HTTP uses real local provider, persists receipt and never disp
   });
   await new Promise<void>(resolve => provider.listen(3170, "127.0.0.1", resolve));
   const org = randomUUID(), users: string[] = [];
-  async function cookie() {
+  async function cookie(role: "OWNER" | "VIEWER" = "OWNER", organizationId = org) {
     const id = randomUUID(); users.push(id);
     const user = await db.adminUser.create({ data: { id, name: "HTTP mail QA", email: `${id}@example.invalid`, passwordHash: "no-login", role: "OWNER" } });
-    await db.adminMembership.create({ data: { id: randomUUID(), organizationId: org, adminUserId: id, role: "OWNER" } });
+    await db.adminMembership.create({ data: { id: randomUUID(), organizationId, adminUserId: id, role } });
     return `ledbox_session=${(await createSession(user, org)).jwt}`;
   }
   try {
@@ -38,7 +38,7 @@ test("budget mail HTTP uses real local provider, persists receipt and never disp
       const previewResponse = await call({ ...input, preview: true }); assert.equal(previewResponse.status, 200);
       const preview = await previewResponse.json(); assert.ok(preview.attemptId); assert.equal(deliveries, countBefore);
       assert.equal(await db.idempotencyKey.count({ where: { organizationId: org, key: preview.attemptId } }), 0);
-      const confirm = { ...input, confirm: true, confirmationToken: preview.confirmationToken };
+      const confirm = { ...input, confirm: true, confirmationToken: preview.confirmationToken, acceptAvailabilityWarnings: true };
       const sentResponse = await call(confirm); assert.equal(sentResponse.status, 200); const sent = await sentResponse.json();
       assert.equal(sent.status, scenario === "accepted" ? "sent" : "unknown");
       assert.equal(deliveries, countBefore + 1);
@@ -50,6 +50,37 @@ test("budget mail HTTP uses real local provider, persists receipt and never disp
       const logs = await db.mailLog.findMany({ where: { organizationId: org, entityId: budget.id } }); assert.equal(logs.length, 1);
       assert.equal(logs[0].status, scenario === "accepted" ? "sent" : "sending");
     }
+    // La revisión nueva requiere consentimiento y nunca compromete stock.
+    const stock = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: org, name: "Stock QA250", category: "QA", quantity: 2 } });
+    const start = new Date("2036-10-15T12:00:00Z"), end = new Date("2036-10-16T12:00:00Z");
+    const event = await db.event.create({ data: { id: randomUUID(), organizationId: org, clientId: client.id, name: "QA250 HTTP", startsAt: start, endsAt: end } });
+    const budget = await db.budget.create({ data: { id: randomUUID(), organizationId: org, clientId: client.id, eventId: event.id, title: "QA250 HTTP", publicToken: randomUUID(), subtotal: 1000, total: 1000,
+      items: { create: { id: randomUUID(), name: "Stock", inventoryId: stock.id, quantity: 1, unitPrice: 1000, subtotal: 1000 } } } });
+    const input = { budgetId: budget.id, to: "qa250@example.invalid" };
+    mode = "accepted";
+    const before = deliveries;
+    const preview = await (await call({ ...input, preview: true })).json(); assert.equal(preview.availability.state, "available");
+    assert.equal(await db.eventInventory.count({ where: { eventId: event.id } }), 0);
+    const viewer = await cookie("VIEWER"); assert.equal((await call({ ...input, preview: true }, viewer)).status, 403);
+    const foreignOrg = randomUUID();
+    await db.organization.create({ data: { id: foreignOrg, name: "Foreign QA250", slug: `qa250-${foreignOrg}` } });
+    try {
+      const foreign = await cookie("OWNER", foreignOrg); assert.equal((await call({ ...input, preview: true }, foreign)).status, 404);
+    } finally { await db.organization.delete({ where: { id: foreignOrg } }); }
+    const competing = await db.event.create({ data: { id: randomUUID(), organizationId: org, clientId: client.id, name: "PRIVATE_COMPETITOR", startsAt: start, endsAt: end } });
+    await db.eventInventory.create({ data: { id: randomUUID(), organizationId: org, eventId: competing.id, inventoryId: stock.id, quantity: 2, startsAt: start, endsAt: end } });
+    const assignments = await db.eventInventory.findMany({ where: { event: { organizationId: org } }, orderBy: { id: "asc" } });
+    assert.equal((await call({ ...input, confirm: true, confirmationToken: preview.confirmationToken, acceptAvailabilityWarnings: true })).status, 409);
+    assert.equal(deliveries, before); assert.equal(await db.idempotencyKey.count({ where: { organizationId: org, key: preview.attemptId } }), 0);
+    const shortage = await (await call({ ...input, preview: true })).json(); assert.equal(shortage.availability.state, "shortage"); assert.doesNotMatch(JSON.stringify(shortage.availability), /PRIVATE_COMPETITOR/);
+    assert.equal((await call({ ...input, confirm: true, confirmationToken: shortage.confirmationToken })).status, 409);
+    assert.equal(deliveries, before);
+    const confirmed = await call({ ...input, confirm: true, confirmationToken: shortage.confirmationToken, acceptAvailabilityWarnings: true }); assert.equal(confirmed.status, 200); assert.equal((await confirmed.json()).status, "sent");
+    assert.equal(deliveries, before + 1); assert.deepEqual(await db.eventInventory.findMany({ where: { event: { organizationId: org } }, orderBy: { id: "asc" } }), assignments);
+    assert.equal(await db.eventInventory.count({ where: { eventId: event.id } }), 0);
+    await db.inventoryItem.update({ where: { id: stock.id }, data: { stockCountStatus: "PENDING_COUNT" } });
+    const replay = await call({ ...input, confirm: true, confirmationToken: shortage.confirmationToken }); assert.equal(replay.status, 200); assert.equal(deliveries, before + 1);
+    assert.equal((await call({ budgetId: budget.id, receiptOnly: true, attemptId: shortage.attemptId })).status, 200);
   } finally {
     await new Promise<void>((resolve, reject) => provider.close(error => error ? reject(error) : resolve()));
     await db.organization.deleteMany({ where: { id: org } }); await db.adminUser.deleteMany({ where: { id: { in: users } } }); await db.$disconnect();
