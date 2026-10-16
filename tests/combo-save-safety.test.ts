@@ -23,7 +23,7 @@ function fixture(mode = "ok") {
       deleteMany: async () => { state.edges = []; }, createMany: async ({ data }: any) => { state.edges = data; },
     },
     eventInventory: { count: async () => mode === "reserved" ? 1 : 0 },
-    inventoryUnit: { count: async () => mode === "history" ? 1 : 0, deleteMany: async () => { deletes++; state.units = []; } },
+    inventoryUnit: { findFirst: async () => mode === "metadata" ? { code: "u1" } : null, count: async () => mode === "history" ? 1 : 0, deleteMany: async () => { deletes++; state.units = []; } },
   };
   const db = { $transaction: async (fn: any) => {
     transactions++; const before = structuredClone(state);
@@ -44,7 +44,7 @@ function fixture(mode = "ok") {
   return { save, options, snapshot: () => structuredClone(state), deletes: () => deletes, transactions: () => transactions, locked: () => locked };
 }
 
-for (const [mode, reason] of [["missing", "component-missing"], ["category", "invalid"], ["nested", "nested"], ["incomplete", "nested"], ["used", "nested"], ["reserved", "has-reservations"], ["history", "invalid"]]) {
+for (const [mode, reason] of [["missing", "component-missing"], ["category", "invalid"], ["nested", "nested"], ["incomplete", "nested"], ["used", "nested"], ["reserved", "has-reservations"], ["history", "invalid"], ["metadata", "invalid"]]) {
   test(`combo rejected by ${mode} rolls back all state, without deleting physical units`, async () => {
     const f = fixture(mode); const before = f.snapshot();
     const result = await f.save(f.options);

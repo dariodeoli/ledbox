@@ -15,7 +15,7 @@ test("combo conversion is atomic, tenant safe and serializes topology edits", { 
     await db.organization.create({ data: { id: org, name: "QA combo safety", slug: `combo-safe-${org}` } });
     const item = async (name: string, quantity = 3, extra = {}) => {
       const product = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: org, name, category: "Muebles", quantity, ...extra } });
-      if (quantity > 0) await db.inventoryUnit.createMany({ data: Array.from({ length: quantity }, (_, index) => ({ id: randomUUID(), organizationId: org, inventoryId: product.id, code: `${product.id}-${index}`, purchaseCost: 1234 + index, notes: "Original physical unit" })) });
+      if (quantity > 0) await db.inventoryUnit.createMany({ data: Array.from({ length: quantity }, (_, index) => ({ id: randomUUID(), organizationId: org, inventoryId: product.id, code: `${product.id}-${index}`, purchaseCost: 0, notes: null })) });
       return product;
     };
     const parent = await item("Convertible", 3); const piece = await item("Mesa", 3);
@@ -53,6 +53,27 @@ test("combo conversion is atomic, tenant safe and serializes topology edits", { 
       const before = await f.snapshot();
       const result = await f.save([{ componentId: f.piece.id, quantity: 1 }], { data: { name: "Nuevo nombre", category: `Nueva-${randomUUID()}`, sku: duplicateSku } });
       assert.equal(!result.ok && result.reason, "duplicate-sku"); assert.deepEqual(await f.snapshot(), before);
+    });
+    await t.test("unit purchase and operational metadata each block conversion without changing parent, units or history", async () => {
+      const f = await seed();
+      const unit = (await f.snapshot()).units[0];
+      const supplier = await db.supplier.create({ data: { id: randomUUID(), organizationId: f.org, name: "QA supplier" } });
+      const warehouse = await db.warehouse.create({ data: { id: randomUUID(), organizationId: f.org, name: "QA warehouse", code: "QA" } });
+      // A unit's cost is still its own fact even when the parent's cost matches.
+      await db.inventoryItem.update({ where: { id: f.parent.id }, data: { replacementCost: 1234 } });
+      const cases = [
+        { purchaseCost: 1234 }, { notes: "Preserve me" }, { warehouseId: warehouse.id },
+        { location: "Estante A" }, { conditionScore: 8 }, { supplierId: supplier.id },
+        { purchasedAt: new Date("2030-01-01") }, { warrantyUntil: new Date("2032-01-01") }, { incidentCycle: 1 },
+      ];
+      for (const data of cases) {
+        await db.inventoryUnit.update({ where: { id: unit.id }, data });
+        const before = await f.snapshot(); const result = await f.save([{ componentId: f.piece.id, quantity: 1 }]);
+        assert.equal(!result.ok && result.reason, "invalid");
+        assert.match(!result.ok ? result.message : "", /datos propios/);
+        assert.deepEqual(await f.snapshot(), before);
+        await db.inventoryUnit.update({ where: { id: unit.id }, data: { purchaseCost: 0, notes: null, warehouseId: null, location: null, conditionScore: null, supplierId: null, purchasedAt: null, warrantyUntil: null, incidentCycle: 0 } });
+      }
     });
     await t.test("even resolved unit incidents prohibit conversion and remain byte-for-byte intact", async () => {
       const f = await seed(); const unit = (await f.snapshot()).units[0];

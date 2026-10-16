@@ -786,6 +786,22 @@ export async function saveCombo(options: {
               where: { inventoryId: comboId, organizationId, OR: [{ status: { not: "AVAILABLE" } }, { incidents: { some: {} } }] },
             });
             if (withHistory > 0) rejectComboSave({ ok: false, reason: "invalid", message: "El producto tiene unidades con historial (mantenimiento, daños o retiros): no se puede convertir en juego." });
+            // Available does not mean disposable: individual purchase/location
+            // details remain valuable even if equal to the parent's defaults.
+            const withDetails = await tx.inventoryUnit.findFirst({
+              where: {
+                inventoryId: comboId, organizationId,
+                OR: [
+                  { purchaseCost: { not: 0 } }, { notes: { not: null } },
+                  { warehouseId: { not: null } }, { location: { not: null } },
+                  { conditionScore: { not: null } }, { supplierId: { not: null } },
+                  { purchasedAt: { not: null } }, { warrantyUntil: { not: null } },
+                  { incidentCycle: { not: 0 } },
+                ],
+              },
+              select: { code: true },
+            });
+            if (withDetails) rejectComboSave({ ok: false, reason: "invalid", message: `La unidad «${withDetails.code}» conserva datos propios de compra, costo, notas, ubicación o condición. No se puede convertir en combo sin perderlos; no se modificó el producto ni sus unidades.` });
             removeCleanUnits = true;
           }
           const active = await tx.eventInventory.count({ where: { inventoryId: comboId, ...committedAssignmentWhere(organizationId) } });
