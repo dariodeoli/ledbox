@@ -223,6 +223,20 @@ export async function purgeInventoryItem(id: string, input: PurgeInput, context:
   });
 }
 
+/** Borrar una familia nunca desvincula variantes como efecto secundario del definitivo. */
+export async function purgeInventoryFamily(id: string, input: PurgeInput, context: AuditContext): Promise<void> {
+  const reason = readPurgeReason(input.reason);
+  await dbWithDeleted.$transaction(async tx => {
+    const blockers = await blockersFor("InventoryFamily", id, context.organizationId, tx);
+    const row = await tx.inventoryFamily.findFirst({ where: { id, organizationId: context.organizationId, deletedAt: { not: null } }, select: { name: true } });
+    if (!row) throw new TrashError("La familia no está en la papelera.", 409);
+    if (!namesMatch(input.confirmName, row.name)) throw new TrashError("El nombre escrito no coincide con el de la familia.", 400);
+    if (blockers.length) throw new TrashError("La familia conserva variantes vinculadas, incluso eliminadas. Desvinculalas antes del borrado definitivo; sus productos y datos se conservan.", 409, blockers);
+    await tx.inventoryFamily.delete({ where: { id } });
+    await recordAudit({ context, action: "purge", entity: "InventoryFamily", entityId: id, summary: `Borró definitivamente la familia «${row.name}»`, detail: { fields: { reason } } }, tx);
+  });
+}
+
 export type AnnulOutcome = { status: 200; id: string } | { status: 404 } | { status: 409; blockers: Blocker[] };
 
 /**
@@ -281,6 +295,7 @@ const orderBy = { deletedAt: "desc" } as const;
 
 const SOURCES: TrashSource[] = [
   { type: "Event", load: (o) => dbWithDeleted.event.findMany({ where: trashWhere(o), select: nameSelect, orderBy, take: MAX_ROWS }) },
+  { type: "InventoryFamily", load: async (o) => (await dbWithDeleted.inventoryFamily.findMany({ where: trashWhere(o), select: { id: true, name: true, deletedAt: true, deletedById: true, deleteReason: true }, orderBy, take: MAX_ROWS })).map(row => ({ ...row, anonymizedAt: null })) },
   { type: "InventoryItem", load: (o) => dbWithDeleted.inventoryItem.findMany({ where: trashWhere(o), select: nameSelect, orderBy, take: MAX_ROWS }) },
   { type: "Client", load: (o) => dbWithDeleted.client.findMany({ where: trashWhere(o), select: nameSelect, orderBy, take: MAX_ROWS }) },
   { type: "Lead", load: (o) => dbWithDeleted.lead.findMany({ where: trashWhere(o), select: nameSelect, orderBy, take: MAX_ROWS }) },
@@ -295,7 +310,7 @@ const SOURCES: TrashSource[] = [
   },
 ];
 
-/** Lo eliminado de la empresa (las 7 entidades con papelera), con bloqueos del borrado definitivo. */
+/** Lo eliminado de la empresa (las entidades con papelera), con bloqueos del borrado definitivo. */
 export async function listTrash(organizationId: string, purgeDays: number | null = null, now: Date = new Date()): Promise<TrashRow[]> {
   const groups = await Promise.all(SOURCES.map(async (source) => ({ type: source.type, rows: await source.load(organizationId) })));
   const userIds = [...new Set(groups.flatMap((group) => group.rows.map((row) => row.deletedById)).filter((value): value is string => Boolean(value)))];

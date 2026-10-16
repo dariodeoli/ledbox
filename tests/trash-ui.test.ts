@@ -166,8 +166,10 @@ test("Eventos e Inventario enchufan el menú «•••» de la papelera solo c
   assert.match(dialog, /disabled=\{!ready/);
 });
 
-test("el registro cubre las 7 entidades de la papelera con su ruta de API", () => {
-  assert.deepEqual(Object.keys(TRASH_ENTITIES).sort(), ["Budget", "Client", "Event", "InventoryItem", "Lead", "Promoter", "Supplier"]);
+test("el registro cubre las 8 entidades de la papelera con su ruta de API", () => {
+  assert.deepEqual(Object.keys(TRASH_ENTITIES).sort(), ["Budget", "Client", "Event", "InventoryFamily", "InventoryItem", "Lead", "Promoter", "Supplier"]);
+  assert.equal(trashActionPath("InventoryFamily", "f1", "restore"), "/api/admin/inventory/families/f1/restore");
+  assert.equal(canOfferAnonymize("InventoryFamily", [{ kind: "familyVariants", count: 1 }]), false);
   assert.equal(trashActionPath("Client", "c1", "archive"), "/api/admin/clients/c1/archive");
   assert.equal(trashActionPath("Promoter", "p1", "trash"), "/api/admin/promoters/p1/trash");
   assert.equal(trashActionPath("Budget", "b1", "purge"), "/api/admin/budgets/b1/purge");

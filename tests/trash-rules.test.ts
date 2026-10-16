@@ -31,7 +31,8 @@ test("el filtro agrega deletedAt:null y respeta un where explícito", () => {
   assert.equal(mentionsDeletedAt({ organizationId: "o" }), false);
   assert.deepEqual(live, { deletedAt: null });
   assert.deepEqual([...FILTERED_OPERATIONS].sort(), ["aggregate", "count", "findFirst", "findFirstOrThrow", "findMany", "findUnique", "findUniqueOrThrow", "groupBy"]);
-  assert.equal(TRASH_MODELS.length, 7);
+  assert.equal(TRASH_MODELS.length, 8);
+  assert(TRASH_MODELS.includes("InventoryFamily"));
 });
 
 test("db.ts cablea la extensión sobre los 7 modelos y exporta dbWithDeleted", () => {

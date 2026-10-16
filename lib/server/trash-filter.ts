@@ -1,10 +1,10 @@
 /**
  * Filtro de la papelera (docs/PAPELERA.md): lo eliminado (`deletedAt` con fecha) no
- * aparece en ninguna lectura de los 7 modelos con papelera. Puro y sin Prisma para
+ * aparece en ninguna lectura de los modelos con papelera. Puro y sin Prisma para
  * poder probarlo sin base. La extensión de `lib/server/db.ts` lo aplica a cada operación.
  */
 
-export const TRASH_MODELS = ["Event", "InventoryItem", "Client", "Lead", "Supplier", "Promoter", "Budget"] as const;
+export const TRASH_MODELS = ["Event", "InventoryItem", "InventoryFamily", "Client", "Lead", "Supplier", "Promoter", "Budget"] as const;
 export type TrashModel = (typeof TRASH_MODELS)[number];
 
 /** Operaciones de lectura que reciben `where` y quedan filtradas. */
