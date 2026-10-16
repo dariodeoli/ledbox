@@ -2954,7 +2954,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-meter--large .admin-meter-figures strong { font-size: 22px; }
 .admin-meter--large .admin-meter-track { height: 6px; }
 /* Casilla de selección de fila (selección múltiple para la edición en lote). */
-.admin-rowcheck { display: inline-grid; place-items: center; flex: 0 0 auto; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+.admin-rowcheck { position: relative; z-index: 1; display: inline-grid; place-items: center; flex: 0 0 auto; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
 .admin-rowcheck:disabled { cursor: not-allowed; opacity: .5; }
 .admin-rowcheck-box { display: grid; place-items: center; width: 18px; height: 18px; border: 1.5px solid var(--a-line-control); border-radius: 6px; background: var(--a-bg-2); color: transparent; }
 .admin-rowcheck[aria-checked="true"] .admin-rowcheck-box { border-color: var(--a-ok); background: var(--a-ok); color: var(--a-ink); }

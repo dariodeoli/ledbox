@@ -50,7 +50,7 @@ function invalidateSession(): void {
 }
 
 export type AdminApiResult<T> = { ok: true; data: T } | { ok: false; error: string; code?: string; sessionInvalid?: boolean; aborted?: boolean };
-export type AdminSendResult<T> = { ok: true; data: T } | { ok: false; error: string; code?: string; blockers?: TrashBlocker[] };
+export type AdminSendResult<T> = { ok: true; data: T } | { ok: false; error: string; code?: string; blockers?: TrashBlocker[]; uncertain?: boolean };
 
 /**
  * Aviso global de refresco (issue #120): la «Carga con IA» crea registros desde
@@ -237,7 +237,7 @@ async function sendMutation<T>(
     outcome = await requestJson(path, { method, body, timeoutMs: SEND_TIMEOUT_MS, idempotencyKey });
   }
   clearAdminApiCache();
-  if (!outcome) return { ok: false, error: "No pudimos conectar con el panel." };
+  if (!outcome) return { ok: false, error: "No pudimos conectar con el panel.", uncertain: true };
   if (outcome.status === 401 || outcome.status === 403) {
     // Misma regla que en los GET: un 403 con código es una regla de negocio
     // (límite del plan, issue #42), no una sesión vencida.
@@ -261,7 +261,7 @@ async function sendMutation<T>(
     // 409 de la papelera: los bloqueos concretos (`{ kind, count }`) viajan al diálogo.
     const blockers = readBlockers(outcome.payload);
     if (blockers.length) return { ok: false, error: message, blockers };
-    return code ? { ok: false, error: message, code } : { ok: false, error: message };
+    return code ? { ok: false, error: message, code, uncertain: outcome.status >= 500 } : { ok: false, error: message, uncertain: outcome.status >= 500 };
   }
   return { ok: true, data: outcome.payload as T };
 }
