@@ -2990,6 +2990,12 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-ficha-stats dd { display: grid; align-content: start; gap: 4px; min-width: 0; margin: 0; color: var(--a-text-strong); font-size: 14px; line-height: 1.3; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .admin-ficha-stats .admin-meter { min-width: 0; }
 .admin-ficha-stats .admin-meter-figures { white-space: normal; }
+@media (max-width: 767px) {
+  .admin-ficha-hero { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; }
+  .admin-ficha-hero-main { display: contents; }
+  .admin-ficha-badges { align-self: start; }
+  .admin-ficha-stats { grid-column: 1 / -1; }
+}
 .admin-ficha-range { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
 .admin-ficha-description { margin: 0; color: var(--a-text); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
 .admin-ficha-links, .admin-ficha-audit { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
