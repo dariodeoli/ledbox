@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Button as SharedButton } from "owncoding-ui";
+import { Button as SharedButton, Select as SharedSelect } from "owncoding-ui";
 import type { KpiState } from "@/components/admin/kpi-state";
 import { createPortal } from "react-dom";
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -1394,7 +1394,7 @@ export function AdminSelect({
   tone?: AdminTone;
 }) {
   return (
-    <select
+    <SharedSelect
       className={className ?? "admin-filter"}
       value={value}
       onChange={(event) => onChange(event.target.value)}
@@ -1409,7 +1409,7 @@ export function AdminSelect({
           {option.label}
         </option>
       ))}
-    </select>
+    </SharedSelect>
   );
 }
 
