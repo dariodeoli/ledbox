@@ -1,4 +1,6 @@
 "use client";
+import { ClientIdentityView } from "../ClientIdentity";
+import { clientPresentation } from "@/lib/client-identity";
 
 import { kpiState } from "@/components/admin/kpi-state";
 import Link from "next/link";
@@ -158,6 +160,7 @@ function itemTagLabel(item: AdminCalendarItem): string | null {
 
 function itemTitleText(item: AdminCalendarItem): string {
   const parts = [calendarKindLabel(item.kind), item.title];
+  if (item.client) { const identity = clientPresentation(item.client); if (identity.primary !== item.title) parts.push(identity.primary); if (identity.description) parts.push(identity.description); }
   if (item.subtitle) parts.push(item.subtitle);
   return parts.join(" · ");
 }
@@ -217,7 +220,8 @@ function CalendarItemLink({ item, variant, onSelect }: { item: AdminCalendarItem
     <button type="button" className="admin-cal-item" onClick={() => onSelect(item)} data-variant={variant} data-kind={item.kind} data-tone={item.tone} title={`${itemTitleText(item)}${range}`} aria-label={`Ver resumen: ${item.title}`}>
       <span className="admin-cal-item-time">{formatTime(item.at)}</span>
       <span className="admin-cal-item-main">
-        <span className="admin-cal-item-title">{item.title}</span>
+        <span className="admin-cal-item-title">{item.client && ["collection", "collection_due"].includes(item.kind) ? <ClientIdentityView client={item.client} /> : item.title}</span>
+        {item.client && !["collection", "collection_due"].includes(item.kind) ? <ClientIdentityView client={item.client} /> : null}
         {item.subtitle ? <span className="admin-cal-item-sub">{item.subtitle}</span> : null}
         {range ? <span className="admin-cal-item-sub">{range.slice(3)}</span> : null}
       </span>
@@ -359,10 +363,11 @@ export function CalendarioModule({ events = [], eventsLoading = false, eventsErr
       </AdminToolbar>
 
       {selectedItem ? (
-        <AdminPanel title={selectedItem.title} icon="calendar" action={<AdminButton icon="close" onClick={closeSummary}>Cerrar resumen</AdminButton>}>
+        <AdminPanel title={selectedItem.client && !selectedEvent ? calendarKindLabel(selectedItem.kind) : selectedItem.title} icon="calendar" action={<AdminButton icon="close" onClick={closeSummary}>Cerrar resumen</AdminButton>}>
           <div className="admin-cal-summary" ref={summaryRef} tabIndex={-1} aria-label={`Resumen: ${selectedItem.title}`} role="region" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); closeSummary(); } }}>
             <AdminBadge tone={selectedItem.tone}>{calendarKindLabel(selectedItem.kind)}</AdminBadge>
             {itemTagLabel(selectedItem) ? <AdminBadge tone={statusTone(selectedItem.tag)}>{itemTagLabel(selectedItem)}</AdminBadge> : null}
+            {!selectedEvent && selectedItem.client ? <ClientIdentityView client={selectedItem.client} size={40} /> : null}
             {selectedEvent ? null : <p>{selectedItem.subtitle ?? "Sin información adicional"}</p>}
             <dl>
               {!selectedEvent || selectedItem.kind !== "event" ? <div><dt>Fecha del movimiento</dt><dd>{formatDateTime(selectedItem.at)}</dd></div> : null}
@@ -370,7 +375,7 @@ export function CalendarioModule({ events = [], eventsLoading = false, eventsErr
               {selectedEvent ? <>
                 <div><dt>Inicio del evento</dt><dd>{selectedEvent.startsAt ? formatDateTime(selectedEvent.startsAt) : "Sin fecha informada"}</dd></div>
                 <div><dt>Fin del evento</dt><dd>{selectedEvent.endsAt ? formatDateTime(selectedEvent.endsAt) : "Sin fecha informada"}</dd></div>
-                <div><dt>Cliente</dt><dd>{selectedEvent.client.company || selectedEvent.client.name}</dd></div>
+                <div><dt>Cliente</dt><dd><ClientIdentityView client={selectedEvent.client} /></dd></div>
                 <div><dt>Lugar</dt><dd>{[selectedEvent.location, selectedEvent.city].filter(Boolean).join(" · ") || "Sin lugar informado"}</dd></div>
                 <div><dt>Montaje</dt><dd>{selectedEvent.setupAt ? formatDateTime(selectedEvent.setupAt) : "Sin fecha informada"}</dd></div>
                 <div><dt>Desmontaje</dt><dd>{selectedEvent.strikeAt ? formatDateTime(selectedEvent.strikeAt) : "Sin fecha informada"}</dd></div>

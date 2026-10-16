@@ -1,4 +1,5 @@
 "use client";
+import { ClientIdentityView } from "../ClientIdentity";
 import { useMemo, useState } from "react";
 import type { AdminBudgetRow } from "@/lib/admin-types";
 import { useAdminResource } from "@/lib/admin-api";
@@ -53,7 +54,8 @@ export function BudgetComparisons({ quotes }: { quotes: AdminBudgetRow[] }) {
       <DateField label="Vencimiento de la comparación" value={expiresAt} required onChange={setExpiresAt} />
       <div className="admin-comparison-candidates">
         {candidates.map((quote) => <div key={quote.id}>
-          <SwitchField label={`Incluir ${quote.title}`} hint={quote.client.company || quote.client.name} checked={Object.hasOwn(chosen, quote.id)} disabled={busy || (!Object.hasOwn(chosen, quote.id) && ids.length >= 4)} onChange={(checked) => setChosen((rows) => { const next = { ...rows }; if (checked) next[quote.id] = quote.title.slice(0,80); else delete next[quote.id]; return next; })} />
+          <SwitchField label={`Incluir ${quote.title}`} checked={Object.hasOwn(chosen, quote.id)} disabled={busy || (!Object.hasOwn(chosen, quote.id) && ids.length >= 4)} onChange={(checked) => setChosen((rows) => { const next = { ...rows }; if (checked) next[quote.id] = quote.title.slice(0,80); else delete next[quote.id]; return next; })} />
+          <ClientIdentityView client={quote.client} />
           {Object.hasOwn(chosen, quote.id) ? <TextField label={`Nombre de alternativa: ${quote.title}`} value={chosen[quote.id]} maxLength={80} required onChange={(value) => setChosen((rows) => ({ ...rows, [quote.id]: value }))} /> : null}
         </div>)}
       </div>

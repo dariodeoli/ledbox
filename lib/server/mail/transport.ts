@@ -70,6 +70,8 @@ export type ProviderMailOutcome = {
   providerId: string | null;
   /** Mensaje del proveedor si rechazó el envío. */
   error: string | null;
+  /** Sin acuse fiable: no equivale a rechazo y no autoriza un reintento automático. */
+  uncertain?: boolean;
 };
 
 /** Motivo del rechazo del proveedor, en una línea legible. */
@@ -97,9 +99,16 @@ export async function sendThroughProvider(payload: ProviderMailPayload): Promise
       ...(payload.text ? { text: payload.text } : {}),
       ...(payload.replyTo ? { replyTo: payload.replyTo } : {}),
     });
-    if (result.error) return { providerId: null, error: providerErrorMessage(result.error) };
-    return { providerId: result.data?.id ?? null, error: null };
+    if (result.error) {
+      // El SDK también convierte errores de red en application_error con statusCode null.
+      const code = result.error.statusCode;
+      const uncertain = result.error.name === "application_error" || result.error.name === "internal_server_error"
+        || (typeof code === "number" && code >= 500);
+      return { providerId: null, error: providerErrorMessage(result.error), ...(uncertain ? { uncertain: true } : {}) };
+    }
+    if (!result.data?.id) return { providerId: null, error: "El proveedor no devolvió un acuse verificable.", uncertain: true };
+    return { providerId: result.data.id, error: null };
   } catch (error) {
-    return { providerId: null, error: providerErrorMessage(error) };
+    return { providerId: null, error: providerErrorMessage(error), uncertain: true };
   }
 }

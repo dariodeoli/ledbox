@@ -760,3 +760,11 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - Las variantes y su resumen distinguen pendiente de conteo de cero confirmado. Si falta contar alguna variante, no se muestra una disponibilidad total como si estuviera completa.
 - La importación separa fotos modificadas, conservadas, fallidas y archivos no aportados. El detalle identifica producto, galería, categoría o colección; una galería parcialmente aplicada avisa qué ocurrió.
 - Las fotos idénticas de categorías y colecciones se conservan sin reescribir. Los contadores del resultado reflejan cambios guardados; la vista previa aclara que sólo encontró archivos, todavía sin aplicarlos.
+
+## v2.1.139 — 2026-10-16
+
+- Respaldo portable de catálogo e inventario con fotos, relaciones y propietarios. Permite revisar y restaurar en una demo nueva; no reemplaza un respaldo completo de empresa ni restaura reservas, caja o historial.
+- Importación explícita de precios de productos existentes: conservar, vaciar o reemplazar cada precio y tarifa. La vista previa muestra antes/después; detecta cambios concurrentes y permite recuperar reportes sin aplicar dos veces. Fotos y estados selectivos siguen pendientes.
+- Enviar presupuestos guarda un recibo antes de contactar al proveedor. Consultar o repetir el mismo intento no reenvía; la aceptación pasa un borrador sin cambios a Enviado y refresca el panel. Un resultado incierto queda visible y exige revisar antes de crear otro intento.
+- Identidad compartida de cliente en calendario, facturación viva, comparaciones y selector de precios: avatar, nombre comercial, responsable y segmento. Los documentos fiscales e históricos mantienen sus snapshots.
+- Las propuestas de ciudad por IA exigen una opción del catálogo; los formularios históricos conservan valores anteriores.

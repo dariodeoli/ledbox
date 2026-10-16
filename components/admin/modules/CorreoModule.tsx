@@ -137,8 +137,8 @@ export function CorreoModule() {
                 </AdminCell>
                 <AdminCell title={mailCategoryLabel(log.category)}>{mailCategoryLabel(log.category)}</AdminCell>
                 <AdminCell title={log.subject}>{log.subject}</AdminCell>
-                <AdminCell title={log.providerId ? `Id del proveedor: ${log.providerId}` : mailStatusLabel(log.status)}>
-                  <AdminBadge tone={mailStatusTone(log.status)}>{mailStatusLabel(log.status)}</AdminBadge>
+                <AdminCell title={log.providerId ? `Id del proveedor: ${log.providerId}` : mailStatusLabel(log.status, log.error)}>
+                  <AdminBadge tone={mailStatusTone(log.status, log.error)}>{mailStatusLabel(log.status, log.error)}</AdminBadge>
                 </AdminCell>
                 <AdminCell title={log.error ?? "Sin fallos"}>
                   {log.error ? <span className="admin-reminder-error">{log.error}</span> : "—"}

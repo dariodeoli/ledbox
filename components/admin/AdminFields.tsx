@@ -694,9 +694,11 @@ export function PhoneField({
 }
 
 /** Ciudad con sugerencias; `catalogOnly` exige selección del catálogo y conserva valores históricos. */
-export function CityField({ label, help, ariaLabel, value, onChange, onSelect, hint, error, wide, size, required, disabled, placeholder, id, name, catalogOnly = true }: {
+export function CityField({ label, help, ariaLabel, value, onChange, onSelect, hint, error, wide, size, required, disabled, placeholder, id, name, catalogOnly = true, allowHistoricalValue = true }: {
   label?: string; help?: string; ariaLabel?: string; value: string; onChange: (value: string) => void;
   catalogOnly?: boolean;
+  /** New drafts must not present an unpersisted proposal as a historical value. */
+  allowHistoricalValue?: boolean;
   onSelect: (city: string, department: string) => void;
   hint?: string; error?: string | null; wide?: boolean;
   /** Ancho del campo: xs, sm, md, lg o full (por defecto el de su tipo). */
@@ -705,10 +707,12 @@ export function CityField({ label, help, ariaLabel, value, onChange, onSelect, h
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   const ref = useSharedInputAttributes({ id: fieldId, value, error, name, required, ariaLabel: label ?? ariaLabel, describedBy: describedBy(error, hint, hintId, errorId) });
+  const outsideCatalog = Boolean(value) && !CITY_OPTIONS.some(entry => entry.ciudad === value);
+  const catalogError = error || (!disabled && !allowHistoricalValue && outsideCatalog ? `La ciudad «${value}» no pertenece al catálogo. Elegí una opción de la lista.` : undefined);
   if (catalogOnly) return <Combobox label={label} help={help} ariaLabel={ariaLabel} value={value}
     onChange={(city) => { const option = CITY_OPTIONS.find((entry) => entry.ciudad === city); if (option) onSelect(option.ciudad, option.departamento); else onChange(city === value ? city : ""); }}
-    options={CITY_OPTIONS.map((entry) => ({ value: entry.ciudad, label: entry.ciudad, description: entry.departamento })).concat(value && !CITY_OPTIONS.some((entry) => entry.ciudad === value) ? [{ value, label: value, description: "Valor guardado anteriormente" }] : [])}
-    hint={hint} error={error} wide={wide} size={size ?? "md"} required={required} disabled={disabled} placeholder={placeholder} id={fieldId} name={name} />;
+    options={CITY_OPTIONS.map((entry) => ({ value: entry.ciudad, label: entry.ciudad, description: entry.departamento })).concat(allowHistoricalValue && value && !CITY_OPTIONS.some((entry) => entry.ciudad === value) ? [{ value, label: value, description: "Valor guardado anteriormente" }] : [])}
+    hint={hint} error={catalogError} wide={wide} size={size ?? "md"} required={required} disabled={disabled} placeholder={placeholder} id={fieldId} name={name} />;
   return (
     <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={error} wide={wide} size={size ?? "md"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
       <div ref={ref} className="admin-shared-autocomplete">

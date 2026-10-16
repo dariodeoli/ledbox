@@ -41,9 +41,13 @@ export async function replaceAudienceTiers(
   audience: AudiencePriceTier["audience"],
   next: ReadonlyArray<Omit<AudiencePriceTier, "audience">>,
 ): Promise<void> {
-  const keep = (await tx.inventoryPriceTier.findMany({
-    where: { organizationId, inventoryId, audience: { not: audience } },
+  const before = await tx.inventoryPriceTier.findMany({
+    where: { organizationId, inventoryId, audience },
+    orderBy: { fromDays: "asc" },
     select: { audience: true, fromDays: true, mode: true, price: true },
-  })) as AudiencePriceTier[];
-  await replacePriceTiers(tx, organizationId, inventoryId, [...keep, ...next.map((tier) => ({ ...tier, audience }))]);
+  });
+  const sorted = [...next].sort((a, b) => a.fromDays - b.fromDays);
+  if (before.length === sorted.length && before.map(key).join("|") === sorted.map(tier => key({ ...tier, audience })).join("|")) return;
+  await tx.inventoryPriceTier.deleteMany({ where: { organizationId, inventoryId, audience } });
+  if (sorted.length) await tx.inventoryPriceTier.createMany({ data: sorted.map((tier, sortOrder) => ({ id: randomUUID(), organizationId, inventoryId, audience, fromDays: tier.fromDays, mode: tier.mode, price: tier.price, sortOrder })) });
 }

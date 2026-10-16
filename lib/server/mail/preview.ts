@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import type { MailPreview } from "@/lib/mail-preview";
 
@@ -29,6 +29,7 @@ export async function createMailPreview(content: PreviewContent, scope: PreviewS
   const expiresAt = issuedAt + TTL_SECONDS;
   const confirmationToken = await new SignJWT({ ...scope, fingerprint: fingerprint(content) })
     .setProtectedHeader({ alg: "HS256" }).setIssuer(ISSUER).setAudience(AUDIENCE)
+    .setJti(randomUUID())
     .setIssuedAt(issuedAt).setExpirationTime(expiresAt).sign(secret());
   return { status: "preview", ...content, confirmationToken, expiresAt: new Date(expiresAt * 1000).toISOString() };
 }

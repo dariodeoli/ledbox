@@ -111,8 +111,17 @@ async function lockFamily(tx: Tx, organizationId: string, id: string): Promise<b
   return rows.length > 0;
 }
 
+/** Shared family-first lock for writers that may turn a variant price into its own. */
+export { lockFamily as lockInventoryFamily };
+
 async function loadFamily(tx: Tx, organizationId: string, id: string): Promise<FamilyRow | null> {
   return tx.inventoryFamily.findFirst({ where: { id, organizationId, deletedAt: null } });
+}
+
+/** Minimal canonical read scope for a variant price edit; no variant writer outside this module. */
+export const VARIANT_PRICE_IDENTITY_SELECT = { familyId: true, variantOwnPrice: true } as const;
+export function variantPriceIdentity(item: { familyId: string | null; variantOwnPrice: boolean }) {
+  return { familyId: item.familyId, variantOwnPrice: item.variantOwnPrice };
 }
 
 const VARIANT_SELECT = {

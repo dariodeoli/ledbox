@@ -7,6 +7,7 @@ import { jsonError, readJson } from "@/lib/server/http";
 import { buildBudgetMail, mailIdentityFor, sendMail } from "@/lib/server/mail";
 import { createMailPreview, verifyMailPreviewConfirmation, MailPreviewUnavailableError } from "@/lib/server/mail/preview";
 import { requireAdminContext } from "@/lib/server/tenancy";
+import { budgetMailAttemptId, readBudgetMailAttempt, reconcileBudgetMailAttempt, sendBudgetMailAttempt } from "@/lib/server/budget-mail-attempt";
 
 export const runtime = "nodejs";
 import { clientDisplayName } from "@/lib/client-identity";
@@ -44,11 +45,26 @@ export async function POST(request: Request) {
   const rawTo = typeof body.to === "string" ? body.to : "";
   const message = typeof body.message === "string" ? body.message.trim() : "";
   const preview = body.preview === true;
-  if (preview && body.confirm === true) return jsonError("Elegí previsualizar o confirmar el envío.", 400);
+  if (!budgetId) return jsonError("Elegí el presupuesto a enviar.", 400);
+  if (preview && (body.confirm === true || body.receiptOnly === true)) return jsonError("Elegí previsualizar, confirmar o consultar un intento.", 400);
+  // Recuperar un intento nunca renderiza ni reenvía el correo. La autorización
+  // vigente y el recibo ligan empresa, actor y presupuesto, incluso si éste avanzó.
+  const receiptId = body.receiptOnly === true && typeof body.attemptId === "string" ? body.attemptId
+    : !preview && body.confirm === true && typeof body.confirmationToken === "string" && body.confirmationToken.length <= 4096
+      ? budgetMailAttemptId(body.confirmationToken) : null;
+  if (receiptId) {
+    try {
+      const receipt = await readBudgetMailAttempt(auth.context, budgetId, receiptId);
+      if (receipt) return Response.json(await reconcileBudgetMailAttempt(auth.context, receipt), { headers: { "Cache-Control": "no-store" } });
+      if (body.receiptOnly === true) return jsonError("No encontramos un recibo vigente de este intento para tu sesión. No se reenvió ningún correo.", 404);
+    } catch {
+      return jsonError("No pudimos consultar el intento. Revisá el historial antes de intentar un nuevo envío.", 503);
+    }
+  }
+  if (body.receiptOnly === true) return jsonError("Indicá un intento de correo válido.", 400);
   if (!preview && (body.confirm !== true || typeof body.confirmationToken !== "string")) {
     return jsonError("Previsualizá el correo antes de confirmar el envío.", 409);
   }
-  if (!budgetId) return jsonError("Elegí el presupuesto a enviar.", 400);
   if (message.length > MAX_MESSAGE) return jsonError(`El mensaje no puede superar los ${MAX_MESSAGE} caracteres.`, 400);
 
   const to = normalizeEmail(rawTo);
@@ -89,7 +105,8 @@ export async function POST(request: Request) {
   try {
     if (preview) {
       // Read-only: no send, MailLog, audit, portal token generation or budget mutation.
-      return Response.json(await createMailPreview(sendable, scope), { headers: { "Cache-Control": "no-store" } });
+      const result = await createMailPreview(sendable, scope);
+      return Response.json({ ...result, attemptId: budgetMailAttemptId(result.confirmationToken) }, { headers: { "Cache-Control": "no-store" } });
     }
     if (!await verifyMailPreviewConfirmation(body.confirmationToken as string, sendable, scope)) {
       return jsonError("La vista previa venció o cambió el correo. Previsualizá nuevamente antes de enviarlo.", 409);
@@ -100,20 +117,29 @@ export async function POST(request: Request) {
   }
 
   const clientLabel = clientDisplayName(budget.client);
-  const result = await sendMail({
-    to,
-    subject: content.subject,
-    category: "budget",
-    html: content.html,
-    text: content.text,
-    organizationId,
-    identity,
-    entity: "Budget",
-    entityId: budget.id,
-    actor: auth.context.user,
-  });
+  let attempt: Awaited<ReturnType<typeof sendBudgetMailAttempt>>;
+  try {
+    attempt = await sendBudgetMailAttempt({ request, context: auth.context, budgetId: budget.id, updatedAt: budget.updatedAt,
+      token: body.confirmationToken as string, to, subject: content.subject,
+      deliver: () => sendMail({
+        to,
+        subject: content.subject,
+        category: "budget",
+        html: content.html,
+        text: content.text,
+        organizationId,
+        identity,
+        entity: "Budget",
+        entityId: budget.id,
+        actor: auth.context.user,
+      }),
+    });
+  } catch {
+    return jsonError("No pudimos registrar o recuperar el intento; no se repetirá el envío automáticamente. Revisá el historial.", 503);
+  }
+  const result = attempt.reply;
 
-  await recordAudit({
+  if (attempt.firstAttempt) await recordAudit({
     context: auth.context,
     action: "send",
     entity: "Budget",
@@ -122,13 +148,17 @@ export async function POST(request: Request) {
       result.simulated
         ? `Simuló el envío por correo del presupuesto «${budget.title}» a «${clientLabel}» (${to}): en la demo no sale ningún correo`
         : result.status === "sent"
-        ? `Envió por correo el presupuesto «${budget.title}» a «${clientLabel}» (${to})`
+        ? `El proveedor aceptó el correo del presupuesto «${budget.title}» para «${clientLabel}» (${to}); no acredita entrega al buzón`
+        : result.status === "unknown" || result.status === "pending"
+        ? `Resultado del correo del presupuesto «${budget.title}» pendiente de confirmación; no se reenvió automáticamente`
         : `No pudo enviar por correo el presupuesto «${budget.title}» a «${clientLabel}»: ${result.error ?? "sin detalle"}`,
     detail: {
       fields: {
         to,
         category: "budget",
         status: result.status,
+        attemptId: result.attemptId,
+        commercialState: result.commercialState,
         portalCode: content.code,
         ...(result.error ? { error: result.error } : {}),
       },
@@ -136,14 +166,12 @@ export async function POST(request: Request) {
   });
 
   return Response.json({
-    status: result.status,
-    error: result.error ?? null,
+    ...result,
     // Demo: el correo no salió; solo una sandbox recibe la vista previa de lo que se habría enviado.
-    ...(result.simulated ? { simulated: true, preview: result.preview ?? null } : {}),
+    ...(result.simulated ? { simulated: true, preview: attempt.preview ?? null } : {}),
     to,
     subject: content.subject,
     portalUrl: content.portalUrl,
     code: content.code,
-    sentAt: new Date().toISOString(),
-  });
+  }, { headers: { "Cache-Control": "no-store" } });
 }

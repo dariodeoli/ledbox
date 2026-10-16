@@ -1,4 +1,6 @@
 "use client";
+import { ClientIdentityView, clientComboboxOption } from "../ClientIdentity";
+import { clientPresentation } from "@/lib/client-identity";
 
 import { kpiState } from "@/components/admin/kpi-state";
 import Link from "next/link";
@@ -307,7 +309,7 @@ export function FacturacionModule() {
   const clientOptions = useMemo(
     () => [
       { value: "", label: "Consumidor final (texto libre)" },
-      ...activeClients.map((client) => ({ value: client.id, label: client.company?.trim() || client.name })),
+      ...activeClients.map(clientComboboxOption),
     ],
     [activeClients],
   );
@@ -669,7 +671,7 @@ export function FacturacionModule() {
                     id: budget.id,
                     title: budget.title,
                     titleTooltip: budget.title,
-                    subtitle: budget.client.company || budget.client.name,
+                    identity: <ClientIdentityView client={budget.client} />,
                     fields: [
                       {
                         label: "Total",
@@ -707,7 +709,7 @@ export function FacturacionModule() {
                     <AdminCell title={budget.title}>
                       <strong>{budget.title}</strong>
                     </AdminCell>
-                    <AdminCell title={budget.client.company || budget.client.name}>{budget.client.company || budget.client.name}</AdminCell>
+                    <AdminCell title={clientPresentation(budget.client).primary}><ClientIdentityView client={budget.client} /></AdminCell>
                     <AdminCell title={formatMoney(budget.total)}>
                       <span className="admin-nowrap">{formatMoney(budget.total)}</span>
                     </AdminCell>
@@ -1530,7 +1532,8 @@ export function FacturacionModule() {
                 options={approvedBudgets.map((budget) => ({
                   value: budget.id,
                   label: budget.title,
-                  description: `${budget.client.company || budget.client.name} · ${formatMoney(budget.total)}`,
+                  description: `${clientPresentation(budget.client).primary} · ${formatMoney(budget.total)}`,
+                  content: <span>{budget.title}<ClientIdentityView client={budget.client} /></span>,
                 }))}
                 hint={selectedBudget ? "Las líneas del presupuesto entran como ítems de la factura (IVA 10 % por defecto, ajustable después)." : undefined}
               />

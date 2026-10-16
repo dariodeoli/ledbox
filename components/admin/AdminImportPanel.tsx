@@ -1,5 +1,7 @@
 "use client";
 
+import { SelectedPriceImport } from "./SelectedPriceImport";
+
 import { useEffect, useMemo, useState } from "react";
 import { adminApiGet, adminApiUpload, clearAdminApiCache } from "@/lib/admin-api";
 import { IMPORT_MODULES, type ImportModuleId } from "@/lib/import-modules";
@@ -44,7 +46,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
   const modulo = IMPORT_MODULES[moduloId];
   const url = `/api/admin/import/${modulo.id}`;
   const [camino, setCamino] = useState<Camino>("planilla");
-  const [importMode, setImportMode] = useState<CatalogImportMode>("CREATE_ONLY");
+  const [importMode, setImportMode] = useState<CatalogImportMode | "UPDATE_SELECTED">("CREATE_ONLY");
   const [planilla, setPlanilla] = useState<File | null>(null);
   const [json, setJson] = useState<File | null>(null);
   const [zip, setZip] = useState<File | null>(null);
@@ -173,6 +175,8 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
   const porMotivo = dudas.reduce<Record<string, number>>((acc, duda) => ({ ...acc, [duda.motivo ?? "otro"]: (acc[duda.motivo ?? "otro"] ?? 0) + 1 }), {});
   const dudasVisibles = dudas.filter((duda) => (motivo === "todas" || (duda.motivo ?? "otro") === motivo) && (!busqueda.trim() || `${duda.codigo} ${duda.mensaje}`.toLowerCase().includes(busqueda.trim().toLowerCase())));
   const aplicables = preview ? (preview.tarjetas.find((tarjeta) => tarjeta.clave === "crear")?.valor ?? 0) + (preview.tarjetas.find((tarjeta) => tarjeta.clave === "actualizar")?.valor ?? 0) : 0;
+
+  if (modulo.id === "productos" && importMode === "UPDATE_SELECTED") return <SelectedPriceImport onClose={onClose} onApplied={onApplied} onBack={() => setImportMode("CREATE_ONLY")} />;
 
   const pie = resultado ? (
     <AdminButton type="button" variant="primary" onClick={onClose}>
@@ -344,7 +348,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
               { value: "ia", label: "IA de LedBox" },
             ]}
           />
-          {modulo.id === "productos" ? <SelectField label="Productos existentes" size="full" value={importMode} onChange={(value) => setImportMode(value as CatalogImportMode)} options={[{ value: "CREATE_ONLY", label: "Crear sólo productos nuevos" }, { value: "UPSERT", label: "Crear nuevos y actualizar existentes" }]} hint="Crear sólo nuevos conserva íntegros los códigos existentes, su stock, tarifas y fotos." /> : null}
+          {modulo.id === "productos" ? <SelectField label="Productos existentes" size="full" value={importMode} onChange={(value) => setImportMode(value as CatalogImportMode | "UPDATE_SELECTED")} options={[{ value: "CREATE_ONLY", label: "Crear sólo productos nuevos" }, { value: "UPSERT", label: "Crear nuevos y actualizar existentes" }, { value: "UPDATE_SELECTED", label: "Actualizar sólo precios (JSON explícito)" }]} hint="Crear sólo nuevos conserva íntegros los códigos existentes, su stock, tarifas y fotos." /> : null}
           {camino === "planilla" ? (
             <>
               <p className="admin-field-hint">Descargá la plantilla con las columnas exactas, completala y subila en .xlsx o .csv.</p>

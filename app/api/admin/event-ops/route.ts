@@ -1,3 +1,4 @@
+import { CLIENT_IDENTITY_SELECT, clientIdentityDTO } from "@/lib/server/client-identity";
 import { randomUUID } from "node:crypto";
 import { requireAdminContext } from "@/lib/server/tenancy";
 import { db } from "@/lib/server/db";
@@ -36,8 +37,8 @@ async function withCleaning<E extends { assignments: Array<{ checkedInAt: Date |
  * `GET ?fields=checklist` (issue #68): lo mínimo del checklist del dashboard
  * —id, nombre y tareas—, sin cliente, equipos ni la disponibilidad de la
  * promotora. `GET ?fields=panel` (issue #68): el evento del panel de operación
- * con el **cliente mínimo** (id, nombre histórico, empresa, fantasía, razón
- * social y teléfono) y las tareas y
+ * con identidad comercial común (sin bytes ni contactos privados), teléfono
+ * operativo existente y las tareas y
  * asignaciones completas. Sin `fields` la respuesta es la de siempre
  * (compatible).
  */
@@ -70,12 +71,12 @@ export async function GET(request: Request) {
       orderBy: { startsAt: "asc" },
       take: 200,
       include: {
-        client: { select: { id: true, name: true, company: true, tradeName: true, legalName: true, phone: true } },
+        client: { select: { ...CLIENT_IDENTITY_SELECT, phone: true } },
         tasks: { orderBy: { dueAt: "asc" }, include: promoterSelect },
         assignments: { include: { inventory: { include: { _count: { select: { components: true } } } } } },
       },
     });
-    return Response.json({ events: await withCleaning(organizationId, events) });
+    return Response.json({ events: await withCleaning(organizationId, events.map(event => ({ ...event, client: clientIdentityDTO(event.client) }))) });
   }
 
   const events = await db.event.findMany({

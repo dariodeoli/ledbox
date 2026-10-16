@@ -7,6 +7,7 @@
 
 import { diasHasta, formatGs } from "owncoding-ui/utils";
 import { waMeLink } from "@/lib/whatsapp-link";
+import { uncertainMailError } from "./mail-preview";
 
 import { DEFAULT_PHONE_COUNTRY, normalizePhone, parsePhone, phoneValid } from "./field-rules";
 
@@ -424,9 +425,10 @@ const MAIL_STATUS_TONES: Record<string, AdminTone> = {
 };
 
 export const mailCategoryLabel = (value: string | null | undefined) => label(MAIL_CATEGORY, value);
-export const mailStatusLabel = (value: string | null | undefined) => label(MAIL_STATUS, value);
+export const mailStatusLabel = (value: string | null | undefined, error?: string | null) => uncertainMailError(error) ? "Sin confirmar" : label(MAIL_STATUS, value);
 
-export function mailStatusTone(value: string | null | undefined): AdminTone {
+export function mailStatusTone(value: string | null | undefined, error?: string | null): AdminTone {
+  if (uncertainMailError(error)) return "warn";
   if (!value) return "neutral";
   return MAIL_STATUS_TONES[value] ?? "neutral";
 }

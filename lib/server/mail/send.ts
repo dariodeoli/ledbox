@@ -5,6 +5,7 @@ import { db } from "../db";
 import { salidaPermitida } from "../demo-sandbox";
 import { rebasePortalLinks } from "@/lib/public-config";
 import type { SimulatedMail } from "@/lib/mail-preview";
+import { MAIL_UNCERTAIN_PREFIX } from "@/lib/mail-preview";
 import { isSandboxOrg } from "../demo-sandbox";
 import { mailIdentityFor, type MailIdentity } from "./org-brand";
 import { emailConfigured, missingApiKeyMessage, sendThroughProvider } from "./transport";
@@ -76,6 +77,8 @@ export type SendMailResult = {
   logId?: string | null;
   /** Demo: el correo no salió, quedó simulado. `status` sigue siendo `skipped`. */
   simulated?: boolean;
+  /** Error de red/acuse ambiguo: failed no significa rechazo confirmado en este caso. */
+  uncertain?: boolean;
   /** Solo en una sandbox (nunca en una empresa real): el correo tal como se habría enviado. */
   preview?: SimulatedMail;
 };
@@ -204,13 +207,13 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
   });
 
   const outcome = await sendThroughProvider({ from: identity.from, to, subject: input.subject, html: input.html, text: input.text, replyTo: identity.replyTo ?? undefined });
-  const status: MailStatus = outcome.error ? "failed" : "sent";
-  const error = outcome.error ? outcome.error.slice(0, MAX_ERROR) : null;
+  const status: MailStatus = outcome.uncertain ? "sending" : outcome.error ? "failed" : "sent";
+  const error = outcome.error ? `${outcome.uncertain ? MAIL_UNCERTAIN_PREFIX : ""}${outcome.error}`.slice(0, MAX_ERROR) : null;
   if (registered) await updateMailLog(logId, { status, error, providerId: outcome.providerId });
 
   if (outcome.error) {
     console.error(`[mail] Falló el envío ${input.category} a ${to}: ${error}`);
-    return { status: "failed", error: error ?? undefined, providerId: null, logId: registered ? logId : null };
+    return { status: "failed", error: error ?? undefined, providerId: null, logId: registered ? logId : null, ...(outcome.uncertain ? { uncertain: true } : {}) };
   }
   return { status: "sent", providerId: outcome.providerId, logId: registered ? logId : null };
 }

@@ -1,6 +1,7 @@
 "use client";
 import { PaymentDetailsDialog } from "./PaymentDetailsDialog";
 import { ClientIdentityView, clientComboboxOption } from "../ClientIdentity";
+import { budgetMailNotice, type BudgetMailReply } from "@/lib/budget-mail-receipt";
 import { useClientSelector } from "@/lib/admin-client-selector";
 import { BudgetComparisons } from "./BudgetComparisons";
 import { inputDateTime } from "./EventoFicha";
@@ -67,6 +68,7 @@ import { AdminBoard, AdminViewSwitch, useAdminBoardMove, useAdminModuleView, use
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 import {
   AdminActionsMenu,
+  AdminConfirmDialog,
   AdminSelect,
   AdminBadge,
   AdminButton,
@@ -103,7 +105,7 @@ import {
   type ComboboxOption,
 } from "../AdminFields";
 import { kpiState } from "@/components/admin/kpi-state";
-import { adminApiGet, adminSend, useAdminResource } from "@/lib/admin-api";
+import { adminApiGet, adminSend, requestAdminRefresh, useAdminResource } from "@/lib/admin-api";
 import { emailValid, FIELD_MESSAGES, normalizeEmail } from "@/lib/field-rules";
 
 /** Tablero kanban: una columna por estado comercial (set de estados, sin máquina). */
@@ -609,7 +611,7 @@ function ItemLinksDialog({
 }
 
 export function PresupuestosModule() {
-  const { role } = useAdminSession();
+  const { role, organization: activeOrganization, user: activeUser } = useAdminSession();
   const budgetsResource = useAdminResource("/api/admin/budgets", (payload) => ({
     budgets: payload.budgets ?? [],
     requests: payload.budgetRequests ?? [],
@@ -754,6 +756,8 @@ export function PresupuestosModule() {
   const [sendMessage, setSendMessage] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
   const [sendPreview, setSendPreview] = useState<MailPreview | null>(null);
+  const [sendAttemptId, setSendAttemptId] = useState<string | null>(null);
+  const [newSendAttempt, setNewSendAttempt] = useState(false);
   /** Demo: correo que no salió, con su vista previa. */
   const [simulatedMail, setSimulatedMail] = useState<SimulatedMail | null>(null);
   const mailInFlight = useRef(false);
@@ -1237,6 +1241,7 @@ export function PresupuestosModule() {
 
   /** Abre el diálogo de envío por correo con el destinatario del cliente ya cargado. */
   function openSend(budget: AdminBudgetRow) {
+    setNewSendAttempt(false);
     setSendPreview(null);
     setSendTo(normalizeEmail(budget.client.email ?? ""));
     setSendMessage("");
@@ -1244,6 +1249,20 @@ export function PresupuestosModule() {
     setSendStartsAt(inputDateTime(budget.event?.startsAt));
     setSendEndsAt(inputDateTime(budget.event?.endsAt));
     setSendBudget(budget);
+    try { setSendAttemptId(window.sessionStorage.getItem(sendAttemptKey(budget.id))); } catch { setSendAttemptId(null); }
+  }
+
+  function sendAttemptKey(budgetId: string) {
+    return `ledbox:budget-mail-attempt:${activeOrganization?.id ?? ""}:${activeUser?.id ?? ""}:${budgetId}`;
+  }
+
+  function rememberSendAttempt(id: string | null) {
+    setSendAttemptId(id);
+    if (!sendBudget) return;
+    try {
+      if (id) window.sessionStorage.setItem(sendAttemptKey(sendBudget.id), id);
+      else window.sessionStorage.removeItem(sendAttemptKey(sendBudget.id));
+    } catch { /* El recibo servidor sigue vigente aunque el navegador no conserve el acceso directo. */ }
   }
 
   async function saveSendDates() {
@@ -1291,9 +1310,9 @@ export function PresupuestosModule() {
   /** First click previews only; a separate click confirms the exact payload. */
   async function sendBudgetMail() {
     if (!sendBudget || linkBusy || sendDatesInFlight.current || mailInFlight.current) return;
-    if (sendDatesDirty) { setSendError("Guardá las fechas antes de previsualizar el correo."); return; }
+    if (!sendAttemptId && sendDatesDirty) { setSendError("Guardá las fechas antes de previsualizar el correo."); return; }
     const to = normalizeEmail(sendTo);
-    if (!emailValid(to)) {
+    if (!sendAttemptId && !emailValid(to)) {
       setSendError(FIELD_MESSAGES.email);
       return;
     }
@@ -1301,14 +1320,18 @@ export function PresupuestosModule() {
     setSendBusy(true);
     setSendError("");
     try {
-      const result = await adminSend<MailPreview | { status: string; error: string | null; to: string; simulated?: boolean; preview?: SimulatedMail | null }>("/api/admin/budgets/send", {
+      // Guardar sólo el hash antes de la red permite consultar tras perder la respuesta o recargar.
+      if (!sendAttemptId && sendPreview?.attemptId) rememberSendAttempt(sendPreview.attemptId);
+      const result = await adminSend<MailPreview | (BudgetMailReply & { preview?: SimulatedMail | null })>("/api/admin/budgets/send", sendAttemptId ? {
+        budgetId: sendBudget.id, receiptOnly: true, attemptId: sendAttemptId,
+      } : {
         budgetId: sendBudget.id,
         to,
         message: sendMessage.trim() || undefined,
         ...(sendPreview ? { confirm: true, confirmationToken: sendPreview.confirmationToken } : { preview: true }),
       });
       if (!result.ok) {
-        setSendPreview(null);
+        if (!sendAttemptId && !sendPreview?.attemptId) setSendPreview(null);
         setSendError(result.error);
         return;
       }
@@ -1320,15 +1343,26 @@ export function PresupuestosModule() {
         // Demo: no salió ningún correo; se muestra cómo se habría visto.
         setNotice(`${SIMULATED_MAIL_NOTICE}: presupuesto «${sendBudget.title}» para ${result.data.to}.`);
         setSimulatedMail(result.data.preview ?? null);
+        rememberSendAttempt(null);
         setSendBudget(null);
-        budgetsResource.reload();
+        requestAdminRefresh();
         return;
       }
       if (result.data.status === "sent") {
-        setNotice(`Enviamos el presupuesto «${sendBudget.title}» a ${result.data.to}.`);
+        setNotice(budgetMailNotice(result.data));
+        requestAdminRefresh();
+        if (result.data.commercialState === "reconciliation_pending" || result.data.commercialState === "stale_revision") {
+          rememberSendAttempt(result.data.attemptId);
+          setSendError(budgetMailNotice(result.data));
+          return;
+        }
+        rememberSendAttempt(null);
         setSendBudget(null);
-        budgetsResource.reload();
         return;
+      }
+      if ("attemptId" in result.data) {
+        rememberSendAttempt(result.data.attemptId);
+        requestAdminRefresh();
       }
       setSendError(("error" in result.data ? result.data.error : null) ?? "El proveedor rechazó el envío.");
     } finally {
@@ -1939,7 +1973,7 @@ export function PresupuestosModule() {
           icon="mail"
           description="El correo lleva el link del portal con el código, el resumen de ítems, total y validez, y la hoja imprimible."
           error={sendError || (!sendBudget.publicToken ? "Este presupuesto todavía no tiene link del portal: generá el link para que el correo lleve el código y el destino de aprobación." : "")}
-          warning={!emailValid(sendBudget.client.email ?? "") ? "El cliente no tiene un correo válido cargado en su ficha: cargalo en Clientes o escribí otro destinatario acá." : undefined}
+          warning={sendAttemptId ? "Consultar este intento no vuelve a enviar el correo. El recibo se conserva durante 7 días." : !emailValid(sendBudget.client.email ?? "") ? "El cliente no tiene un correo válido cargado en su ficha: cargalo en Clientes o escribí otro destinatario acá." : undefined}
           dirty={sendMessage.trim() !== "" || sendDatesDirty}
           onClose={() => { if (!sendBusy && !linkBusy && !sendDatesBusy) setSendBudget(null); }}
           footer={({ requestClose }) => (
@@ -1952,16 +1986,17 @@ export function PresupuestosModule() {
               <AdminButton icon="close" type="button" onClick={requestClose} disabled={sendBusy || linkBusy || sendDatesBusy}>
                 Cancelar
               </AdminButton>
+              {sendAttemptId ? <AdminButton type="button" icon="refresh" disabled={sendBusy || linkBusy || sendDatesBusy} onClick={() => setNewSendAttempt(true)}>Nuevo intento</AdminButton> : null}
               <AdminButton
                 variant="primary"
                 icon="mail"
                 type="button"
                 busy={sendBusy}
-                busyLabel={sendPreview ? "Enviando…" : "Preparando…"}
-                disabled={!sendBudget.publicToken || !emailValid(sendTo) || linkBusy || sendDatesBusy || sendDatesDirty}
+                busyLabel={sendAttemptId ? "Consultando…" : sendPreview ? "Enviando…" : "Preparando…"}
+                disabled={(!sendAttemptId && (!sendBudget.publicToken || !emailValid(sendTo) || sendDatesDirty)) || linkBusy || sendDatesBusy}
                 onClick={() => void sendBudgetMail()}
               >
-                {sendPreview ? "Confirmar y enviar presupuesto" : "Previsualizar correo"}
+                {sendAttemptId ? "Consultar resultado" : sendPreview ? "Confirmar y enviar presupuesto" : "Previsualizar correo"}
               </AdminButton>
             </>
           )}
@@ -1994,9 +2029,9 @@ export function PresupuestosModule() {
           </dl>
 
           {canCreateEvent ? <><AdminDialogSection title="Fechas del evento (opcional)">
-            <DateTimeField label="Inicio del evento" shortcuts size="md" value={sendStartsAt} disabled={sendBusy || linkBusy || sendDatesBusy} onChange={value => { setSendStartsAt(value); setSendPreview(null); setSendError(""); }} />
-            <DateTimeField label="Fin del evento" shortcuts size="md" value={sendEndsAt} min={sendStartsAt || undefined} disabled={sendBusy || linkBusy || sendDatesBusy} onChange={value => { setSendEndsAt(value); setSendPreview(null); setSendError(""); }} />
-            <AdminButton icon="check" type="button" busy={sendDatesBusy} busyLabel="Guardando…" disabled={!sendDatesDirty || sendBusy || linkBusy} onClick={() => void saveSendDates()}>Guardar fechas</AdminButton>
+            <DateTimeField label="Inicio del evento" shortcuts size="md" value={sendStartsAt} disabled={Boolean(sendAttemptId) || sendBusy || linkBusy || sendDatesBusy} onChange={value => { setSendStartsAt(value); setSendPreview(null); setSendError(""); }} />
+            <DateTimeField label="Fin del evento" shortcuts size="md" value={sendEndsAt} min={sendStartsAt || undefined} disabled={Boolean(sendAttemptId) || sendBusy || linkBusy || sendDatesBusy} onChange={value => { setSendEndsAt(value); setSendPreview(null); setSendError(""); }} />
+            <AdminButton icon="check" type="button" busy={sendDatesBusy} busyLabel="Guardando…" disabled={Boolean(sendAttemptId) || !sendDatesDirty || sendBusy || linkBusy} onClick={() => void saveSendDates()}>Guardar fechas</AdminButton>
           </AdminDialogSection><AdminNote>Guardar fechas no aprueba el presupuesto ni reserva inventario.</AdminNote></> : null}
 
           <AdminDialogSection title="Destinatario">
@@ -2009,7 +2044,7 @@ export function PresupuestosModule() {
               setSendPreview(null);
               setSendError("");
             }}
-            disabled={sendBusy || linkBusy || sendDatesBusy}
+            disabled={Boolean(sendAttemptId) || sendBusy || linkBusy || sendDatesBusy}
             error={!emailValid(sendTo) ? (sendTo.trim() ? FIELD_MESSAGES.email : FIELD_MESSAGES.required) : undefined}
             hint="Podés cambiarlo: el correo se envía solo a esta dirección."
           />
@@ -2025,7 +2060,7 @@ export function PresupuestosModule() {
               setSendError("");
             }}
             maxLength={600}
-            disabled={sendBusy || linkBusy || sendDatesBusy}
+            disabled={Boolean(sendAttemptId) || sendBusy || linkBusy || sendDatesBusy}
             rows={3}
             placeholder="Ej.: cualquier duda me escribís; en el portal está el detalle completo."
           />
@@ -2041,6 +2076,13 @@ export function PresupuestosModule() {
       ) : null}
 
       {simulatedMail ? <AdminSimulatedMailDialog mail={simulatedMail} onClose={() => setSimulatedMail(null)} /> : null}
+      {sendBudget && newSendAttempt ? <AdminConfirmDialog
+        title="Preparar otro intento de correo"
+        message="Si el proveedor aceptó el intento anterior, un envío nuevo puede llegar duplicado. Revisá su resultado o el historial antes de continuar. Esta acción sólo habilita otra vista previa; todavía no envía."
+        confirmLabel="Preparar nueva vista previa"
+        onClose={() => setNewSendAttempt(false)}
+        onConfirm={() => { rememberSendAttempt(null); setSendPreview(null); setSendError(""); setNewSendAttempt(false); }}
+      /> : null}
 
       {approval ? (
         <AdminDialog

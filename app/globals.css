@@ -5184,6 +5184,7 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 
 /* Importar (AdminImportPanel) */
 .admin-import { display: grid; gap: 14px; }
+.admin-import-example { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
 .admin-import-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
 .admin-import-card { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--a-line-2); border-radius: 10px; background: var(--a-panel); }
 .admin-import-card strong { font-size: 1.4rem; line-height: 1.1; }

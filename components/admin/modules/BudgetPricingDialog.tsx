@@ -1,4 +1,5 @@
 "use client";
+import { clientComboboxOption } from "../ClientIdentity";
 import { useClientSelector } from "@/lib/admin-client-selector";
 
 import { useId, useMemo, useRef, useState } from "react";
@@ -363,7 +364,7 @@ export function BudgetPricingDialog({
       <form id={formId} className="admin-form" onSubmit={(event) => void save(event)}>
         <div hidden={section !== "items"}>
         <AdminDialogSection title="Cliente y evento">
-          <Combobox label="Cliente" onSearch={clients.onSearch} required value={clientId} disabled={approved || closed || busy} options={(clients.data ?? []).map((client) => ({ value: client.id, label: clientDisplayName(client) }))} onChange={setClientId} onCreate={canWriteClients(role) ? setNewClient : undefined} createLabel={(query) => `Crear cliente «${query}»`} />
+          <Combobox label="Cliente" onSearch={clients.onSearch} required value={clientId} disabled={approved || closed || busy} options={(clients.data ?? []).map(clientComboboxOption)} onChange={setClientId} onCreate={canWriteClients(role) ? setNewClient : undefined} createLabel={(query) => `Crear cliente «${query}»`} />
           <Combobox label="Evento" hint="Opcional · distinto del título del presupuesto" value={eventId} disabled={approved || closed || busy} options={(events.data ?? []).map((event) => ({ value: event.id, label: event.name }))} onChange={setEventId} onCreate={canWriteOperations(role) ? setNewEvent : undefined} createLabel={(query) => `Crear evento «${query}»`} />
           <TextField label="Título del presupuesto" required value={title} maxLength={160} disabled={approved || closed || busy} onChange={setTitle} />
         </AdminDialogSection>

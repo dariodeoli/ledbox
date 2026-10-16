@@ -1364,6 +1364,7 @@ export function AdminCargaIaDialog({ onClose, rol }: { onClose: () => void; rol:
                       disabled={!evento.incluir}
                     />
                     <CityField
+                      allowHistoricalValue={false}
                       label="Ciudad"
                       value={evento.ciudad}
                       onChange={(ciudad) => actualizarEvento(evento.clave, { ciudad })}

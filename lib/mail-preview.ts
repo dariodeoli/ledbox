@@ -10,6 +10,8 @@ export const SIMULATED_MAIL_NOTICE = "Demo: el correo se simuló, así se vería
 export const SANDBOX_UNAVAILABLE = "No disponible en la demo";
 /** Ídem para WhatsApp: en la demo no se abre wa.me. */
 export const SIMULATED_WHATSAPP_NOTICE = "Así se vería el mensaje";
+export const MAIL_UNCERTAIN_PREFIX = "Resultado no confirmado: ";
+export const uncertainMailError = (value: string | null | undefined) => Boolean(value?.startsWith(MAIL_UNCERTAIN_PREFIX));
 
 /** Payload real generado por el servidor; el navegador no aporta HTML al envío. */
 export type MailPreview = {
@@ -20,5 +22,7 @@ export type MailPreview = {
   html: string;
   text: string;
   confirmationToken: string;
+  /** Recibo del intento, sin JWT ni datos del correo; sólo consumidores con recibo durable. */
+  attemptId?: string;
   expiresAt: string;
 };
