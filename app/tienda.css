@@ -243,7 +243,7 @@
 
 /* ── Selector de evento: fecha + días + invitados (opcional, no filtra) ── */
 .cp-event { background: transparent; border: 0; border-top: 1px solid var(--color-border-soft); border-radius: 0; box-shadow: none; padding: var(--sp-4) 0 0; display: grid; gap: var(--sp-2); color: var(--color-text); min-width: 0; }
-.cp-event-fields { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: end; }
+.cp-event-fields { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: start; }
 
 .cp-event .cp-fields, .cp-event.cp-fields { --a-field-bg: var(--color-bg); }
 .cp-event-note { font-size: var(--fs-12); color: var(--color-muted); }
@@ -792,7 +792,7 @@
 .cp-event > .cp-btn--block { width: auto; justify-self: start; min-height: var(--tap); font-size: var(--fs-14); }
 .cp-theme .cp-event-date > .admin-icon { position: absolute; left: 2px; top: 32px; color: var(--color-muted); pointer-events: none; }
 .cp-theme .cp-fields .cp-event-date .admin-field input[data-oc-control]:not([type="hidden"]):not([type="checkbox"]) { padding-inline-start: 30px; }
-.cp-theme .cp-event-fields { gap: var(--sp-3); align-items: end; }
+.cp-theme .cp-event-fields { gap: var(--sp-3); align-items: start; }
 .cp-theme .cp-event-fields > .cp-btn { align-self: end; }
 .cp-theme .cp-stepper { border: 0; border-bottom: 1px solid var(--color-muted); border-radius: 0; background: transparent; gap: 0; }
 .cp-theme .cp-stepper button { width: var(--tap); height: var(--tap); border-radius: 0; font-size: var(--fs-16); }
