@@ -31,6 +31,7 @@ import {
   stateTargetsOf,
   type AdjustableState,
   type UnitStateCounts,
+  type UnitStateTargets,
   type CatalogCategory,
   type CatalogCollection,
   type CatalogPlan,
@@ -79,12 +80,21 @@ const IMPORT_NOTE = "Importación";
  * sincronizada; además un incidente abierto («Importación») al salir de servicio, que se resuelve
  * cuando la unidad vuelve a estar disponible. Nunca toca unidades RETIRED.
  */
+export type AppliedUnitStates = {
+  solicitados: UnitStateTargets;
+  aplicados: Record<AdjustableState, number>;
+  devueltos: Record<AdjustableState, number>;
+  noAplicados: number;
+  motivo: string | null;
+};
 async function applyUnitStates(tx: Tx, context: AuditContext, inventoryId: string, itemName: string, targets: ReturnType<typeof stateTargetsOf>) {
   const units = await tx.inventoryUnit.findMany({ where: { organizationId: context.organizationId, inventoryId, status: { in: ["AVAILABLE", ...ADJUSTABLE_STATES] } }, orderBy: { code: "asc" }, select: { id: true, code: true, status: true } });
   const counts: UnitStateCounts = { AVAILABLE: 0, MAINTENANCE: 0, DAMAGED: 0, LOST: 0 };
   for (const unit of units) counts[unit.status as keyof UnitStateCounts] += 1;
   const committed = (await committedQuantities(tx, context.organizationId, [inventoryId])).get(inventoryId) ?? 0;
   const plan = planUnitStates({ counts, nuevas: 0, comprometidas: committed, targets });
+  const applied: Record<AdjustableState, number> = { MAINTENANCE: 0, DAMAGED: 0, LOST: 0 };
+  const returnedCounts: Record<AdjustableState, number> = { MAINTENANCE: 0, DAMAGED: 0, LOST: 0 };
   const change = async (unit: { id: string; code: string; status: string }, to: "AVAILABLE" | AdjustableState) => {
     const before = { status: unit.status };
     if (to === "AVAILABLE") {
@@ -93,9 +103,11 @@ async function applyUnitStates(tx: Tx, context: AuditContext, inventoryId: strin
         data: { status: "RESOLVED", resolvedAt: new Date(), resolvedById: context.user.id },
       });
       await tx.inventoryUnit.update({ where: { id: unit.id }, data: { status: to, incidentCycle: { increment: 1 } } });
+      returnedCounts[before.status as AdjustableState] += 1;
     } else {
       const unitCycle = await beginInventoryUnitIncidentCycle(tx, context.organizationId, unit.id);
       await tx.inventoryUnit.update({ where: { id: unit.id }, data: { status: to } });
+      applied[to] += 1;
       await tx.inventoryIncident.create({
         data: { id: randomUUID(), organizationId: context.organizationId, inventoryId, unitId: unit.id, unitCycle, kind: INCIDENT_KIND_OF[to], quantity: 1, status: "OPEN", notes: IMPORT_NOTE, openedById: context.user.id },
       });
@@ -124,6 +136,9 @@ async function applyUnitStates(tx: Tx, context: AuditContext, inventoryId: strin
     }
   }
   await syncInventoryQuantity(tx, inventoryId);
+  const noAplicados = Math.max(0, plan.pedidas - ADJUSTABLE_STATES.reduce((sum, state) => sum + applied[state], 0));
+  return { solicitados: { ...targets }, aplicados: applied, devueltos: returnedCounts, noAplicados,
+    motivo: noAplicados ? "Las unidades necesarias están asignadas a eventos vigentes o futuros; las reservas se conservaron." : null } satisfies AppliedUnitStates;
 }
 
 /** Lo que hay en la empresa para esos códigos (incluye la papelera). */
@@ -224,10 +239,13 @@ export type ApplyResult = {
   fallidos: ApplyFailure[];
   summary: CatalogPlan["summary"];
   problems: ImportProblem[];
+  estadosAplicados: Array<AppliedUnitStates & { codigo: string }>;
+  tarjetas: Array<{ etiqueta: string; valor: number }>;
+  avisos: Array<{ codigo: string; mensaje: string }>;
 };
 
 type Tx = Prisma.TransactionClient;
-type Outcome = { id: string; created: boolean; photo: boolean };
+type Outcome = { id: string; created: boolean; photo: boolean; states?: AppliedUnitStates };
 
 /** Alcance del producto: visible en la web (RETAIL) salvo que el dueño ya lo haya abierto a otro público. */
 const visibilityData = (current: { catalogAudience: string | null; visibleOnWeb: boolean } | null) =>
@@ -288,8 +306,8 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
     }
     if (product.preciosDias?.length) await replaceAudienceTiers(tx, organizationId, planned.existingId, "RETAIL", product.preciosDias);
     const targets = stateTargetsOf(product);
-    if (Object.keys(targets).length > 0) await applyUnitStates(tx, context, planned.existingId, product.nombre, targets);
-    return { id: planned.existingId, created: false, photo: photoChanged };
+    const states = Object.keys(targets).length > 0 ? await applyUnitStates(tx, context, planned.existingId, product.nombre, targets) : undefined;
+    return { id: planned.existingId, created: false, photo: photoChanged, states };
   }
   const id = randomUUID();
   await tx.inventoryItem.create({
@@ -315,8 +333,8 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
   });
   if (product.preciosDias?.length) await replaceAudienceTiers(tx, organizationId, id, "RETAIL", product.preciosDias);
   const targets = stateTargetsOf(product);
-  if (Object.keys(targets).length > 0) await applyUnitStates(tx, context, id, product.nombre, targets);
-  return { id, created: true, photo: Boolean(photo) };
+  const states = Object.keys(targets).length > 0 ? await applyUnitStates(tx, context, id, product.nombre, targets) : undefined;
+  return { id, created: true, photo: Boolean(photo), states };
 }
 
 /** Alta de un juego sin piezas: combo incompleto, sin stock propio ni unidades. Los datos finos los completa `writeComboMeta`. */
@@ -419,7 +437,9 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
   };
 
   const label = (item: PlannedProduct) => `${item.product.codigo} · ${item.product.nombre}`;
+  const estadosAplicados: ApplyResult["estadosAplicados"] = [];
   const note = (outcome: Outcome, item: PlannedProduct) => {
+    if (outcome.states) estadosAplicados.push({ codigo: item.product.codigo, ...outcome.states });
     idByCode.set(item.product.codigo, outcome.id);
     if (outcome.created) created.push({ id: outcome.id, etiqueta: label(item) });
     else updated += 1;
@@ -611,6 +631,18 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     }
   }
 
+  // Preview was read before taking item locks. Report only committed changes:
+  // concurrent reservations or a reverted block must not appear as applied.
+  const codesApplied = new Set(estadosAplicados.map(row => row.codigo));
+  const problems = plan.problems.filter(row => row.tipo !== "estado-incompleto" || !row.codigo || !codesApplied.has(row.codigo));
+  for (const row of estadosAplicados) if (row.noAplicados) problems.push({ nivel: "aviso", tipo: "estado-incompleto", codigo: row.codigo, fila: null,
+    mensaje: `${row.codigo}: no se pudieron aplicar ${row.noAplicados} cambios de estado. ${row.motivo}` });
+  const summary = { ...plan.summary,
+    estadosMantenimiento: estadosAplicados.reduce((sum, row) => sum + row.aplicados.MAINTENANCE, 0),
+    estadosDanadas: estadosAplicados.reduce((sum, row) => sum + row.aplicados.DAMAGED, 0),
+    estadosPerdidas: estadosAplicados.reduce((sum, row) => sum + row.aplicados.LOST, 0),
+    estadosDisponibles: estadosAplicados.reduce((sum, row) => sum + ADJUSTABLE_STATES.reduce((total, state) => total + row.devueltos[state], 0), 0),
+  };
   const result: ApplyResult = {
     lote: input.lote,
     creados: created,
@@ -623,8 +655,17 @@ export async function applyCatalog(context: AuditContext, input: ImportInput & {
     fotosColeccion: collectionPhotos,
     omitidos: plan.summary.omitidos + failedProducts.size,
     fallidos: failures,
-    summary: plan.summary,
-    problems: plan.problems,
+    summary,
+    problems,
+    estadosAplicados,
+    tarjetas: [
+      { etiqueta: "Creados", valor: created.length }, { etiqueta: "Actualizados", valor: updated },
+      { etiqueta: "Juegos", valor: combosDone }, { etiqueta: "Fotos", valor: photosSaved },
+      { etiqueta: "Omitidos", valor: plan.summary.omitidos + failedProducts.size },
+      { etiqueta: "A mantenimiento", valor: summary.estadosMantenimiento }, { etiqueta: "Dañadas", valor: summary.estadosDanadas },
+      { etiqueta: "Perdidas", valor: summary.estadosPerdidas }, { etiqueta: "A disponible", valor: summary.estadosDisponibles },
+    ],
+    avisos: problems.filter(row => row.nivel === "aviso").map(row => ({ codigo: row.codigo ?? "Catálogo", mensaje: row.mensaje })),
   };
 
   // Auditoría en lote (mismo patrón que la Carga con IA: entidad IaCarga, `lote` anulable por /api/admin/ia/anular).
