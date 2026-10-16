@@ -253,7 +253,7 @@ export function EmpresaPerfil() {
           </div>
         </AdminPanel>
 
-        <AdminPanel title="Medios de pago aceptados" icon="wallet" meta="Cada uno, sí o no. Los datos de la cuenta están en Presupuestos → Datos de pago">
+        <AdminPanel title="Medios de pago aceptados" icon="wallet" meta="Cada uno, sí o no. Los datos de la cuenta están en Finanzas → Bancos y cuentas">
           <div className="admin-settings-grid">
             {PAYMENT_METHOD_KEYS.map((key) => (
               <SwitchField
