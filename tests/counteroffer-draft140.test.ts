@@ -109,9 +109,12 @@ test("actual GET request projection supplies snapshot/billing to validate a legi
 // El API entrega las líneas vivas, incluso después de resolver una solicitud.
 test("request summary labels current values without inventing an original after acceptance", () => {
   const fn = nodes(source, node => ts.isFunctionDeclaration(node) && node.name?.text === "requestDelta")[0]!;
-  const summarize = evaluate(`(${fn.getText(source)})`, { formatNumber: String, formatMoney: String });
+  const summarize = evaluate(`(${fn.getText(source)})`, { formatNumber: String, formatMoney: String, originalCounterofferDraft });
   const request = { kind: "items", status: "accepted", payload: { items: [{ id: "a", quantity: 3, days: 1 }] }, budget: { items: [{ id: "a", name: "Mesa", quantity: 4, days: 1 }] } };
   assert.equal(summarize(request), "Mesa: actual 4 × 1 d · cliente pidió 3 × 1 d");
+  const total = snapshotFromProduct({ basePrice: 100_000, tiers: [{ fromDays: 3, mode: "TOTAL", price: 250_000 }] }, "RETAIL", 3);
+  const priced = { ...request, budget: { items: [{ ...request.budget.items[0], unitPrice: 250_000, pricingSnapshot: total }] } };
+  assert.equal(summarize(priced), "Mesa: actual 4 × 3 d · cliente pidió 3 × 1 d");
   request.status = "pending";
   assert.equal(summarize(request), "Mesa: actual 4 × 1 d · cliente pidió 3 × 1 d");
 });

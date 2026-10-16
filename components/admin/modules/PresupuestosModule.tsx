@@ -240,7 +240,7 @@ function requestDelta(request: AdminBudgetRequestRow): string {
       .map((row) => {
         const current = request.budget.items.find((item) => item.id === row.id);
         const name = current?.name ?? "Ítem";
-        const from = current ? `${formatNumber(current.quantity)} × ${formatNumber(current.days)} d` : "—";
+        const from = current ? `${formatNumber(current.quantity)} × ${formatNumber(Number(originalCounterofferDraft(current).days))} d` : "—";
         return `${name}: actual ${from} · cliente pidió ${row.excluded ? "Retirado / no incluido" : `${formatNumber(row.quantity)} × ${formatNumber(row.days)} d`}`;
       })
       .join(" · ");
@@ -280,7 +280,7 @@ function RequestComparison({ request }: { request: AdminBudgetRequestRow }) {
             return (
               <div className="admin-dialog-table-row" role="row" key={row.id}>
                 <span role="cell">{current?.name ?? "Ítem"}</span>
-                <span role="cell">{current ? `${formatNumber(current.quantity)} × ${formatNumber(current.days)} d` : "—"}</span>
+                <span role="cell">{current ? `${formatNumber(current.quantity)} × ${formatNumber(Number(originalCounterofferDraft(current).days))} d` : "—"}</span>
                 <span role="cell">
                   <strong>
                     {row.excluded ? "Retirado / no incluido" : `${formatNumber(row.quantity)} × ${formatNumber(row.days)} d`}
