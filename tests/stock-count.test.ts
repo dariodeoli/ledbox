@@ -47,16 +47,16 @@ test("inventory uses a pending label and incomplete filter rather than a false f
 
 function confirmationFixture(mode = "pending") {
   let item: any = { id: "item", name: "Silla", quantity: mode === "registered" ? 3 : 0, stockCountStatus: "PENDING_COUNT", comboIncomplete: mode === "combo", _count: { components: 0 } };
-  const changes: any[] = [], audits: any[] = []; let creates = 0, locked = 0;
+  const changes: any[] = [], audits: any[] = []; let creates = 0, locked = 0; const placements: any[] = [];
   const tx = { inventoryItem: { findFirst: async ({ where }: any) => where.organizationId === "org" && mode !== "foreign" ? item : null, update: async ({ data }: any) => { changes.push(data); item = { ...item, ...data }; } } };
   const sf = ts.createSourceFile("count.ts", readFileSync("lib/server/inventory-stock-count.ts", "utf8"), ts.ScriptTarget.Latest, true);
   const fn = sf.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === "confirmInventoryCount")!;
   const confirm = runInNewContext(ts.transpileModule(fn.getText(sf).replace(/^export /, "") + ";confirmInventoryCount;", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, {
     lockInventoryItems: async () => { locked++; return new Set(["item"]); },
-    createInventoryUnits: async (_tx: unknown, { quantity }: any) => { creates += quantity; item.quantity += quantity; },
+    createInventoryUnits: async (_tx: unknown, options: any) => { placements.push(options); creates += options.quantity; item.quantity += options.quantity; },
     recordAudit: async (entry: any) => audits.push(entry),
   });
-  return { confirm: (total: number) => confirm(tx, { organizationId: "org", user: { id: "user" } }, "item", total), state: () => ({ item, changes, audits, creates, locked }) };
+  return { confirm: (total: number, placement?: { warehouseId?: string; location?: string }) => confirm(tx, { organizationId: "org", user: { id: "user" } }, "item", total, placement), state: () => ({ item, changes, audits, creates, locked, placements }) };
 }
 test("explicit zero confirmation does not call unit creation and records knowledge transition once", async () => {
   const f = confirmationFixture(); await f.confirm(0); assert.equal(f.state().creates, 0); assert.equal(f.state().item.stockCountStatus, "CONFIRMED"); assert.equal(f.state().audits.length, 1);
@@ -81,19 +81,32 @@ test("combo remains definable but its pending component blocks capacity without 
 test("actual import writer never calls createInventoryUnits for zero or unknown; existing null retains units and prices", async () => {
  const sf = ts.createSourceFile("import.ts", readFileSync("lib/server/import-catalog.ts", "utf8"), ts.ScriptTarget.Latest, true);
  const fn = sf.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === "writeUnitItem")!;
- let current: any = null; const created: any[] = [], updated: any[] = []; let unitCalls = 0, confirmed = 0, tierCalls = 0;
+ let current: any = null; const created: any[] = [], updated: any[] = []; let unitCalls = 0, confirmed = 0, tierCalls = 0; let confirmedPlacement: any;
  const write = runInNewContext(ts.transpileModule(fn.getText(sf).replace(/^export /, "") + ";writeUnitItem;", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, {
    resolveInventoryCategory: async () => ({ text: "General", categoryId: "category" }), categoryWriteData: () => ({ category: "General" }),
    specData: () => ({}), billingUnitOf: () => "DAILY", visibilityData: () => ({}), sameBytes: () => false,
    lockInventoryItems: async () => new Set(["item"]), randomUUID: () => "new-item",
    createInventoryUnits: async (_tx: any, { quantity }: any) => { unitCalls++; assert(quantity > 0, "zero must not reach legacy fallback-to-one helper"); },
-   confirmInventoryCount: async () => { confirmed++; }, replaceAudienceTiers: async () => { tierCalls++; }, stateTargetsOf: () => ({}),
+   findWarehouseByCode: async () => ({ id: "warehouse-import" }),
+   confirmInventoryCount: async (_tx: unknown, _context: unknown, _id: string, _total: number, placement: any) => { confirmed++; confirmedPlacement = placement; }, replaceAudienceTiers: async () => { tierCalls++; }, stateTargetsOf: () => ({}),
  });
  const tx = { inventoryItem: { create: async ({ data }: any) => { created.push(data); }, findFirst: async () => current, update: async ({ data }: any) => { updated.push(data); } } };
- for (const cantidad of [null, 0]) await write(tx, { organizationId: "org" }, plan({ cantidad }).items[0], null);
+ for (const cantidad of [null, 0]) await write(tx, { organizationId: "org" }, plan({ cantidad, deposito: "D2", ubicacion: "E3-B2" }).items[0], null);
  assert.equal(created[0].quantity, 0); assert.equal(created[0].stockCountStatus, "PENDING_COUNT"); assert.equal(created[1].stockCountStatus, "CONFIRMED"); assert.equal(unitCalls, 0);
+ assert.equal(created[0].defaultWarehouseId, "warehouse-import"); assert.equal(created[1].defaultLocation, "E3-B2");
  current = { quantity: 5, stockCountStatus: "CONFIRMED", _count: { components: 0 } };
  const existing = new Map([["SC1", { id: "item", units: 5, isCombo: false, inTrash: false, name: "Silla" }]]);
  await write(tx, { organizationId: "org" }, plan({ cantidad: null, precio: null }, existing).items[0], null);
  assert.equal(unitCalls, 0); assert.equal(confirmed, 0); assert.equal(tierCalls, 0); assert(!("listPrice" in updated[0])); assert(!("stockCountStatus" in updated[0])); assert(!("quantity" in updated[0]));
+ current = { ...current, stockCountStatus: "PENDING_COUNT" };
+ await write(tx, { organizationId: "org" }, plan({ cantidad: 7, deposito: "D2", ubicacion: "E3-B2" }, existing).items[0], null);
+ assert.equal(confirmed, 1); assert.equal(confirmedPlacement.warehouseId, "warehouse-import"); assert.equal(confirmedPlacement.location, "E3-B2");
+});
+
+test("import count placement reaches only newly created units; UI confirmation keeps defaults", async () => {
+ const imported = confirmationFixture("registered");
+ await imported.confirm(5, { warehouseId: "warehouse-new", location: "E3-B2" });
+ assert.equal(imported.state().placements.length, 1); assert.equal(imported.state().placements[0].quantity, 2);
+ assert.equal(imported.state().placements[0].warehouseId, "warehouse-new"); assert.equal(imported.state().placements[0].location, "E3-B2");
+ const ui = confirmationFixture(); await ui.confirm(1); assert.equal(ui.state().placements[0].warehouseId, undefined); assert.equal(ui.state().placements[0].location, undefined);
 });

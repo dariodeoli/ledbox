@@ -308,7 +308,7 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
         ...(product.ubicacion ? { location: product.ubicacion } : {}),
       });
     }
-    if (product.cantidad !== null && current.stockCountStatus === "PENDING_COUNT") await confirmInventoryCount(tx, context, planned.existingId, product.cantidad);
+    if (product.cantidad !== null && current.stockCountStatus === "PENDING_COUNT") await confirmInventoryCount(tx, context, planned.existingId, product.cantidad, { ...(warehouse ? { warehouseId: warehouse.id } : {}), ...(product.ubicacion ? { location: product.ubicacion } : {}) });
     if (product.preciosDias?.length) await replaceAudienceTiers(tx, organizationId, planned.existingId, "RETAIL", product.preciosDias);
     const targets = stateTargetsOf(product);
     const states = Object.keys(targets).length > 0 ? await applyUnitStates(tx, context, planned.existingId, product.nombre, targets) : undefined;
@@ -323,6 +323,8 @@ async function writeUnitItem(tx: Tx, context: AuditContext, planned: PlannedProd
       kind: "REUSABLE",
       quantity: planned.unidades,
       stockCountStatus: product.cantidad === null ? "PENDING_COUNT" : "CONFIRMED",
+      ...(planned.unidades === 0 && warehouse ? { defaultWarehouseId: warehouse.id } : {}),
+      ...(planned.unidades === 0 && product.ubicacion ? { defaultLocation: product.ubicacion } : {}),
       ...baseData,
       listPrice: product.precio ?? 0,
       ...visibilityData(null),

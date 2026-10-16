@@ -90,6 +90,31 @@ test("stock count confirmation persists knowledge, units and reservation gates",
       const rejected = await commit(); assert.equal(rejected.ok, false); assert.equal(await db.eventInventory.count({ where: { inventoryId: item.id } }), 0);
       await confirm(item.id, 3); assert((await commit()).ok); assert.equal((await db.eventInventory.findFirstOrThrow({ where: { inventoryId: item.id } })).quantity, 2);
     });
+    await t.test("import confirmation places only the new units in the requested warehouse/location", async () => {
+      const primary = await db.warehouse.create({ data: { id: randomUUID(), organizationId: org, name: "Primary placement", code: `A${randomUUID().slice(0, 5).toUpperCase()}` } });
+      const secondary = await db.warehouse.create({ data: { id: randomUUID(), organizationId: org, name: "Secondary placement", code: `B${randomUUID().slice(0, 5).toUpperCase()}` } });
+      const sku = `P-${randomUUID()}`;
+      const item = await pending("Placed pending", { sku });
+      await db.$transaction(tx => createInventoryUnits(tx, { organizationId: org, inventoryId: item.id, name: item.name, quantity: 2, warehouseId: primary.id, location: "E1-B1" }));
+      const before = (await reload(item.id)).units;
+      const parsed = normalizeCatalog({ productos: [{ codigo: sku, nombre: item.name, cantidad: 4, deposito: secondary.code, ubicacion: "E3-B2" }] }); assert(parsed.ok);
+      assert.equal(parsed.value.doc.productos[0].deposito, secondary.code); assert.equal(parsed.value.doc.productos[0].ubicacion, "E3-B2");
+      const result = await applyCatalog(ctx, { products: parsed.value.doc.productos, parseProblems: parsed.value.problems, photos: null, photoProblems: [], lote: randomUUID() }); assert.deepEqual(result.fallidos, []);
+      const after = await reload(item.id); assert.equal(after.item.quantity, 4); assert.equal(after.item.stockCountStatus, "CONFIRMED");
+      for (const unit of before) assert.deepEqual(after.units.find(next => next.id === unit.id), unit, "existing unit is not silently moved");
+      const added = after.units.filter(unit => !before.some(old => old.id === unit.id)); assert.equal(added.length, 2); assert(added.every(unit => unit.warehouseId === secondary.id && unit.location === "E3-B2"));
+    });
+    await t.test("new zero/null imports retain default placement for future count confirmation", async () => {
+      const warehouse = await db.warehouse.create({ data: { id: randomUUID(), organizationId: org, name: "Empty item warehouse", code: `C${randomUUID().slice(0, 5).toUpperCase()}` } });
+      for (const cantidad of [0, null]) {
+        const sku = `D-${randomUUID()}`;
+        const parsed = normalizeCatalog({ productos: [{ codigo: sku, nombre: "Empty placed product", cantidad, deposito: warehouse.code, ubicacion: "E4-B2" }] }); assert(parsed.ok);
+        const result = await applyCatalog(ctx, { products: parsed.value.doc.productos, parseProblems: parsed.value.problems, photos: null, photoProblems: [], lote: randomUUID() }); assert.deepEqual(result.fallidos, []);
+        const item = await db.inventoryItem.findFirstOrThrow({ where: { organizationId: org, sku } });
+        assert.equal(item.defaultWarehouseId, warehouse.id); assert.equal(item.defaultLocation, "E4-B2"); assert.equal(await db.inventoryUnit.count({ where: { inventoryId: item.id } }), 0);
+        await confirm(item.id, 1); const units = (await reload(item.id)).units; assert.equal(units.length, 1); assert.equal(units[0].warehouseId, warehouse.id); assert.equal(units[0].location, "E4-B2");
+      }
+    });
   } finally {
     await db.organization.deleteMany({ where: { id: { in: organizations } } });
     await db.$disconnect();
