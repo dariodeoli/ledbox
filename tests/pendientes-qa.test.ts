@@ -52,6 +52,11 @@ test("finanzas: «Pagar» del trabajo de proveedor es un AdminDialog con footer,
   assert.match(src, /const amount = Number\(payJob\.amount\);/);
 });
 
+test("proveedores: el panel aclara que un trabajo y sus pagos no confirman cantidades, fechas ni reserva", () => {
+  const src = read("components/admin/modules/ProveedoresModule.tsx");
+  assert.match(src, /Este registro sigue el trabajo y sus pagos; por sí solo no confirma cantidades ni fechas de suministro, ni reserva equipos para el evento\./);
+});
+
 test("create-event: el tope del plan se repite dentro de la transacción, después del FOR UPDATE", () => {
   const route = read("app/api/admin/budgets/[id]/create-event/route.ts");
   const src = read("lib/server/budget-event.ts");
