@@ -7,6 +7,7 @@ import ts from "typescript";
 import * as React from "react";
 import * as rules from "../lib/bulk-trash";
 import * as trash from "../lib/trash-shared";
+import { buildCsv } from "../lib/admin-export";
 const native = createRequire(import.meta.url);
 function source(path: string, mocks: Record<string, unknown>, globals = {}) {
   const exports: any = {};
@@ -28,6 +29,20 @@ function harness(perform = async (_type: any, row: any) => ({ row, status: "succ
   return { render, store, unmount() { cleanups.forEach(fn => fn?.()); } };
 }
 const row = (id: string) => ({ id, name: id, archivedAt: null });
+test("el informe de lote exporta un renglón por resultado y etiqueta cada estado", () => {
+  const block = rules.bulkTrashReportBlock([
+    { row: { ...row("1"), name: "=2+2" }, status: "success", message: "Archivado" },
+    { row: { ...row("2"), name: "Cliente; dos" }, status: "blocked", message: "Tiene reservas" },
+    { row: row("3"), status: "failed", message: "Error de red" },
+    { row: row("4"), status: "unknown", message: "Confirmá el estado" },
+  ]);
+  assert.deepEqual(block.header, ["ID", "Registro", "Resultado", "Detalle"]);
+  assert.deepEqual(block.rows.map(result => result[2]), ["Confirmado", "Bloqueado", "Fallido", "Por confirmar"]);
+  const csv = buildCsv([block]);
+  assert.match(csv, /'=2\+2/);
+  assert.match(csv, /"Cliente; dos"/);
+  assert.equal((csv.match(/\r\n/g) ?? []).length, 5);
+});
 test("real selection hook preserves all-filter exceptions across pages and pinned filters", async () => {
   const h = harness(); await h.render().selectAll(); let bulk = h.render(); assert.equal(bulk.count, 3);
   bulk.toggle(row("2")); bulk = h.render({ visibleRows: [row("3")] }); assert.equal(bulk.count, 2); assert.equal(bulk.isSelected("2"), false);
