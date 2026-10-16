@@ -1905,7 +1905,7 @@ export function SegmentedField({
     </span>
   ) : null;
   return (
-    <div className={wide ? "admin-field admin-field--wide" : "admin-field"} data-size={wide ? "full" : (size ?? options.length > 3 ? "full" : "lg")}>
+    <div className={wide ? "admin-field admin-field--wide" : "admin-field"} data-size={wide ? "full" : (size ?? (options.length > 3 ? "full" : "lg"))}>
       {label ? (
         help ? <span className="admin-field-heading">
           <span className="admin-field-label" id={labelId}>{label}</span>
