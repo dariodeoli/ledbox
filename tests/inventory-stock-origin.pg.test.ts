@@ -82,10 +82,12 @@ test("stock origin HTTP/PG: mixed ownership, no external fake stock, tenant, CAS
       assert.equal((await db.inventoryItem.findUniqueOrThrow({ where: { id: externalId } })).quantity, 0);
     });
     await t.test("ownership is present in private unit DTO; unrelated owner cannot read/update it; company purge remains atomic", async () => {
-      const response = await fetch(`${base}/api/admin/inventory?id=${encodeURIComponent(mixedId)}`, { headers: { Cookie: auth.cookie } });
+      const response = await fetch(`${base}/api/admin/inventory?itemId=${encodeURIComponent(mixedId)}`, { headers: { Cookie: auth.cookie } });
       assert.equal(response.status, 200); const text = await response.text(); assert.match(text, /stockOrigin/); assert.match(text, /ownerSupplierId/);
-      const foreignRead = await fetch(`${base}/api/admin/inventory?id=${encodeURIComponent(mixedId)}`, { headers: { Cookie: outsider.cookie } });
-      assert.equal(foreignRead.status, 404);
+      const foreignRead = await fetch(`${base}/api/admin/inventory?itemId=${encodeURIComponent(mixedId)}`, { headers: { Cookie: outsider.cookie } });
+      assert.equal(foreignRead.status, 200); assert.deepEqual((await foreignRead.json()).inventory, []);
+      const foreignAvailability = await fetch(`${base}/api/admin/inventory?inventoryId=${encodeURIComponent(mixedId)}`, { headers: { Cookie: outsider.cookie } });
+      assert.equal(foreignAvailability.status, 404);
       assert.equal((await call("/api/admin/inventory", { kind: "unit-update", id: unitId, notes: "other tenant" }, outsider.cookie)).status, 404);
       // The enclosing finally removes both suppliers and units in one company cascade,
       // exercising the deferred NO ACTION ownership FK rather than losing owners via SET NULL.
