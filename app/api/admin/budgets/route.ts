@@ -85,7 +85,7 @@ const INVENTORY_LINK_SELECT = { id: true, name: true, sku: true, category: true,
  * (issue #14) con su presupuesto embebido, para que el módulo muestre la cola
  * de pendientes sin una segunda llamada.
  */
-export async function GET(request?: Request) {
+export async function GET(request: Request) {
   const auth = await requireAdminContext();
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
