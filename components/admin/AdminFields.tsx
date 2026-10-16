@@ -420,6 +420,7 @@ export function MoneyField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const rawInput = useRef<string | null>(null);
   const effectiveLimit = Math.min(limit, FIELD_LIMITS.amountStorage);
   const limitError = amountExceeds(amountInput(value), effectiveLimit) ? FIELD_MESSAGES.amountLimit : null;
   const fieldError = error || limitError;
@@ -444,12 +445,23 @@ export function MoneyField({
   }, [invalid, value]);
   return (
     <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={fieldError} wide={wide} size={size ?? "sm"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <div className={compact ? "admin-money admin-money--compact" : "admin-money"} ref={wrapperRef}>
+      <div className={compact ? "admin-money admin-money--compact" : "admin-money"} ref={wrapperRef}
+        onInputCapture={(event) => {
+          // La librería limpia el DOM antes de notificar: conservar primero el
+          // texto pegado (incluido «Gs.») y enteros que excedan Number seguro.
+          const input = event.target as HTMLInputElement;
+          if (typeof input.value === "string") rawInput.current = input.value;
+        }}>
         <MoneyInput
           id={label ? fieldId : id}
           name={name}
           value={value}
-          onValueChange={() => onChange(amountInput(wrapperRef.current?.querySelector("input")?.value ?? ""))}
+          onValueChange={() => {
+            const raw = rawInput.current;
+            rawInput.current = null;
+            if (raw !== null) onChange(amountInput(raw));
+            else onChange(amountInput(wrapperRef.current?.querySelector("input")?.value ?? ""));
+          }}
           max={effectiveLimit}
           integerOnly
           required={required}
