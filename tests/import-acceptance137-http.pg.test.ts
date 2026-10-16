@@ -3,6 +3,25 @@ import {randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 const base=process.env.IMPORT_ACCEPTANCE_BASE_URL;
 const enabled=Boolean(process.env.TEST_DATABASE_URL&&base&&/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(base));
+test('137 real multipart preview→apply preserves maintenance totals and duration tiers', {skip:!enabled,timeout:60000},async()=>{
+ const url=new URL(process.env.TEST_DATABASE_URL!);assert.ok(['localhost','127.0.0.1'].includes(url.hostname));process.env.DATABASE_URL=url.toString();
+ const {db}=await import('../lib/server/db');const {createSession}=await import('../lib/server/auth');
+ const org=randomUUID(),userId=randomUUID();await db.organization.create({data:{id:org,name:'137 multipart disposable fixture',slug:`multipart137-${org}`}});
+ try{
+  const user=await db.adminUser.create({data:{id:userId,name:'Multipart QA',email:`${userId}@example.invalid`,role:'OWNER',passwordHash:'not-a-login',autoLockEnabled:false}});
+  await db.adminMembership.create({data:{id:randomUUID(),adminUserId:userId,organizationId:org,role:'OWNER'}});
+  const cookie=`ledbox_session=${(await createSession(user,org)).jwt}`;
+  const doc={productos:[{codigo:'UI-7',nombre:'Multipart chair',cantidad:10,precio:10000,en_mantenimiento:7,precios_dias:[{desde_dias:3,modo:'total',precio:25000}]}]};
+  const previewForm=new FormData();previewForm.set('accion','preview');previewForm.set('modo','CREATE_ONLY');previewForm.set('fuente','json');previewForm.set('json',new File([JSON.stringify(doc)],'catalogo.json',{type:'application/json'}));
+  const response=await fetch(`${base}/api/admin/import/productos`,{method:'POST',headers:{Cookie:cookie},body:previewForm});assert.equal(response.status,200,await response.clone().text());
+  const preview=await response.json();assert.equal(preview.resumen.estadosMantenimiento,7);assert.equal(preview.catalogo.productos[0].en_mantenimiento,7);assert.equal(preview.catalogo.productos[0].precios_dias[0].desde_dias,3);
+  const applyForm=new FormData();applyForm.set('accion','apply');applyForm.set('modo','CREATE_ONLY');applyForm.set('catalogo',JSON.stringify(preview.catalogo));applyForm.set('lote',randomUUID());
+  const applied=await fetch(`${base}/api/admin/import/productos`,{method:'POST',headers:{Cookie:cookie},body:applyForm});assert.equal(applied.status,200,await applied.clone().text());
+  const messages=(await applied.text()).trim().split('\n').map(line=>JSON.parse(line));assert.ok(messages.every(row=>!row.error));const result=messages.find(row=>row.resultado)?.resultado;assert.ok(result);assert.equal(result.summary.estadosMantenimiento,7);assert.deepEqual(result.fallidos,[]);
+  const item=await db.inventoryItem.findFirstOrThrow({where:{organizationId:org,sku:'UI-7'}});assert.equal(item.quantity,10);assert.equal(await db.inventoryUnit.count({where:{inventoryId:item.id,status:'MAINTENANCE'}}),7);assert.equal(await db.inventoryUnit.count({where:{inventoryId:item.id,status:'AVAILABLE'}}),3);
+  const tier=await db.inventoryPriceTier.findFirstOrThrow({where:{inventoryId:item.id}});assert.equal(tier.fromDays,3);assert.equal(tier.price,25000);
+ }finally{await db.organization.deleteMany({where:{id:org}});await db.adminUser.deleteMany({where:{id:userId}});await db.$disconnect()}
+});
 // Opt-in: matching local app server + disposable PG, no external network or real messages.
 test('137 imported unit+combo → public quote approval HTTP → real reserve/dispatch/return', {skip:!enabled,timeout:60000},async()=>{
  const url=new URL(process.env.TEST_DATABASE_URL!);assert.ok(['localhost','127.0.0.1'].includes(url.hostname));process.env.DATABASE_URL=url.toString();
