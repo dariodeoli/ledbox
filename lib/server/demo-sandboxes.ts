@@ -1,3 +1,4 @@
+import { assertOrganizationSlugAvailable, claimOrganizationSlug } from "./organization-slugs";
 import { createHash, randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { DEMO_PLAN_CODE } from "@/lib/plan-rules";
@@ -131,6 +132,7 @@ async function reserve(ip: string, now: Date): Promise<Reservation> {
       if ((await activeCount(tx, now)) >= SANDBOX_MAX_ACTIVE) return { ok: false, reason: "full" };
       await bucketConsume(tx, ipBucket, now);
       await bucketConsume(tx, allBucket, now);
+      await assertOrganizationSlugAvailable(tx, ids.slug, ids.organizationId);
       await tx.organization.create({
         data: {
           id: ids.organizationId,
@@ -147,6 +149,7 @@ async function reserve(ip: string, now: Date): Promise<Reservation> {
           ...(demoPlan ? { planId: demoPlan.id, planStartedAt: now } : {}),
         },
       });
+      await claimOrganizationSlug(tx, ids.slug, ids.organizationId);
       await tx.adminUser.create({
         data: {
           id: ids.userId,

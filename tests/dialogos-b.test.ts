@@ -18,6 +18,7 @@ const SOURCES: Record<string, string> = {
   finanzas: m("FinanzasModule.tsx"),
   facturacion: m("FacturacionModule.tsx"),
   presupuestos: m("PresupuestosModule.tsx"),
+  paymentDetails: m("PaymentDetailsDialog.tsx"),
   pricing: m("BudgetPricingDialog.tsx"),
   quick: m("BudgetQuickCreate.tsx"),
   detail: m("BudgetDetailDialog.tsx"),
@@ -123,6 +124,7 @@ test("la ayuda de cierre sin guardar (dirty) está en los diálogos con edición
     ["finanzas", 6],
     ["facturacion", 4],
     ["presupuestos", 5],
+    ["paymentDetails", 1],
     ["usuarios", 3],
     ["signature", 1],
     ["conciliacion", 1],
@@ -136,7 +138,13 @@ test("la ayuda de cierre sin guardar (dirty) está en los diálogos con edición
   // La foto del formulario sale de un ref, sin tocar el estado que viaja al servidor.
   assert.match(SOURCES.facturacion, /invoiceBase\.current/);
   assert.match(SOURCES.presupuestos, /planBaseRef/);
-  assert.match(SOURCES.presupuestos, /loadedRef/);
+  assert.match(SOURCES.paymentDetails, /loadedRef/);
+  assert.match(SOURCES.paymentDetails, /dirty=\{!loading && JSON\.stringify\(details\) !== loadedRef\.current\}/);
+  for (const source of [SOURCES.presupuestos, SOURCES.finanzas]) {
+    assert.match(source, /import \{ PaymentDetailsDialog \} from "\.\/PaymentDetailsDialog"/);
+    assert.match(source, /<PaymentDetailsDialog\b/);
+    assert.doesNotMatch(source, /function PaymentDetailsDialog\b/);
+  }
 });
 
 test("las confirmaciones destructivas usan AdminConfirmDialog, no diálogos armados a mano", () => {

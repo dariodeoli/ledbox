@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { formatMoney } from "@/lib/admin-format";
 import { recordAudit } from "@/lib/server/audit";
@@ -26,9 +27,12 @@ export async function POST(request: Request) {
   if (!auth.ok) return auth.response;
   const { organizationId, user: actor } = auth.context;
 
-  const body = (await readJson(request)) as Record<string, unknown>;
+  const input = await readJson(request);
+  if (!input || typeof input !== "object" || Array.isArray(input)) return jsonError("Indicá los datos de la solicitud.", 400);
+  const body = input as Record<string, unknown>;
   const planId = typeof body.planId === "string" ? body.planId.trim() : "";
   if (!planId) return jsonError("Elegí el plan al que querés cambiar.", 400);
+  if (body.note !== undefined && body.note !== null && typeof body.note !== "string") return jsonError("La nota debe ser texto.", 400);
   const note = typeof body.note === "string" ? body.note.trim() : "";
   if (note.length > NOTE_MAX_LENGTH) {
     return jsonError(`La nota no puede superar ${NOTE_MAX_LENGTH} caracteres.`, 400);
@@ -40,31 +44,30 @@ export async function POST(request: Request) {
   });
   if (!plan) return jsonError("Ese plan no está disponible en el catálogo.", 404);
 
-  const organization = await db.organization.findUnique({
-    where: { id: organizationId },
-    select: { planId: true },
+  // Serializa las solicitudes de una empresa: dos pestañas actualizan la misma pendiente.
+  const result = await db.$transaction(async (tx) => {
+    const organizations = await tx.$queryRaw<Array<{ planId: string | null }>>(Prisma.sql`
+      SELECT "planId" FROM "Organization" WHERE "id" = ${organizationId}
+      AND NOT "isDemo" AND "slug" <> 'demo' FOR UPDATE`);
+    if (!organizations.length) return { ok: false, error: "La empresa no está disponible.", status: 404 } as const;
+    if (organizations[0].planId === plan.id) return { ok: false, error: `La empresa ya está en el plan «${plan.name}».`, status: 409 } as const;
+    const pending = await tx.planChangeRequest.findFirst({
+      where: { organizationId, status: "pending" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { id: true, planId: true },
+    });
+    const fields = {
+      planId: plan.id, note: note || null,
+      requestedById: actor.id, requestedByName: actor.name, requestedByEmail: actor.email,
+      createdAt: new Date(),
+    };
+    const saved = pending
+      ? await tx.planChangeRequest.update({ where: { id: pending.id }, data: fields })
+      : await tx.planChangeRequest.create({ data: { id: randomUUID(), organizationId, ...fields } });
+    return { ok: true, pending, saved } as const;
   });
-  if (organization?.planId === plan.id) {
-    return jsonError(`La empresa ya está en el plan «${plan.name}».`, 409);
-  }
-
-  const pending = await db.planChangeRequest.findFirst({
-    where: { organizationId, status: "pending" },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, planId: true },
-  });
-  const fields = {
-    planId: plan.id,
-    note: note || null,
-    requestedById: actor.id,
-    requestedByName: actor.name,
-    requestedByEmail: actor.email,
-    // La fecha de la solicitud es la del pedido vigente (una sola pendiente).
-    createdAt: new Date(),
-  };
-  const saved = pending
-    ? await db.planChangeRequest.update({ where: { id: pending.id }, data: fields })
-    : await db.planChangeRequest.create({ data: { id: randomUUID(), organizationId, ...fields } });
+  if (!result.ok) return jsonError(result.error, result.status);
+  const { pending, saved } = result;
 
   await recordAudit({
     context: auth.context,

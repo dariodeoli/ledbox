@@ -61,7 +61,7 @@ const AdminCommandPalette = dynamic(() => import("./AdminCommandPalette").then((
 });
 import { AdminMobileNav } from "./AdminMobileNav";
 import { AdminModuleHelp } from "./AdminModuleHelp";
-import { AdminThemeToggle, AdminSidebarToggle } from "./admin-theme";
+import { AdminThemeToggle, AdminSidebarToggle, useAdminSidebar } from "./admin-theme";
 import { AdminOfflineBanner, AdminOfflineIndicator } from "./AdminOffline";
 import { adminApiGet, adminSend, clearAdminApiCache, redirectToLogin, useAdminResource } from "@/lib/admin-api";
 
@@ -432,6 +432,7 @@ export function AdminShell({
   initialSession?: AdminSessionPayload | null;
 }) {
   const pathname = usePathname();
+  const sidebar = useAdminSidebar(pathname);
   const router = useRouter();
   const [session, setSession] = useState<AdminSessionData>(() =>
     initialSession ? sessionDataFromPayload(initialSession) : EMPTY_SESSION,
@@ -935,13 +936,13 @@ export function AdminShell({
                 EventOS<span className="admin-brand-dot">.</span>
               </span>
             </Link>
-            <AdminSidebarToggle />
+            <AdminSidebarToggle mode={sidebar.mode} onToggle={sidebar.toggle} />
             <AdminIconButton icon="close" iconSize={16} label="Cerrar menú" className="admin-sidebar-close" onClick={() => setMenuOpen(false)} />
           </div>
 
           <div className="admin-sidebar-nav" ref={navRef}>
-            {navGroups.map((group, index) => {
-              const accordion = navAccordion && !group.bare;
+            {navGroups.filter(group => !group.docked).map((group, index) => {
+              const accordion = navAccordion && !group.bare && sidebar.mode !== "collapsed";
               const groupOpen = !accordion || openNavGroup === group.label;
               const listId = `admin-nav-group-${index}`;
               return (
@@ -977,6 +978,7 @@ export function AdminShell({
                         <li key={item.href}>
                           <Link
                             href={item.href}
+                            onClick={(event) => { if (!event.defaultPrevented && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) sidebar.navigate(item.href); }}
                             className="admin-nav-link"
                             data-active={active ? "true" : undefined}
                             aria-current={active ? "page" : undefined}
@@ -1001,6 +1003,17 @@ export function AdminShell({
           </div>
 
           <div className="admin-sidebar-foot">
+            {navGroups.filter(group => group.docked).flatMap(group => group.items).map(item => {
+              const active = isAdminNavItemActive(pathname, item);
+              return (
+                <Link key={item.href} href={item.href} className="admin-nav-link" title={item.label} aria-label={item.label}
+                  aria-current={active ? "page" : undefined} data-active={active ? "true" : undefined}
+                  onClick={(event) => { if (!event.defaultPrevented && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) sidebar.navigate(item.href); }}>
+                  <AdminIcon name={item.icon} size={16} />
+                  <span className="admin-nav-text">{item.label}</span>
+                </Link>
+              );
+            })}
             {session.organization ? (
               <AdminCompanySwitcher
                 session={session}

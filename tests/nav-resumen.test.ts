@@ -26,7 +26,7 @@ const repoFile = (relative: string) => readFileSync(new URL(`../${relative}`, im
 const hrefsFor = (role: Parameters<typeof adminNavGroups>[0]) =>
   adminNavGroups(role).flatMap((group) => group.items.map((item) => item.href));
 
-test("menú por rol: todos ven lo mismo salvo Estado, que es de OWNER/ADMIN", () => {
+test("menú por rol: Ajustes está fijo y Estado vive dentro, con permisos propios", () => {
   const common = [
     "/dashboard",
     "/leads",
@@ -42,8 +42,7 @@ test("menú por rol: todos ven lo mismo salvo Estado, que es de OWNER/ADMIN", ()
   ];
   for (const role of ADMIN_ROLES) {
     const hrefs = hrefsFor(role);
-    const withState = role === "OWNER" || role === "ADMIN";
-    assert.deepEqual(hrefs, withState ? [...common, "/estado"] : common, `${role}: menú distinto del esperado`);
+    assert.deepEqual(hrefs, common, `${role}: menú distinto del esperado`);
   }
   // Sin sesión resuelta (rol desconocido) tampoco se ve Estado.
   assert.equal(hrefsFor(null).includes("/estado"), false);
@@ -90,11 +89,11 @@ test("Firmas y Plantillas salen del menú pero siguen siendo rutas y tienen su a
   assert.equal(adminNavLabel("/plantillas"), "Mensajes");
   assert.equal(adminNavLabel("/clientes/mensajes"), "Mensajes");
   assert.equal(adminNavIcon("/firmas"), "pen");
-  // Accesos visibles: pestaña «Firmas» en Presupuestos y «Plantillas» en Ajustes, en ambas pantallas.
+  // Firmas pertenece a Presupuestos; Mensajes a Clientes, sin salida desde Ajustes.
   assert.match(repoFile("components/admin/modules/PresupuestosTabs.tsx"), /href: "\/firmas", label: "Firmas"/);
   assert.match(repoFile("components/admin/modules/PresupuestosModule.tsx"), /<PresupuestosTabs active=\{showRequests \? "solicitudes" : "presupuestos"\}/);
   assert.match(repoFile("components/admin/modules/FirmasModule.tsx"), /<PresupuestosTabs active="firmas" \/>/);
-  assert.match(repoFile("components/admin/modules/AjustesTabs.tsx"), /href: "\/plantillas", label: "Plantillas"/);
+  assert.doesNotMatch(repoFile("components/admin/modules/AjustesTabs.tsx"), /href: "\/plantillas"/);
   assert.match(repoFile("components/admin/modules/AjustesModule.tsx"), /<AjustesTabs active=\{section\} \/>/);
   assert.match(repoFile("components/admin/modules/PlantillasModule.tsx"), /<ClientesTabs active="mensajes" onNavigate=/);
 });

@@ -204,6 +204,7 @@ model Organization {
   demoReady             Boolean                     @default(true)
   inventoryCategories   InventoryCategory[]
   inventoryFamilies     InventoryFamily[]
+  eventVenues           EventVenue[]
   warehouses            Warehouse[]
 
   @@index([active, createdAt])
@@ -3094,4 +3095,39 @@ model CollectionItem {
   @@id([collectionId, itemId])
   @@index([itemId])
   @@index([organizationId])
+}
+
+/// Namespace duradero: identificador actual y anteriores de la misma empresa.
+/// Sin FK a propósito: al borrar una empresa su URL queda reservada al ID histórico.
+model OrganizationSlug {
+  slug           String   @id
+  organizationId String
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+}
+
+/// Libreta de recintos por empresa; los eventos conservan snapshots independientes.
+model EventVenue {
+  id                String   @id
+  organizationId    String
+  key               String
+  location          String
+  city              String?
+  department        String?
+  address           String?
+  addressReference  String?
+  locationUrl       String?
+  venueContactName  String?
+  venueContactPhone String?
+  venueContactEmail String?
+  revision          Int      @default(0)
+  /// Backfill recuperó ficha anterior para conservar contacto; confirmar defaults la limpia.
+  needsReview       Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key])
+  @@index([organizationId, location])
 }

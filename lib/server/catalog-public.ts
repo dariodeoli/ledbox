@@ -1,3 +1,4 @@
+import { resolveOrganizationSlugId } from "./organization-slugs";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { BillingUnit, InventoryStatus } from "@prisma/client";
 import { billedDays } from "@/lib/quote-sharing";
@@ -82,10 +83,12 @@ export type PublicCatalogContext = {
 async function resolveStore(slug: string): Promise<Omit<PublicCatalogContext, "priceList" | "access"> | null> {
   const normalized = slug.trim().toLowerCase();
   if (!normalized || normalized.length > 80) return null;
+  const organizationId = await resolveOrganizationSlugId(normalized);
+  if (!organizationId) return null;
   const organization = await db.organization.findFirst({
     // Las sandboxes de la demo (`isDemo` con `demoParentId`) no tienen tienda pública por slug:
     // la vitrina (`demo`) sí, de solo lectura (docs/DEMO-INTERACTIVA.md §4).
-    where: { slug: normalized, active: true, NOT: { isDemo: true, demoParentId: { not: null } } },
+    where: { id: organizationId, active: true, NOT: { isDemo: true, demoParentId: { not: null } } },
     select: { id: true, name: true, slug: true },
   });
   if (!organization) return null;

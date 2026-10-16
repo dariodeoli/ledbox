@@ -1,4 +1,6 @@
 "use client";
+import { Input as SharedInput, Textarea as SharedTextarea, Select as SharedSelect } from "owncoding-ui";
+
 import { clientDisplayName } from "@/lib/client-identity";
 import { budgetBalance, budgetCollectionStep } from "@/lib/budget-collection-step";
 import { AdminAvatar } from "@/components/admin/AdminAvatar";
@@ -9,6 +11,7 @@ import { PortalQuoteResources } from "./PortalQuoteResources";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AdminIcon } from "@/components/admin/AdminIcons";
+import { MoneyField, PercentField } from "@/components/admin/AdminFields";
 import {
   budgetChangeKindLabel,
   budgetChangeStatusLabel,
@@ -35,13 +38,6 @@ import {
   type PortalDemoState,
 } from "@/lib/portal-demo";
 import { PAYMENT_PROOF_MIMES, paymentProofExtension } from "@/lib/admin-types";
-import {
-  amountInput,
-  caretAfterDigits,
-  moneyInputDisplay,
-  moneyInputMaxLength,
-  percentInput,
-} from "@/lib/field-rules";
 import type { PortalBudget, PortalBudgetProof, PortalBudgetRequest, PortalExpectedPayment } from "@/lib/server/budget-portal";
 import { privacyPolicyUrl } from "@/lib/public-config";
 import { portalItemLine } from "@/lib/quote-selection";
@@ -319,7 +315,7 @@ function Stepper({
       >
         −
       </button>
-      <input
+      <SharedInput
         type="text"
         inputMode="numeric"
         pattern="[0-9]*"
@@ -455,7 +451,6 @@ export function PortalBudgetView({
   /** Bloque de pago post-aprobación (issue #107): destino del scroll al confirmar. */
   const payFirstRef = useRef<HTMLElement | null>(null);
   const proofInputRef = useRef<HTMLInputElement | null>(null);
-  const discountInputRef = useRef<HTMLInputElement | null>(null);
   const [targetOffscreen, setTargetOffscreen] = useState(false);
   const [footerVisible, setFooterVisible] = useState(false);
 
@@ -1366,7 +1361,7 @@ export function PortalBudgetView({
           {openExpected.length > 0 ? (
             <label className="portal-field" htmlFor="portal-proof-concept">
               <span className="portal-field-label">¿Qué pago estás comprobando?</span>
-              <select
+              <SharedSelect
                 id="portal-proof-concept"
                 name="proof-concept"
                 value={proofExpectedId}
@@ -1383,13 +1378,13 @@ export function PortalBudgetView({
                     {expected.status === "PROOF" ? " (en revisión)" : ""}
                   </option>
                 ))}
-              </select>
+              </SharedSelect>
             </label>
           ) : null}
           <div className="portal-form-row">
             <label className="portal-field" htmlFor="portal-proof-name">
               <span className="portal-field-label">Nombre y apellido</span>
-              <input
+              <SharedInput
                 id="portal-proof-name"
                 name="proof-name"
                 value={proofName}
@@ -1893,7 +1888,7 @@ export function PortalBudgetView({
 
                 <label className="portal-field" htmlFor="portal-name">
                   <span className="portal-field-label">Nombre y apellido de quien autoriza o pide</span>
-                  <input
+                  <SharedInput
                     id="portal-name"
                     name="name"
                     value={name}
@@ -1910,44 +1905,13 @@ export function PortalBudgetView({
 
                 {canEdit && actionMode === "discount" ? (
                   <div className="portal-form-row portal-form-row--discount">
-                    <label className="portal-field" htmlFor="portal-discount-value">
-                      <span className="portal-field-label">{discountType === "percent" ? "Porcentaje (0–100)" : "Monto en guaraníes"}</span>
-                      <input
-                        ref={discountInputRef}
-                        id="portal-discount-value"
-                        name="discount-value"
-                        type="text"
-                        inputMode={discountType === "percent" ? "decimal" : "numeric"}
-                        value={discountType === "percent" ? discountValue : moneyInputDisplay(discountValue)}
-                        onKeyDown={(event) => {
-                          if (event.ctrlKey || event.metaKey || event.altKey) return;
-                          const permitido = discountType === "percent" ? /^[\d,]$/ : /^\d$/;
-                          if (event.key.length === 1 && !permitido.test(event.key)) event.preventDefault();
-                        }}
-                        onChange={(event) => {
-                          if (discountType === "percent") {
-                            setDiscountValue(percentInput(event.target.value));
-                            return;
-                          }
-                          // El formateo no mueve el caret (mismo criterio que MoneyField).
-                          const input = event.currentTarget;
-                          const before = input.value.slice(0, input.selectionStart ?? input.value.length);
-                          const digitsBefore = (before.match(/\d/g) || []).length;
-                          setDiscountValue(amountInput(input.value));
-                          requestAnimationFrame(() => {
-                            const node = discountInputRef.current;
-                            if (!node || document.activeElement !== node) return;
-                            const caret = caretAfterDigits(node.value, digitsBefore);
-                            node.setSelectionRange?.(caret, caret);
-                          });
-                        }}
-                        maxLength={discountType === "percent" ? 6 : moneyInputMaxLength()}
-                        placeholder={discountType === "percent" ? "Ej.: 10" : "Ej.: 500000"}
-                        aria-invalid={discountError ? true : undefined}
-                        title={discountError ?? undefined}
-                        required
-                      />
-                    </label>
+                    <div className="portal-field">
+                      {discountType === "percent" ? (
+                        <PercentField id="portal-discount-value" name="discount-value" label="Porcentaje (0–100)" value={discountValue} onChange={setDiscountValue} error={discountError} placeholder="Ej.: 10" size="full" required />
+                      ) : (
+                        <MoneyField id="portal-discount-value" name="discount-value" label="Monto en guaraníes" value={discountValue} onChange={setDiscountValue} limit={budget.subtotal} error={discountError} placeholder="Ej.: 500000" size="full" required />
+                      )}
+                    </div>
                     <div className="portal-field portal-field--choice">
                       <span className="portal-field-label" id="portal-discount-type-label">Tipo de rebaja</span>
                       <PortalSegmented
@@ -1970,7 +1934,7 @@ export function PortalBudgetView({
                   <span className="portal-field-label">
                     {actionMode === "authorize" ? "Comentario (opcional)" : actionMode === "discount" ? "Motivo de la rebaja" : "¿Qué cambios necesitás?"}
                   </span>
-                  <textarea
+                  <SharedTextarea
                     id="portal-note"
                     name="note"
                     value={note}

@@ -85,7 +85,7 @@ test("lib/bank-mark.ts no guarda listas locales de bancos", () => {
 });
 
 test("el campo Banco de Tesorería y de Datos de pago usa el catálogo", () => {
-  for (const file of ["components/admin/modules/FinanzasModule.tsx", "components/admin/modules/PresupuestosModule.tsx"]) {
+  for (const file of ["components/admin/modules/FinanzasModule.tsx", "components/admin/modules/PaymentDetailsDialog.tsx"]) {
     const source = repoFile(file);
     assert.match(source, /bankSuggestions\(/, `${file}: el campo Banco tiene que sugerir el catálogo`);
     assert.match(source, /<datalist/, `${file}: el campo Banco necesita su datalist del catálogo`);

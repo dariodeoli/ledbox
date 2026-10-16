@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ADMIN_ROOT_ID,
   ADMIN_SIDEBAR_KEY,
@@ -79,29 +79,34 @@ export function AdminThemeToggle() {
  * Toggle del sidebar de escritorio (solo íconos ↔ completo). En mobile no se
  * dibuja: ahí el sidebar sigue siendo el drawer con su barra inferior.
  */
-export function AdminSidebarToggle() {
+/** El colapso al entrar a Ajustes no sobrescribe la preferencia manual. */
+export function useAdminSidebar(pathname: string) {
   const [mode, setMode] = useState<AdminSidebarMode>("expanded");
-
-  useEffect(() => {
-    setMode(readStoredSidebarMode());
+  const previous = useRef<string | null>(null);
+  const change = useCallback((next: AdminSidebarMode, persist = false) => {
+    if (persist) try { window.localStorage.setItem(ADMIN_SIDEBAR_KEY, next); } catch { /* vista actual */ }
+    applyAdminSidebarMode(next);
+    setMode(next);
   }, []);
+  useLayoutEffect(() => {
+    const settings = isSettingsSidebarPath(pathname);
+    if (previous.current === null) change(settings ? "collapsed" : readStoredSidebarMode());
+    else if (settings !== isSettingsSidebarPath(previous.current)) change(settings ? "collapsed" : "expanded");
+    previous.current = pathname;
+  }, [pathname, change]);
+  const navigate = useCallback((href: string) => change(isSettingsSidebarPath(href) ? "collapsed" : "expanded"), [change]);
+  const toggle = useCallback(() => change(mode === "collapsed" ? "expanded" : "collapsed", true), [change, mode]);
+  return { mode, navigate, toggle };
+}
 
-  const toggle = useCallback(() => {
-    setMode((current) => {
-      const next: AdminSidebarMode = current === "collapsed" ? "expanded" : "collapsed";
-      try {
-        window.localStorage.setItem(ADMIN_SIDEBAR_KEY, next);
-      } catch {
-        /* almacenamiento no disponible: el modo vale solo para esta vista */
-      }
-      applyAdminSidebarMode(next);
-      return next;
-    });
-  }, []);
+export function isSettingsSidebarPath(pathname: string): boolean {
+  return ["/ajustes", "/estado"].some(base => pathname === base || pathname.startsWith(`${base}/`));
+}
 
+export function AdminSidebarToggle({ mode, onToggle }: { mode: AdminSidebarMode; onToggle: () => void }) {
   const collapsed = mode === "collapsed";
   const label = collapsed ? "Expandir el menú lateral" : "Colapsar el menú lateral (solo íconos)";
   return (
-    <AdminIconButton icon="panel-left" iconSize={16} label={label} className="admin-sidebar-collapse" onClick={toggle} aria-expanded={!collapsed} aria-controls="admin-sidebar" />
+    <AdminIconButton icon="panel-left" iconSize={16} label={label} className="admin-sidebar-collapse" onClick={onToggle} aria-expanded={!collapsed} aria-controls="admin-sidebar" />
   );
 }

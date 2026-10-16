@@ -1,3 +1,4 @@
+import { resolveOrganizationSlugId } from "./organization-slugs";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { db } from "./db";
@@ -103,7 +104,8 @@ export async function resolveCatalogAccess(slug: string, token: string): Promise
     },
   });
   if (!row || row.revokedAt) return null;
-  if (!row.organization.active || row.organization.slug !== normalized) return null;
+  const organizationId = await resolveOrganizationSlugId(normalized);
+  if (!row.organization.active || row.organization.id !== organizationId) return null;
   if (!row.client.active || row.client.deletedAt || row.client.organizationId !== row.organization.id) return null;
   const now = new Date();
   if (!row.lastUsedAt || now.getTime() - row.lastUsedAt.getTime() > LAST_USED_THROTTLE_MS) {

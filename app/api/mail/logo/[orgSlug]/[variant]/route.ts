@@ -1,3 +1,4 @@
+import { resolveOrganizationSlugId } from "@/lib/server/organization-slugs";
 import { isLogoVariant } from "@/lib/admin-types";
 import { db } from "@/lib/server/db";
 import { jsonError } from "@/lib/server/http";
@@ -15,7 +16,9 @@ export const dynamic = "force-dynamic";
 export async function GET(_request: Request, { params }: { params: Promise<{ orgSlug: string; variant: string }> }) {
   const { orgSlug, variant } = await params;
   if (!isLogoVariant(variant)) return jsonError("Logo no encontrado.", 404);
-  const organization = await db.organization.findFirst({ where: { slug: orgSlug, active: true }, select: { id: true } });
+  const organizationId = await resolveOrganizationSlugId(orgSlug);
+  if (!organizationId) return jsonError("Logo no encontrado.", 404);
+  const organization = await db.organization.findFirst({ where: { id: organizationId, active: true }, select: { id: true } });
   if (!organization) return jsonError("Logo no encontrado.", 404);
   const logo = await db.organizationLogo.findUnique({
     where: { organizationId_variant: { organizationId: organization.id, variant } },

@@ -1,4 +1,6 @@
 "use client";
+import { Input as SharedInput, EmailField as SharedEmailField } from "owncoding-ui";
+
 
 import { useState, type FormEvent } from "react";
 import { ACCESS_REQUEST_KIND_LABEL, ACCESS_REQUEST_KINDS, type AccessRequestKind } from "@/lib/catalog-access-mode";
@@ -78,13 +80,13 @@ export function AccessGate({
           <p className="cp-hint">Dejanos tus datos. {organizationName} revisa tu pedido de acceso y, si lo aprueba, te manda tu link por correo.</p>
           {demo ? <p className="cp-note" role="note">Esto es una demo: la solicitud no se guarda.</p> : null}
           <label className="cp-field"><span>Nombre y apellido</span>
-            <input name="name" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={120} autoComplete="name" /></label>
+            <SharedInput name="name" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={120} autoComplete="name" /></label>
           <label className="cp-field"><span>Empresa (opcional)</span>
-            <input name="company" value={company} onChange={(e) => setCompany(e.target.value)} maxLength={120} autoComplete="organization" /></label>
+            <SharedInput name="company" value={company} onChange={(e) => setCompany(e.target.value)} maxLength={120} autoComplete="organization" /></label>
           <label className="cp-field"><span>Teléfono (con código de país)</span>
-            <input name="phone" value={phone} onChange={(e) => setPhone(e.target.value)} required inputMode="tel" autoComplete="tel" placeholder="+595 981 000 000" maxLength={40} /></label>
+            <SharedInput name="phone" value={phone} onChange={(e) => setPhone(e.target.value)} required inputMode="tel" autoComplete="tel" placeholder="+595 981 000 000" maxLength={40} /></label>
           <label className="cp-field"><span>Correo</span>
-            <input name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required maxLength={200} autoComplete="email" inputMode="email" /></label>
+            <SharedEmailField name="email" value={email} onChange={setEmail} required maxLength={200} autoComplete="email" inputMode="email" /></label>
           <fieldset className="cp-field cp-kind">
             <legend>Soy</legend>
             <div className="cp-cats" role="group" aria-label="Tipo de cliente">

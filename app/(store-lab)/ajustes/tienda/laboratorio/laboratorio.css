@@ -1,0 +1,45 @@
+/* Only the authenticated lab uses this skin. Landing and production templates stay unchanged. */
+.lb-shop-lab .cp-theme {
+  --color-bg: var(--bg); --color-surface: var(--bg-2); --color-text: var(--text); --color-muted: var(--muted-2);
+  --color-primary: var(--led); --color-on-primary: var(--ink); --color-accent-text: var(--led);
+  --color-border: var(--border); --color-border-soft: var(--border); --color-photo: #fff;
+  --font-body: "Inter Panel", system-ui, sans-serif; --font-display: "Space Grotesk Panel", "Inter Panel", system-ui, sans-serif;
+  background: transparent;
+}
+.lb-shop-lab .lab-notice { position: relative; z-index: 101; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; padding: 12px 40px; background: var(--bg-2); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted-2); }
+.lb-shop-lab .lab-notice strong, .lb-shop-lab .lab-notice a { color: var(--led); }
+.lb-shop-lab .lab-nav { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 40px; height: 68px; border-bottom: 1px solid var(--border); background: var(--glass); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+.lb-shop-lab .lab-brand { display: flex; align-items: center; gap: 12px; color: var(--text-strong); text-decoration: none; min-width: 0; font-weight: 700; }
+.lb-shop-lab .lab-brand img { width: auto; height: 46px; max-width: 120px; object-fit: contain; }
+.lb-shop-lab .lab-brand > span:last-child { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-shop-lab #hero { padding-top: 90px; min-height: calc(100svh - 110px); }
+.lb-shop-lab #hero .mega { overflow-wrap: anywhere; }
+.lb-shop-lab #hero .hero-sub { margin-top: 32px; }
+.lb-shop-lab #hero .hero-actions { margin-top: 40px; }
+.lb-shop-lab .lab-cover { display: block; position: relative; z-index: 1; }
+.lb-shop-lab .lab-cover img { display: block; width: 100%; height: auto; }
+.lb-shop-lab .cp-catalog { padding-inline: 40px; max-width: none; }
+.lb-shop-lab .cp-catalog-layout { grid-template-columns: minmax(0, 1fr); }
+.lb-shop-lab .cp-filters { display: none; }
+.lb-shop-lab .cp-filter-open { display: inline-flex; }
+.lb-shop-lab .cp-section-head { display: none; }
+.lb-shop-lab .cp-tile { padding: 30px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.lb-shop-lab .cp-grid { gap: 0; border-top: 1px solid var(--border); }
+.lb-shop-lab .cp-tile-media { aspect-ratio: 4 / 3; }
+.lb-shop-lab .cp-tile-name { font-size: 22px; text-transform: uppercase; }
+.lb-shop-lab .cp-tile-add { width: 100%; border: 1px solid var(--led); color: var(--led); background: transparent; text-transform: uppercase; }
+.lb-shop-lab .c-meta svg { width: 20px; height: 20px; }
+.lb-shop-lab .lab-footer { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; border-top: 1px solid var(--border); padding: 32px 40px; color: var(--muted); font-size: 12px; }
+.lb-shop-lab .lab-footer a { color: var(--led); }
+@media (max-width: 767px) {
+  .lb-shop-lab .lab-notice { padding: 10px 20px; }
+  .lb-shop-lab .lab-nav { padding: 0 20px; gap: 8px; }
+  .lb-shop-lab .nav-center { display: none; }
+  .lb-shop-lab .lab-brand > span:last-child { max-width: 12ch; }
+  .lb-shop-lab .nav-cta { padding: 10px; font-size: 10px; }
+  .lb-shop-lab #hero { padding: 64px 20px 0; }
+  .lb-shop-lab .cp-catalog { padding-inline: 16px; }
+  .lb-shop-lab .cp-tile { padding: 16px 10px; }
+  .lb-shop-lab .cp-tile-name { font-size: 16px; }
+  .lb-shop-lab .lab-footer { padding: 24px 20px; }
+}

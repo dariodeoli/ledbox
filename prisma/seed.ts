@@ -1,3 +1,4 @@
+import { assertOrganizationSlugAvailable, claimOrganizationSlug, resolveOrganizationSlugId } from "@/lib/server/organization-slugs";
 import { Prisma, PrismaClient } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
@@ -33,10 +34,18 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const ADMIN_ALLOWLIST: ReadonlySet<string> = new Set(admins.map((admin) => admin.email));
 
 async function main() {
-  const organization = await prisma.organization.upsert({
-    where: { slug: DEFAULT_ORGANIZATION.slug },
-    create: { ...DEFAULT_ORGANIZATION, active: true, paymentDetails: PAYMENT_DETAILS },
-    update: { name: DEFAULT_ORGANIZATION.name, active: true },
+  const organization = await prisma.$transaction(async (tx) => {
+    // El seed no recrea el identificador viejo de una empresa renombrada.
+    const existingId = await resolveOrganizationSlugId(DEFAULT_ORGANIZATION.slug, tx);
+    const organizationId = existingId ?? DEFAULT_ORGANIZATION.id;
+    await assertOrganizationSlugAvailable(tx, DEFAULT_ORGANIZATION.slug, organizationId);
+    const row = await tx.organization.upsert({
+      where: { id: organizationId },
+      create: { ...DEFAULT_ORGANIZATION, active: true, paymentDetails: PAYMENT_DETAILS },
+      update: { name: DEFAULT_ORGANIZATION.name, active: true },
+    });
+    await claimOrganizationSlug(tx, DEFAULT_ORGANIZATION.slug, row.id);
+    return row;
   });
   await prisma.organization.updateMany({
     where: { id: organization.id, paymentDetails: { equals: Prisma.DbNull } },

@@ -25,7 +25,7 @@ import {
   type LateFeeUnit,
 } from "@/lib/rental-charges";
 import { Combobox, MoneyField, NumberField, SelectField, TextAreaField, TextField } from "../AdminFields";
-import { AdminButton, AdminNote, AdminPanel } from "../AdminUI";
+import { AdminButton, AdminDisclosure, AdminNote, AdminPanel } from "../AdminUI";
 
 /**
  * Ajustes → Alquileres: garantía, recargo por demora, roturas y faltantes, cargos personalizados,
@@ -155,7 +155,7 @@ export function RentalPolicyPanels({ settings, onSaved, readOnly }: { settings: 
   }
 
   return (
-    <form className="admin-settings admin-settings-sections" onSubmit={(event) => void save(event)}>
+    <form className="admin-settings admin-settings-sections admin-rental-policies" onSubmit={(event) => void save(event)}>
       {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
       {error ? <AdminNote tone="error">{error}</AdminNote> : null}
 
@@ -186,10 +186,10 @@ export function RentalPolicyPanels({ settings, onSaved, readOnly }: { settings: 
           </div>
         ) : null}
         {form.mode !== "NONE" && form.calc !== "PER_PRODUCT" ? (
-          <div className="rental-preview" aria-live="polite">
+          <AdminDisclosure title="Probar garantía" hint="Ejemplo, no se guarda"><div className="rental-preview" aria-live="polite">
             <MoneyField label="Pedido de ejemplo" value={sample.order} limit={BUDGET_INT_MAX} onChange={(order) => setSample({ ...sample, order })} />
             <p><strong>{depositPreview === null ? "Sin garantía con estos valores" : `Garantía = ${formatMoney(depositPreview)}`}</strong></p>
-          </div>
+          </div></AdminDisclosure>
         ) : null}
       </AdminPanel>
 
@@ -204,23 +204,23 @@ export function RentalPolicyPanels({ settings, onSaved, readOnly }: { settings: 
           )}
           <NumberField label="Tolerancia (minutos)" value={form.lateGrace} onChange={(value) => patch({ lateGrace: value })} maxLength={4} disabled={disabled} hint="Hasta este tiempo de demora no se cobra nada." />
         </div>
-        <div className="rental-preview admin-settings-grid" aria-live="polite">
+        <AdminDisclosure title="Probar recargo" hint="Ejemplo, no se guarda"><div className="rental-preview admin-settings-grid" aria-live="polite">
           {form.lateKind === "PERCENT" ? <MoneyField label="Alquiler de ejemplo" value={sample.rental} limit={BUDGET_INT_MAX} onChange={(rental) => setSample({ ...sample, rental })} /> : null}
           <NumberField label="Demora de ejemplo" value={sample.lateCount} maxLength={3} onChange={(lateCount) => setSample({ ...sample, lateCount })} />
           <SelectField label="Unidad de la demora" value={sample.lateUnit} onChange={(value) => setSample({ ...sample, lateUnit: value as LateFeeUnit })} options={[{ value: "DAY", label: "Días" }, { value: "HOUR", label: "Horas" }]} />
           <p className="rental-preview-result"><strong>{lateLabel} = {formatMoney(lateAmount.amount)}</strong>{late.units === 0 && lateMinutes > 0 ? " (dentro de la tolerancia)" : late.units > 0 ? ` · ${late.units} ${form.lateUnit === "DAY" ? "día" : "hora"}${late.units === 1 ? "" : "s"} × ${formatMoney(lateAmount.unitAmount)}` : ""}</p>
-        </div>
+        </div></AdminDisclosure>
       </AdminPanel>
 
       <AdminPanel title="Roturas y faltantes" icon="alert" meta="Sobre el costo de reposición del producto">
         <div className="admin-settings-grid">
           <NumberField label="% del costo de reposición" value={form.damagePercent} onChange={(value) => patch({ damagePercent: value })} maxLength={3} disabled={disabled} hint="100 = el costo completo. Cada cargo se puede editar antes de aplicarlo." />
         </div>
-        <div className="rental-preview admin-settings-grid" aria-live="polite">
+        <AdminDisclosure title="Probar roturas y faltantes" hint="Ejemplo, no se guarda"><div className="rental-preview admin-settings-grid" aria-live="polite">
           <NumberField label="Piezas de ejemplo" value={sample.pieces} maxLength={4} onChange={(pieces) => setSample({ ...sample, pieces })} />
           <MoneyField label="Costo de reposición de ejemplo" value={sample.replacement} limit={BUDGET_INT_MAX} onChange={(replacement) => setSample({ ...sample, replacement })} />
           <p className="rental-preview-result"><strong>{num(sample.pieces)} × {formatMoney(damage.unitAmount)} = {formatMoney(damage.amount)}</strong></p>
-        </div>
+        </div></AdminDisclosure>
       </AdminPanel>
 
       <AdminPanel title="Cargos personalizados" icon="receipt" meta="Se ofrecen al devolver según lo que vuelve">
@@ -253,14 +253,14 @@ export function RentalPolicyPanels({ settings, onSaved, readOnly }: { settings: 
             <AdminButton type="button" icon="refresh" disabled={disabled} onClick={() => patch({ tiers: DEFAULT_CANCELLATION_POLICY.map((tier) => ({ days: String(tier.minDaysBefore), percent: String(tier.retainPercent) })) })}>Usar la de fábrica</AdminButton>
           </div>
         </div>
-        <div className="rental-preview" aria-live="polite">
+        <AdminDisclosure title="Probar cancelación" hint="Ejemplo, no se guarda"><div className="rental-preview" aria-live="polite">
           {tiersValid ? <ul className="rental-policy-lines">{cancellationPolicyLines(policy).map((line) => <li key={line}>{line}</li>)}</ul> : <p className="admin-field-hint">Completá los días y el porcentaje de cada tramo.</p>}
           <div className="admin-settings-grid">
             <NumberField label="Cancelación de ejemplo (días antes)" value={sample.cancelDays} maxLength={3} onChange={(cancelDays) => setSample({ ...sample, cancelDays })} />
             <MoneyField label="Seña de ejemplo" value={sample.advance} limit={BUDGET_INT_MAX} onChange={(advance) => setSample({ ...sample, advance })} />
           </div>
           {tiersValid ? <p className="rental-preview-result"><strong>Con {num(sample.cancelDays)} días: se propone retener {formatMoney(cancel.retained)} ({cancel.percent} %) y devolver {formatMoney(cancel.refundable)}.</strong> Solo es una propuesta: nunca se reembolsa solo.</p> : null}
-        </div>
+        </div></AdminDisclosure>
       </AdminPanel>
 
       <AdminPanel title="Condiciones del alquiler" icon="plan" meta="Se muestran en el portal y en el impreso">

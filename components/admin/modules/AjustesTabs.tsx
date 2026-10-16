@@ -8,7 +8,7 @@ import { AdminTabs } from "../AdminUI";
 export type AdminAjustesSection = "empresa" | "apariencia" | "correo" | "alquileres" | "inventario" | "tienda" | "plan" | "usuarios" | "eliminados";
 
 const SECTIONS: ReadonlyArray<{
-  key: AdminAjustesSection;
+  key: AdminAjustesSection | "estado";
   href: string;
   label: string;
   icon: AdminIconName;
@@ -22,15 +22,12 @@ const SECTIONS: ReadonlyArray<{
   { key: "tienda", href: "/ajustes/tienda", label: "Tienda web", icon: "globe", restricted: true },
   { key: "plan", href: "/ajustes/plan", label: "Plan", icon: "plan", restricted: false },
   { key: "usuarios", href: "/ajustes/usuarios", label: "Usuarios", icon: "users", restricted: true },
+  { key: "estado", href: "/estado", label: "Estado", icon: "database", restricted: true },
   { key: "eliminados", href: "/ajustes/eliminados", label: "Eliminados", icon: "trash", restricted: true },
 ];
 
-/**
- * Barra de secciones de Ajustes. Plantillas (issue #35) es una sección más pero
- * vive en su propia ruta (`/plantillas`), así que la barra es la misma en las dos
- * pantallas y Plantillas se ve para todos los roles (el API gatea por categoría).
- */
-export function AjustesTabs({ active }: { active: AdminAjustesSection | "plantillas" }) {
+/** Navegación de Ajustes; los mensajes se administran desde Clientes. */
+export function AjustesTabs({ active }: { active: AdminAjustesSection | "estado" }) {
   const { role } = useAdminSession();
   const canManage = canManageOrganization(role);
   return (
@@ -45,7 +42,6 @@ export function AjustesTabs({ active }: { active: AdminAjustesSection | "plantil
             icon: item.icon,
             active: item.key === active,
           })),
-          { href: "/plantillas", label: "Plantillas", icon: "mail" as AdminIconName, active: active === "plantillas" },
         ]}
       />
     </div>

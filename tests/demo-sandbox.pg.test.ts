@@ -251,13 +251,15 @@ async function e2Setup() {
   return { db, dbWithDeleted, demoData, sandboxes, sandboxLib, host, resetBuckets, purgeAll };
 }
 
-/** Tablas con `organizationId` y tablas con id de texto: para comprobar que no queda nada de una sandbox. */
+/** Datos operativos deben desaparecer; el namespace conserva sólo su tombstone de URL. */
 async function leftovers(db: Awaited<ReturnType<typeof e2Setup>>["db"], organizationId: string, ns: string) {
   const tables = await db.$queryRaw<Array<{ table_name: string; column_name: string }>>`
     SELECT table_name, column_name FROM information_schema.columns
     WHERE table_schema = 'public' AND (column_name = 'organizationId' OR (column_name = 'id' AND data_type = 'text'))`;
   const found: string[] = [];
   for (const { table_name, column_name } of tables) {
+    // Única excepción: no son datos de la sandbox sino reserva perpetua de su URL (#261).
+    if (table_name === "OrganizationSlug" && column_name === "organizationId") continue;
     const sql =
       column_name === "organizationId"
         ? `SELECT count(*)::int AS n FROM "${table_name}" WHERE "organizationId" = $1`
@@ -265,6 +267,14 @@ async function leftovers(db: Awaited<ReturnType<typeof e2Setup>>["db"], organiza
     const rows = await db.$queryRawUnsafe<Array<{ n: number }>>(sql, column_name === "organizationId" ? organizationId : `sbx_${ns}_`);
     if ((rows[0]?.n ?? 0) > 0) found.push(`${table_name}.${column_name}=${rows[0].n}`);
   }
+  const tombstones = await db.$queryRaw<Array<{ slug: string; organizationId: string }>>`
+    SELECT "slug", "organizationId" FROM "OrganizationSlug" WHERE "organizationId" = ${organizationId}`;
+  assert.deepEqual(tombstones, [{ slug: `demo-${ns}`, organizationId }], "la URL anterior conserva sólo su propietario histórico");
+  assert.equal(await db.organization.findUnique({ where: { id: organizationId } }), null, "la empresa purgada no existe");
+  const { assertOrganizationSlugAvailable, OrganizationSlugTaken, resolveOrganizationSlugId } = await import("../lib/server/organization-slugs");
+  assert.equal(await resolveOrganizationSlugId(`demo-${ns}`), null, "el tombstone no resuelve a una empresa eliminada");
+  await assert.rejects(() => db.$transaction(tx => assertOrganizationSlugAvailable(tx, `demo-${ns}`, `not-owner-${ns}`)), OrganizationSlugTaken,
+    "otra empresa no puede apropiarse de la URL purgada");
   const users = await db.adminUser.count({ where: { demoOrganizationId: organizationId } });
   if (users) found.push(`AdminUser=${users}`);
   return found;

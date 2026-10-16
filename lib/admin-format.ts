@@ -1443,6 +1443,7 @@ const AUDIT_ENTITY: Record<string, string> = {
   System: "Sistema",
   IaCarga: "Carga con IA",
   PlanChangeRequest: "Solicitud de plan",
+  EventVenue: "Recinto",
   Invoice: "Factura",
   PurchaseInvoice: "Compra",
   FiscalPeriod: "Cierre mensual",

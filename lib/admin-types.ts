@@ -1471,7 +1471,7 @@ export type AdminProfile = {
 
 /** Marca de la empresa (`GET /api/admin/organization/branding`). */
 export type AdminOrganizationBranding = {
-  organization: { id: string; name: string; slug: string };
+  organization: { id: string; name: string; slug: string; slugEditable?: boolean; slugAliases?: string[] };
   logos: AdminOrganizationLogos;
 };
 
@@ -2356,6 +2356,7 @@ export const AUDIT_ENTITIES = [
   // Carga con IA (issue #120): análisis de un texto por el proveedor externo.
   "IaCarga",
   "PlanChangeRequest",
+  "EventVenue",
   "Invoice",
   "PurchaseInvoice",
   "FiscalPeriod",
@@ -2819,7 +2820,7 @@ export type AdminRentalSettings = {
 
 /** Sobre común de los GET del panel; cada módulo consume las claves que su endpoint devuelve. */
 export type AdminApiResponse = {
-  venues?: import("./event-venues").EventVenue[];
+  venues?: import("./event-venues").SavedEventVenue[];
   /** Remitos de un evento (`GET /api/admin/delivery-notes?eventId=`). */
   notes?: import("./delivery-note").AdminDeliveryNote[];
   /** Cotización de un paquete (`GET /api/admin/inventory/combos?pricing=1`). */

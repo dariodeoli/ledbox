@@ -186,7 +186,7 @@ test("snapshot: presupuesto de una empresa, invitación de empresa y correo de p
     preheader: "Gs. 1.500.000", brand: vajilla,
   }));
   snapshot("mail-invitacion-empresa", buildInvitationMail({
-    organizationName: "La Vajilla", email: "x@example.test", role: "OPERATIONS", invitedByName: "Dueña", token: "TOKENDEEJEMPLO", expiresAt, brand: vajilla,
+    organizationName: "La Vajilla", email: "x@example.test", role: "OPERATIONS", invitedByName: "Dueña", token: "TOKENDEEJEMPLO", expiresAt, brand: vajilla, now: new Date("2026-10-15T12:00:00Z"),
   }).html);
   snapshot("mail-plataforma", renderMail({
     title: "Restablecé tu contraseña", intro: "Solicitaste restablecer tu contraseña de EventOS.",

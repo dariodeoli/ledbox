@@ -1,4 +1,6 @@
 "use client";
+import { dateShortcuts, type DateShortcutKind } from "@/lib/date-shortcuts";
+import { normalizeHex } from "@/lib/storefront-theme";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
@@ -348,6 +350,21 @@ export function TextAreaField({
   );
 }
 
+/** Color de marca: picker nativo y valor hexadecimal comparten una sola etiqueta. */
+export function ColorField({ label, value, onChange, fallbackColor = "#0b5cd5", hint, error, disabled, size = "full" }: {
+  label: string; value: string; onChange: (value: string) => void; fallbackColor?: string;
+  hint?: string; error?: string | null; disabled?: boolean; size?: FieldSize;
+}) {
+  const { fieldId, hintId, errorId } = useFieldIds();
+  const pickerColor = normalizeHex(value) ?? normalizeHex(fallbackColor) ?? "#0b5cd5";
+  return <FieldChrome label={label} hint={hint} error={error} size={size} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
+    <div className="admin-color-control">
+      <input type="color" value={pickerColor} onInput={(event) => onChange(event.currentTarget.value)} onChange={(event) => onChange(event.target.value)} disabled={disabled} aria-label={`Elegir ${label.toLowerCase()}`} aria-describedby={describedBy(error, hint, hintId, errorId)} />
+      <SharedInput id={fieldId} type="text" value={value} onChange={(event) => onChange(event.target.value)} maxLength={7} placeholder={pickerColor} autoCapitalize="none" spellCheck={false} disabled={disabled} aria-invalid={error ? true : undefined} aria-describedby={describedBy(error, hint, hintId, errorId)} />
+    </div>
+  </FieldChrome>;
+}
+
 /**
  * Monto PYG con el **`MoneyInput` de owncoding-ui** (issue #99): el componente
  * de la librería aporta el prefijo de la moneda, los separadores de miles al
@@ -403,6 +420,7 @@ export function MoneyField({
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const rawInput = useRef<string | null>(null);
   const effectiveLimit = Math.min(limit, FIELD_LIMITS.amountStorage);
   const limitError = amountExceeds(amountInput(value), effectiveLimit) ? FIELD_MESSAGES.amountLimit : null;
   const fieldError = error || limitError;
@@ -427,12 +445,23 @@ export function MoneyField({
   }, [invalid, value]);
   return (
     <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={fieldError} wide={wide} size={size ?? "sm"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <div className={compact ? "admin-money admin-money--compact" : "admin-money"} ref={wrapperRef}>
+      <div className={compact ? "admin-money admin-money--compact" : "admin-money"} ref={wrapperRef}
+        onInputCapture={(event) => {
+          // La librería limpia el DOM antes de notificar: conservar primero el
+          // texto pegado (incluido «Gs.») y enteros que excedan Number seguro.
+          const input = event.target as HTMLInputElement;
+          if (typeof input.value === "string") rawInput.current = input.value;
+        }}>
         <MoneyInput
           id={label ? fieldId : id}
           name={name}
           value={value}
-          onValueChange={() => onChange(amountInput(wrapperRef.current?.querySelector("input")?.value ?? ""))}
+          onValueChange={() => {
+            const raw = rawInput.current;
+            rawInput.current = null;
+            if (raw !== null) onChange(amountInput(raw));
+            else onChange(amountInput(wrapperRef.current?.querySelector("input")?.value ?? ""));
+          }}
           max={effectiveLimit}
           integerOnly
           required={required}
@@ -880,6 +909,29 @@ export function SerialField({
   );
 }
 
+/** Opt-in: the field keeps its normal exact-date input; shortcuts only act on explicit selection. */
+function DateShortcuts({ kind, value, min, max, disabled, label, onChange }: {
+  kind: DateShortcutKind; value: string; min?: string; max?: string; disabled?: boolean;
+  label: string; onChange: (value: string) => void;
+}) {
+  const [clock, setClock] = useState(() => new Date());
+  const refresh = () => setClock(new Date());
+  const choices = dateShortcuts({ kind, value, min, max, now: clock });
+  // A keyboard user can refresh a page left open across midnight even when every old choice was out of range.
+  const refreshable = !disabled && choices.every(choice => !choice.allowed);
+  return <div className="admin-date-shortcuts" role="group" aria-label={`Fechas rápidas para ${label.toLowerCase()}`} tabIndex={refreshable ? 0 : undefined} onFocusCapture={refresh} onPointerEnter={refresh} onPointerDownCapture={refresh} onKeyDownCapture={refresh}>
+    {choices.map(choice => {
+      const detail = `${choice.label}, ${choice.dateLabel}${kind === "datetime-local" ? ` a las ${choice.value.split("T")[1]}` : ""}`;
+      return <button key={choice.offset} type="button" disabled={disabled || !choice.allowed} aria-label={detail} title={choice.allowed ? detail : `${detail} · Fuera del rango permitido`} aria-pressed={value === choice.value} onClick={() => {
+        // Recheck civil day and bounds at activation, including a page left open across midnight.
+        const current = dateShortcuts({ kind, value, min, max })[choice.offset];
+        if (!disabled && current.allowed) onChange(current.value);
+      }}>{choice.label}</button>;
+    })}
+    {kind === "datetime-local" ? <small>Conserva la hora; vacío usa 00:00.</small> : null}
+  </div>;
+}
+
 function DateLikeField({
   type,
   label,
@@ -898,6 +950,7 @@ function DateLikeField({
   id,
   className,
   title,
+  shortcuts = false,
 }: {
   type: "date" | "time" | "datetime-local";
   label?: string;
@@ -918,6 +971,8 @@ function DateLikeField({
   id?: string;
   className?: string;
   title?: string;
+  /** Hoy/Mañana/Pasado mañana; sólo para fechas operativas, nunca automático. */
+  shortcuts?: boolean;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
   return (
@@ -938,6 +993,7 @@ function DateLikeField({
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(error, hint, hintId, errorId)}
       />
+      {shortcuts && type !== "time" ? <DateShortcuts kind={type} value={value} min={min} max={max} disabled={disabled} label={label ?? ariaLabel ?? "Fecha"} onChange={(next) => { if (next !== value) onChange(next); }} /> : null}
     </FieldChrome>
   );
 }
@@ -946,7 +1002,7 @@ export function DateField(props: Omit<React.ComponentProps<typeof DateLikeField>
   return <DateLikeField {...props} type="date" />;
 }
 
-export function TimeField(props: Omit<React.ComponentProps<typeof DateLikeField>, "type">) {
+export function TimeField(props: Omit<React.ComponentProps<typeof DateLikeField>, "type" | "shortcuts">) {
   return <DateLikeField {...props} type="time" />;
 }
 
@@ -978,6 +1034,7 @@ export function DayField({
   disabled,
   className,
   title,
+  shortcuts = false,
   id,
 }: {
   label?: string;
@@ -999,6 +1056,8 @@ export function DayField({
   disabled?: boolean;
   className?: string;
   title?: string;
+  /** Hoy/Mañana/Pasado mañana; sólo para fechas operativas, nunca automático. */
+  shortcuts?: boolean;
   id?: string;
 }) {
   const { fieldId, hintId, errorId } = useFieldIds(id);
@@ -1052,6 +1111,7 @@ export function DayField({
         aria-invalid={message ? true : undefined}
         aria-describedby={describedBy(message, hint, hintId, errorId)}
       />
+      {shortcuts ? <DateShortcuts kind="date" value={value} min={min} max={max} disabled={disabled} label={label ?? ariaLabel ?? "Fecha"} onChange={(next) => { setText(dayInputText(next)); setRangeError(""); if (next !== value) onChange(next); }} /> : null}
     </FieldChrome>
   );
 }
@@ -1439,6 +1499,7 @@ export function SwitchField({
   checked,
   onChange,
   hint,
+  stateLabels,
   error,
   wide,
   disabled,
@@ -1451,6 +1512,7 @@ export function SwitchField({
   checked: boolean;
   onChange: (checked: boolean) => void;
   hint?: string;
+  stateLabels?: { checked: string; unchecked: string };
   error?: string | null;
   wide?: boolean;
   disabled?: boolean;
@@ -1469,7 +1531,7 @@ export function SwitchField({
           onChange={(event: React.ChangeEvent<HTMLInputElement>) => onChange(event.target.checked)}
           ariaLabel={label ? undefined : ariaLabel}
         />
-        <span className="admin-switch-state">{checked ? "Sí" : "No"}</span>
+        <span className="admin-switch-state">{checked ? stateLabels?.checked ?? "Sí" : stateLabels?.unchecked ?? "No"}</span>
       </label>
     </FieldChrome>
   );

@@ -29,6 +29,8 @@ export type AdminNavGroup = {
   bare?: boolean;
   /** Etapas de un flujo: se dibujan unidas por una línea vertical (Ventas). */
   flow?: boolean;
+  /** Accesos fijos encima del selector de empresa. */
+  docked?: boolean;
 };
 
 /**
@@ -119,10 +121,10 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
   },
   {
     label: "Sistema",
+    docked: true,
     items: [
       // Mensajes vive en Clientes; /plantillas conserva el acceso histórico.
-      { href: "/ajustes", label: "Ajustes", icon: "settings" },
-      { href: "/estado", label: "Estado", icon: "database", roles: RESTRICTED_MODULES["/estado/sistema"] },
+      { href: "/ajustes", label: "Ajustes", icon: "settings", also: ["/estado"] },
     ],
   },
 ];
@@ -141,6 +143,7 @@ export function isAdminNavItemActive(pathname: string, item: Pick<AdminNavItem, 
 }
 
 export function adminNavLabel(pathname: string): string {
+  if (isAdminNavActive(pathname, "/estado")) return "Estado";
   for (const [href, label] of Object.entries(PAGE_TITLES)) {
     if (isAdminNavActive(pathname, href)) return label;
   }
@@ -154,6 +157,7 @@ export function adminNavLabel(pathname: string): string {
 
 /** Páginas fuera del sidebar: mismo criterio de ícono que el resto del panel. */
 const PAGE_ICONS: Record<string, AdminIconName> = {
+  "/estado": "database",
   "/perfil": "user",
   "/demo": "overview",
   "/firmas": "pen",

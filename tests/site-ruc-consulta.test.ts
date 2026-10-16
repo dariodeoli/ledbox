@@ -50,7 +50,10 @@ test("el popup usa los campos guiados y conserva lo demás", () => {
   assert.match(dialog, /fetch\(`\/api\/ruc\?numero=/, "llama al endpoint nuevo");
   assert.match(dialog, /EmailField as LibEmailField/, "correo con el componente de la librería");
   assert.match(dialog, /countryCode, setCountryCode\] = useState\("\+595"\)/, "el teléfono arranca en +595");
-  assert.match(dialog, /CODIGOS_PAIS/, "el catálogo de códigos es el de la librería");
+  assert.match(dialog, /<PhonePartsField\b/, "el teléfono reutiliza el adaptador compartido");
+  const phone = read("components/fields/PhonePartsField.tsx");
+  assert.match(phone, /CODIGOS_PAIS/, "el catálogo de códigos del adaptador es el de la librería");
+  assert.match(phone, /soloDigitos/, "el adaptador usa la normalización compartida");
   assert.match(dialog, /name="website"/, "el honeypot sigue");
   assert.match(dialog, /Política de privacidad/, "el aviso de privacidad sigue");
   assert.match(dialog, /whatsappUrl\(text\)/, "el envío a WhatsApp sigue");

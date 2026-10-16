@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ADMIN_NAV, adminModuleVisible } from "../lib/admin-policy";
+import { ADMIN_NAV, adminModuleVisible, isAdminNavItemActive } from "../lib/admin-policy";
 import { ADMIN_ROUTES } from "../lib/admin-routes";
 import { groupSearchResults, SEARCH_GROUP_ORDER, type AdminSearchResult } from "../lib/admin-search";
 import { MODULE_HELP, moduleHelpFor } from "../lib/module-help";
@@ -30,12 +30,12 @@ test("la navegación respeta los grupos y el orden de la guía (§6)", () => {
       { label: "Clientes", hrefs: ["/clientes"] },
       { label: "Operación", hrefs: ["/inventario", "/proveedores", "/promotoras"] },
       { label: "Plata", hrefs: ["/finanzas", "/facturacion"] },
-      { label: "Sistema", hrefs: ["/ajustes", "/estado"] },
+      { label: "Sistema", hrefs: ["/ajustes"] },
     ],
   );
-  // Firmas vive dentro de Presupuestos y Plantillas dentro de Ajustes: ya no son ítems del menú.
+  // Firmas vive dentro de Presupuestos y Plantillas dentro de Clientes: ya no son ítems del menú.
   const items = ADMIN_NAV.flatMap((group) => group.items);
-  assert.equal(items.length, 12);
+  assert.equal(items.length, 11);
   assert.equal(items.some((item) => item.href === "/firmas" || item.href === "/plantillas"), false);
   // El calendario ya no es un destino: es una vista dentro de Eventos.
   assert.equal(items.some((item) => item.href === "/calendario"), false);
@@ -48,7 +48,9 @@ test("los permisos por rol siguen intactos (Ajustes y Estado)", () => {
   assert.equal(new Set(items.map((item) => item.href)).size, items.length);
   // Ajustes se ve en todos los roles (adentro está Plan); Estado es de gestión.
   assert.equal(items.find((item) => item.href === "/ajustes")?.roles, undefined);
-  assert.deepEqual([...(items.find((item) => item.href === "/estado")?.roles ?? [])], ["OWNER", "ADMIN"]);
+  assert.equal(items.some(item => item.href === "/estado"), false);
+  assert.equal(ADMIN_NAV.find(group => group.label === "Sistema")?.docked, true);
+  assert.equal(isAdminNavItemActive("/estado/auditoria", items.find(item => item.href === "/ajustes")!), true);
   // Las secciones de gestión piden OWNER/ADMIN; Plan se ve siempre.
   for (const href of ["/ajustes/empresa", "/ajustes/correo", "/ajustes/usuarios", "/estado/sistema", "/estado/auditoria"]) {
     assert.equal(adminModuleVisible(href, "OWNER"), true, `${href}: OWNER debería verlo`);

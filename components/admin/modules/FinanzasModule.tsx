@@ -1,4 +1,6 @@
 "use client";
+import { PaymentDetailsDialog } from "./PaymentDetailsDialog";
+import { canManageOrganization } from "@/lib/admin-policy";
 import { clientPresentation } from "@/lib/client-identity";
 import { ClientIdentityView, clientComboboxOption } from "../ClientIdentity";
 
@@ -151,7 +153,7 @@ export const FINANZAS_SECTIONS: ReadonlyArray<{
   { key: "por-confirmar", href: "/finanzas/por-confirmar", label: "Por confirmar", icon: "clock", hint: "Comprobantes en revisión y vencidos" },
   { key: "por-cobrar", href: "/finanzas/por-cobrar", label: "Por cobrar", icon: "finance", hint: "Cobros a plazo e historial" },
   { key: "proveedores", href: "/finanzas/proveedores", label: "Proveedores", icon: "suppliers", hint: "Cuentas por pagar y pagos" },
-  { key: "tesoreria", href: "/finanzas/tesoreria", label: "Tesorería", icon: "wallet", hint: "Cuentas y movimientos" },
+  { key: "tesoreria", href: "/finanzas/tesoreria", label: "Bancos y cuentas", icon: "wallet", hint: "Cuentas y movimientos" },
   { key: "conciliacion", href: "/finanzas/conciliacion", label: "Conciliación", icon: "bank", hint: "Conciliación bancaria" },
   { key: "gastos", href: "/finanzas/gastos", label: "Gastos", icon: "receipt", hint: "Gastos de la operación" },
 ];
@@ -1198,6 +1200,7 @@ function FinancePaymentPagination({ page, visible, busy, received = false, onCha
 
 export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanzasSection } = {}) {
   const { role } = useAdminSession();
+  const [paymentDetailsOpen, setPaymentDetailsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [paymentPages, setPaymentPages] = useState({ filter: "", pending: 1, settled: 1 });
@@ -3669,6 +3672,11 @@ export function FinanzasModule({ section = "resumen" }: { section?: AdminFinanza
       ) : null}
       {section === "tesoreria" ? (
         <>
+        {canManageOrganization(role) ? <AdminPanel title="Datos para recibir pagos" icon="bank" meta="Portal y presupuestos"
+          action={<AdminButton icon="edit" onClick={() => setPaymentDetailsOpen(true)}>Configurar datos de pago</AdminButton>}>
+          <p className="admin-field-hint">Banco, titular, RUC, cuenta y alias que compartís con tus clientes. Configurarlos no crea movimientos ni cambia saldos de tesorería.</p>
+        </AdminPanel> : null}
+        {paymentDetailsOpen && canManageOrganization(role) ? <PaymentDetailsDialog onClose={() => setPaymentDetailsOpen(false)} /> : null}
         <AdminPanel
           title="Tesorería" icon="wallet"
           meta={`${formatNumber(accounts.length)} cuentas · disponible ${formatMoney(summary.total)}`}

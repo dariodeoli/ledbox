@@ -452,3 +452,15 @@ test("el catálogo del alta usa el Combobox del kit y no un select plano", () =>
   // Cliente y evento ya no se eligen con el select plano.
   assert.doesNotMatch(module, /<SelectField/);
 });
+
+
+test("monto pegado con prefijo PYG reconoce el punto de Gs. sin perder el importe", () => {
+  for (const text of ["Gs. 1.200.000", "gs.\u00a01.200.000", "PYG 1.200.000", "₲ 1.200.000"]) {
+    assert.equal(amountInput(text), "1200000");
+    assert.equal(parseAmount(text), 1200000);
+  }
+  assert.equal(amountInput("Gs. 0"), "0");
+  assert.equal(amountInput("Gs. 9.007.199.254.740.993"), "9007199254740993");
+  assert.equal(parseAmount("Gs. 9.007.199.254.740.993"), null);
+  assert.equal(parseAmount("Gs. no"), null);
+});

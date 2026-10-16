@@ -1,3 +1,4 @@
+import { organizationSlugHasHistory, resolveOrganizationSlugId } from "./organization-slugs";
 import type { AdminRole } from "@prisma/client";
 import { headers } from "next/headers";
 import { parseBearerToken } from "@/lib/api-tokens";
@@ -339,13 +340,16 @@ export async function resolveActiveOrganizationId(adminUserId: string): Promise<
 export async function resolveDefaultOrganizationId(): Promise<string | null> {
   const slug = (process.env.DEFAULT_ORGANIZATION_SLUG || "ledbox").trim();
   // La vitrina y las sandboxes de la demo (`isDemo`) nunca reciben leads ni cotizaciones públicas.
-  const bySlug = slug
-    ? await db.organization.findFirst({ where: { slug, active: true, isDemo: false }, select: { id: true } })
+  const slugId = slug ? await resolveOrganizationSlugId(slug) : null;
+  const bySlug = slugId
+    ? await db.organization.findFirst({ where: { id: slugId, active: true, isDemo: false }, select: { id: true } })
     : null;
   if (bySlug) return bySlug.id;
+  // Un default conocido pero inactivo, eliminado o ambiguo no desvía leads a otro tenant.
+  if (slugId || (slug && await organizationSlugHasHistory(slug))) return null;
   const fallback = await db.organization.findFirst({
     where: { active: true, isDemo: false },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: { id: true },
   });
   return fallback?.id ?? null;

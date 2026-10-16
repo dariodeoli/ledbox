@@ -72,10 +72,18 @@ test("logos de banco: un solo componente del panel que usa BancoLogo y respeta e
   const logo = read("components", "admin", "BankLogo.tsx");
   assert.match(logo, /from "owncoding-ui\/financial"/);
   assert.match(logo, /soloCatalogo/, "un banco fuera del catálogo no inventa un logo");
-  for (const file of ["components/admin/modules/FinanzasModule.tsx", "components/admin/modules/PresupuestosModule.tsx", "app/(portal)/_components/PortalBudgetView.tsx"]) {
+  for (const file of ["components/admin/modules/FinanzasModule.tsx", "components/admin/modules/PaymentDetailsDialog.tsx", "app/(portal)/_components/PortalBudgetView.tsx"]) {
     const source = read(...file.split("/"));
     assert.match(source, /<BankLogo\b/, `${file}: falta el logo financiero`);
     assert.doesNotMatch(source, /bank-asset|admin-bank-mark|portal-bank-mark/, `${file}: quedó el logo propio`);
+  }
+  // Datos de pago fue extraído: ambos consumidores deben usar el editor canónico,
+  // cuyo BankLogo se exige arriba. No se permite reintroducir un editor local.
+  for (const file of ["FinanzasModule.tsx", "PresupuestosModule.tsx"]) {
+    const source = read("components", "admin", "modules", file);
+    assert.match(source, /import \{ PaymentDetailsDialog \} from "\.\/PaymentDetailsDialog"/, `${file}: falta importar el editor canónico`);
+    assert.match(source, /<PaymentDetailsDialog\b/, `${file}: falta usar el editor canónico`);
+    assert.doesNotMatch(source, /function PaymentDetailsDialog\b/, `${file}: se duplicó el editor de datos de pago`);
   }
   const tailwind = read("tailwind.config.mjs");
   assert.match(tailwind, /darkMode: \["selector", '\[data-theme="dark"\]'\]/, "las variantes dark: de la librería siguen el tema del panel");

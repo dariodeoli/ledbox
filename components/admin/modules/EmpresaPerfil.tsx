@@ -202,7 +202,7 @@ export function EmpresaPerfil() {
         </AdminPanel>
 
         <AdminPanel title="Horario de atención" icon="clock" meta="Por día; con varias franjas o cerrado">
-          <div className="admin-hours" data-testid="horario-atencion">
+          <div className="admin-hours admin-hours--week" data-testid="horario-atencion">
             {WEEK_DAYS.map((day) => (
               <div className="admin-hours-day" key={day}>
                 <div className="admin-hours-head">
@@ -211,7 +211,7 @@ export function EmpresaPerfil() {
                     ariaLabel={`${WEEK_DAY_LABEL[day]}: cerrado`}
                     checked={hours[day].closed}
                     onChange={(checked) => setHours((current) => ({ ...current, [day]: { ...current[day], closed: checked } }))}
-                    hint={hours[day].closed ? "Cerrado" : "Abierto"}
+                    stateLabels={{ checked: "Cerrado", unchecked: "Abierto" }}
                     disabled={readOnly}
                   />
                 </div>
@@ -243,7 +243,7 @@ export function EmpresaPerfil() {
         </AdminPanel>
 
         <AdminPanel title="Entrega, retiro y devolución" icon="calendar" meta="Franjas por defecto; se coordinan al confirmar">
-          <div className="admin-hours">
+          <div className="admin-hours admin-hours--handover">
             {HANDOVER_KINDS.map((kind) => (
               <div className="admin-hours-day" key={kind}>
                 <div className="admin-hours-head"><strong>{HANDOVER_LABEL[kind]}</strong></div>
@@ -253,7 +253,7 @@ export function EmpresaPerfil() {
           </div>
         </AdminPanel>
 
-        <AdminPanel title="Medios de pago aceptados" icon="wallet" meta="Cada uno, sí o no. Los datos de la cuenta están en Presupuestos → Datos de pago">
+        <AdminPanel title="Medios de pago aceptados" icon="wallet" meta="Cada uno, sí o no. Los datos de la cuenta están en Finanzas → Bancos y cuentas">
           <div className="admin-settings-grid">
             {PAYMENT_METHOD_KEYS.map((key) => (
               <SwitchField
