@@ -13,6 +13,7 @@ type State = { entries: Entry[]; inert: Map<HTMLElement, boolean>; body: string;
 const branches = new WeakMap<Document, Set<{ anchor: HTMLElement; panel: HTMLElement }>>();
 function owned(entry: Entry) { return [...branches.get(entry.panel.ownerDocument) ?? []].filter(branch => entry.panel.contains(branch.anchor) && branch.panel.isConnected).map(branch => branch.panel); }
 function contains(entry: Entry, node: Node | null) { return entry.panel.contains(node) || owned(entry).some(panel => panel.contains(node)); }
+const generations = new WeakMap<Document, number>();
 const documents = new WeakMap<Document, State>();
 const FOCUSABLE = 'a[href],area[href],button,input,select,textarea,summary,[tabindex],[contenteditable="true"]';
 
@@ -66,6 +67,7 @@ function sync(doc: Document, state: State) {
 /** Idempotent cleanup, including out-of-order unmount and React StrictMode replay. */
 export function mountOverlay(panel: HTMLElement, options: OverlayOptions = {}): () => void {
   const doc = panel.ownerDocument;
+  generations.set(doc, (generations.get(doc) ?? 0) + 1);
   let state = documents.get(doc);
   if (!state) {
     state = { entries: [], inert: new Map(), body: doc.body.style.overflow, root: doc.documentElement.style.overflow, stop: () => {} };
@@ -134,11 +136,19 @@ export function mountOverlay(panel: HTMLElement, options: OverlayOptions = {}): 
     if (!state!.entries.length) { state!.stop(); documents.delete(doc); }
     if (!wasTop) return;
     const opener = entry.opener;
-    if (opener && !hidden(opener, state!) && (!next || contains(next, opener))) opener.focus({ preventScroll: true });
+    if (opener && opener !== doc.body && opener !== doc.documentElement && !hidden(opener, state!) && (!next || contains(next, opener))) opener.focus({ preventScroll: true });
     else if (next && !contains(next, doc.activeElement)) focus(next, state!);
     else if (!next) {
-      const fallback = options.fallbackFocus?.();
-      if (fallback && !hidden(fallback, state!)) fallback.focus({ preventScroll: true });
+      const generation = generations.get(doc);
+      // Layout cleanup precedes DOM removal: :has(.overlay) can still hide a
+      // persistent trigger here. Resolve after this commit, never after a reopen.
+      if (options.fallbackFocus) queueMicrotask(() => {
+        if (generations.get(doc) !== generation || documents.get(doc)?.entries.length) return;
+        const active = doc.activeElement as HTMLElement | null;
+        if (active && active !== doc.body && active !== doc.documentElement && active.isConnected && !panel.contains(active)) return;
+        const fallback = options.fallbackFocus?.();
+        if (fallback && fallback !== doc.body && fallback !== doc.documentElement && !hidden(fallback, state!)) fallback.focus({ preventScroll: true });
+      });
     }
   };
 }

@@ -18,12 +18,13 @@ export function overlayDocument() {
     contains(n: any): boolean { return n === this || this.children.some(c => c.contains(n)); }
     matches(selector: string) { if(selector===':disabled')return this.disabled; if(selector==='script,style,link')return ['SCRIPT','STYLE','LINK'].includes(this.tagName); return false; }
     querySelectorAll<T>(_selector: string): T[] { return this.children.flatMap(n => [n,...n.querySelectorAll<Element>(_selector)]) as T[]; }
+    getBoundingClientRect() { return {top:0,left:0,bottom:10,right:10}; }
     getClientRects() { return this.visible && !this.hidden ? [{}] : []; }
     focus() { this.focused++; doc.activeElement = this; for (const listener of listeners.get('focusin')??[]) listener({target:this}); }
     showModal() { this.open=true; }
     close() { this.open=false; }
   }
-  const doc: any = { activeElement: null, defaultView: { HTMLElement: Element, getComputedStyle: (e: Element) => e.style }, addEventListener(name: string, fn: any) { if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name)!.add(fn); }, removeEventListener(name: string, fn: any) { listeners.get(name)?.delete(fn); } };
+  const doc: any = { activeElement: null, defaultView: { innerWidth:390, innerHeight:844, HTMLElement: Element, getComputedStyle: (e: Element) => e.style }, addEventListener(name: string, fn: any) { if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name)!.add(fn); }, removeEventListener(name: string, fn: any) { listeners.get(name)?.delete(fn); } };
   doc.body=new Element('BODY'); doc.documentElement=new Element('HTML');doc.body.style.overflow='auto';doc.documentElement.style.overflow='clip';
   const el=(tag='DIV')=>new Element(tag);
   const opener=el('BUTTON');doc.body.append(opener);doc.activeElement=opener;

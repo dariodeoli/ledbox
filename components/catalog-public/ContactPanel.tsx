@@ -26,8 +26,13 @@ export function ContactPanel({ slug, storeName, getCart, onClose, onSaved }: { s
   useModalBehavior(panel, onClose, { fallbackFocus: () => {
     // Saving replaces the cart drawer, so its opener may have unmounted.
     // Resolve a current, visible trigger within this store (also safe in previews).
-    return [...focusScope.current?.querySelectorAll<HTMLElement>("[data-store-cart-trigger]") ?? []]
-      .find((node) => node.getClientRects().length > 0 && !node.matches(":disabled") && !node.closest('[hidden],[inert],[aria-hidden="true"]')) ?? null;
+    const candidates = [...focusScope.current?.querySelectorAll<HTMLElement>("[data-store-cart-trigger]") ?? []]
+      .filter((node) => node.getClientRects().length > 0 && !node.matches(":disabled") && !node.closest('[hidden],[inert],[aria-hidden="true"]'));
+    return candidates.find((node) => {
+      const box = node.getBoundingClientRect();
+      const viewport = node.ownerDocument.defaultView;
+      return box.bottom > 0 && box.right > 0 && box.top < (viewport?.innerHeight ?? 0) && box.left < (viewport?.innerWidth ?? 0);
+    }) ?? candidates[0] ?? null;
   } });
 
   async function submit(event: FormEvent) {
