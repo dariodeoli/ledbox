@@ -249,3 +249,34 @@ test("clientes: los saldos cuentan también a los archivados (la plata no se arc
   assert.match(source, /withBalance: all\.withBalance, balanceAmount: all\.balanceAmount/);
   assert.match(source, /owing \? allClients/);
 });
+
+test("Eliminados compacta acciones de tabla y conserva texto y click de Restaurar en tarjetas", async () => {
+  const ts = (await import("typescript")).default;
+  const { runInNewContext } = await import("node:vm");
+  const React = await import("react");
+  const text = read("components/admin/modules/EliminadosModule.tsx");
+  const ast = ts.createSourceFile("trash.tsx", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let fn: import("typescript").FunctionDeclaration | undefined;
+  const visit = (node: import("typescript").Node) => { if (ts.isFunctionDeclaration(node) && node.name?.text === "actions") fn = node; ts.forEachChild(node, visit); }; visit(ast); assert(fn);
+  let headers = 0, cells = 0;
+  const countColumns = (node: import("typescript").Node) => {
+    if (ts.isJsxAttribute(node) && node.name.getText(ast) === "columns" && node.initializer && ts.isJsxExpression(node.initializer) && node.initializer.expression && ts.isArrayLiteralExpression(node.initializer.expression)) headers = node.initializer.expression.elements.length;
+    if (ts.isJsxOpeningElement(node) && node.tagName.getText(ast) === "AdminCell") cells++;
+    ts.forEachChild(node, countColumns);
+  }; countColumns(ast); assert.equal(headers, 8); assert.equal(cells, headers, "one shared table with matching header/row columns");
+  const code = ts.transpileModule(fn.getText(ast) + ";actions;", { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText;
+  for (const compact of [false, true]) {
+    const restored: string[] = [];
+    const actions = runInNewContext(code, { React, compact, isTrashEntityType, canOfferAnonymize, busyKey: "", key: (item: TrashItem) => item.id, blockersText: () => "", AdminButton: "canonical-button", setTarget() {}, restore: (item: TrashItem) => restored.push(item.id) });
+    const rendered = actions({ id: "family", type: "InventoryFamily", name: "Familia larga", blockers: [], anonymized: false });
+    const children = React.Children.toArray(rendered.props.children) as import("react").ReactElement<any>[];
+    const restore = children[0]; assert.equal(restore.props.icon, "refresh"); assert.equal(restore.props["aria-label"], "Restaurar Familia larga"); assert.match(restore.props.title, /vuelve a archivados/);
+    assert.equal(restore.props.size, compact ? "md" : "sm"); assert.equal(restore.props.children, compact ? "Restaurar" : null);
+    restore.props.onClick(); assert.deepEqual(restored, ["family"]);
+    assert.equal(children[1].props.children, compact ? "Eliminar" : null);
+  }
+  const css = read("app/globals.css");
+  const rule = css.match(/\.admin-table--eliminados \{([^}]+)\}/)?.[1]; assert(rule);
+  assert.match(rule, /--admin-table-min: 0/); assert.doesNotMatch(rule, /64rem|17\.25rem/);
+  assert.match(rule, /--admin-cols: var\(--trash-cols\)/); assert.match(rule, /minmax\(0,/);
+});
