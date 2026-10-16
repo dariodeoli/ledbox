@@ -3243,6 +3243,8 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   height: 34px; padding: 0 8px; border: 1px solid #c7d3da; border-radius: 8px;
   background: #fff; color: #16232a; font: 600 12px/1 var(--font-body); min-width: 12rem;
 }
+.lbprint-select-wrap [data-oc-select] { min-width: 12rem; }
+.lbprint-select-wrap .oc-select-chevron { color: #16232a; }
 .lbprint-terms { margin: 0 0 6px; white-space: pre-line; }
 .lbprint-terms-title { margin: 6px 0 2px; font-weight: 600; }
 .lbprint-list { margin: 0; padding-left: 18px; }
