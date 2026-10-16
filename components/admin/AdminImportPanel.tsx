@@ -193,6 +193,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
 
   return (
     <AdminDialog
+      contentKey={resultado ? "result" : preview ? "preview" : `source-${camino}`}
       title={`Importar ${modulo.label.toLowerCase()}`}
       icon="upload"
       size="lg"

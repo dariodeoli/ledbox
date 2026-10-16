@@ -85,7 +85,7 @@ test("stock origin HTTP/PG: mixed ownership, no external fake stock, tenant, CAS
       const response = await fetch(`${base}/api/admin/inventory?itemId=${encodeURIComponent(mixedId)}`, { headers: { Cookie: auth.cookie } });
       assert.equal(response.status, 200); const text = await response.text(); assert.match(text, /stockOrigin/); assert.match(text, /ownerSupplierId/);
       const foreignRead = await fetch(`${base}/api/admin/inventory?itemId=${encodeURIComponent(mixedId)}`, { headers: { Cookie: outsider.cookie } });
-      assert.equal(foreignRead.status, 200); assert.deepEqual((await foreignRead.json()).inventory, []);
+      assert.equal(foreignRead.status, 404);
       const foreignAvailability = await fetch(`${base}/api/admin/inventory?inventoryId=${encodeURIComponent(mixedId)}`, { headers: { Cookie: outsider.cookie } });
       assert.equal(foreignAvailability.status, 404);
       assert.equal((await call("/api/admin/inventory", { kind: "unit-update", id: unitId, notes: "other tenant" }, outsider.cookie)).status, 404);

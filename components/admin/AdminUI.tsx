@@ -890,6 +890,7 @@ export function AdminDialog({
   error,
   warning,
   dirty = false,
+  contentKey,
   children,
 }: {
   title: string;
@@ -907,6 +908,8 @@ export function AdminDialog({
   warning?: string | null;
   /** Hay cambios sin guardar: cerrar pide confirmación. */
   dirty?: boolean;
+  /** A workflow step change starts the new body at the top without remounting the overlay. */
+  contentKey?: string;
   children: React.ReactNode;
 }) {
   const sectionRef = useRef<HTMLElement>(null);
@@ -1009,7 +1012,7 @@ export function AdminDialog({
             <AdminIcon name="close" size={15} />
           </button>
         </header>
-        <div className="admin-dialog-body">{children}</div>
+        <div key={contentKey} className="admin-dialog-body">{children}</div>
         {!confirming && (error || warning) ? (
           <div className="admin-dialog-status">
             {error ? (typeof error === "string" ? <AdminNote tone="error">{error}</AdminNote> : error) : <AdminNote tone="warn">{warning}</AdminNote>}
