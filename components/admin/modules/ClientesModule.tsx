@@ -18,13 +18,16 @@ import {
   websiteHref,
   whatsappHref,
 } from "@/lib/admin-format";
-import { canWriteBudgets, canWriteClients, matchesQuery } from "@/lib/admin-policy";
-import { CLIENT_SEGMENTS, matchesKpi, portfolioKpis, type ClientKpiKey, type ClientSegment } from "@/lib/client-portfolio";
+import { canWriteBudgets, canWriteClients } from "@/lib/admin-policy";
+import { CLIENT_SEGMENTS, portfolioKpis, type ClientKpiKey, type ClientSegment } from "@/lib/client-portfolio";
 import { clientDisplayName, clientLegalName } from "@/lib/client-identity";
 import { clientLogoUrl } from "@/lib/admin-types";
 import type { AdminClientRow } from "@/lib/admin-types";
 import type { PreparedIdentityImage } from "@/lib/identity-image";
 import { useTrashFlow } from "../TrashDialogs";
+import { useBulkTrash, BulkTrashControls, BulkRowCheck } from "../TrashBulk";
+import { loadBulkTrashRows } from "@/lib/admin-bulk-trash";
+import { filterClientSelection, clientBulkRow } from "@/lib/admin-crm-selection";
 import { useAdminSession } from "../AdminShell";
 import { AdminAvatar } from "../AdminAvatar";
 import { AdminIcon } from "../AdminIcons";
@@ -215,7 +218,7 @@ export function ClientLinks({ client, name }: { client: Pick<AdminClientRow, "we
 }
 
 export function ClientesModule() {
-  const { role } = useAdminSession();
+  const { role, organization } = useAdminSession();
   // La lista trae las métricas reales de cada cliente (issue #34): deuda
   // vencida, monto contratado y última actividad salen del mismo payload, sin
   // una segunda llamada a finanzas.
@@ -233,7 +236,6 @@ export function ClientesModule() {
   const allClients = clientsResource.data?.list ?? null;
   const activeClients = useMemo(() => (allClients ? allClients.filter((client) => !client.archivedAt) : null), [allClients]);
   const clients = { ...clientsResource, data: activeClients };
-  const archivedClients = useMemo(() => (allClients ?? []).filter((client) => Boolean(client.archivedAt)), [allClients]);
   const truncated = clientsResource.data?.truncated === true;
   const [segment, setSegment] = useState<ClientSegment>("ALL");
   const [kpi, setKpi] = useState<ClientKpiKey | null>(null);
@@ -262,35 +264,16 @@ export function ClientesModule() {
   const trash = useTrashFlow("Client", { onChanged: clientsResource.reload });
 
   const rows = useMemo(() => {
-    // La plata no se archiva: con saldo o deuda vencida también se listan los archivados.
-    const owing = kpi === "BALANCE" || filter === "OVERDUE";
-    const list = (filter === "ARCHIVED" ? archivedClients : owing ? allClients ?? [] : clients.data ?? [])
-      .filter((client) => (segment === "ALL" ? true : client.type === segment))
-      .filter((client) => (kpi ? matchesKpi(client, kpi) : true))
-      .filter((client) => {
-        if (filter === "NO_RESPONSIBLE") return !client.contactName;
-        if (filter === "OVERDUE") return client.metrics.overdue > 0;
-        if (filter === "NO_PURCHASES") return client.metrics.contracts === 0;
-        return true;
-      })
-      .filter((client) =>
-        matchesQuery(query, [
-          client.name,
-          clientDisplayName(client),
-          clientLegalName(client),
-          client.company,
-          client.ruc,
-          client.email,
-          client.phone,
-          client.contactName,
-          client.contactEmail,
-          client.contactPhone,
-          client.billingEmail,
-          client.whatsapp,
-        ]),
-      );
+    const list = filterClientSelection(allClients ?? [], { query, segment, kpi, filter });
     return sortClients(list, order);
-  }, [clients.data, allClients, archivedClients, query, segment, kpi, filter, order]);
+  }, [allClients, query, segment, kpi, filter, order]);
+  const bulk = useBulkTrash({
+    type: "Client", organizationId: organization?.id ?? "", enabled: writable,
+    scopeKey: JSON.stringify({ query, segment, kpi, filter }),
+    visibleRows: rows.map(clientBulkRow),
+    loadAllRows: async () => filterClientSelection(await loadBulkTrashRows<AdminClientRow>("/api/admin/clients", "clients"), { query, segment, kpi, filter }).map(clientBulkRow),
+    onChanged: clientsResource.reload,
+  });
 
   /**
    * Acciones de la fila y de la tarjeta (rediseño): una sola visible —cobrar
@@ -353,6 +336,7 @@ export function ClientesModule() {
       id: client.id,
       title: (
         <>
+          {writable ? <BulkRowCheck bulk={bulk} row={clientBulkRow(client)} /> : null}
           <Link className="admin-row-link" href={`/clientes/${client.id}`} title={`Abrir la ficha de ${name}`}>
             <ClientIdentityView client={client} />
           </Link>
@@ -627,6 +611,7 @@ export function ClientesModule() {
 
       {status ? <AdminNote tone="ok">{status}</AdminNote> : null}
       {trash.note}
+      {writable ? <BulkTrashControls bulk={bulk} /> : null}
       {writable ? trash.dialog : null}
 
       {writable && showForm ? (
@@ -748,6 +733,7 @@ export function ClientesModule() {
                 <AdminRow key={client.id}>
                   <AdminCell title={`${client.name}${client.company ? ` · ${client.company}` : ""}${client.ruc ? ` · RUC ${client.ruc}` : ""}`}>
                     <span className="admin-identity">
+                      {writable ? <BulkRowCheck bulk={bulk} row={clientBulkRow(client)} /> : null}
                       {/* Enlace extendido: toda la fila abre la ficha (teclado y clic
                           derecho incluidos); las acciones quedan por encima. */}
                       <Link className="admin-row-link" href={`/clientes/${client.id}`} title={`Abrir la ficha de ${name}`}>
