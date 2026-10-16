@@ -17,10 +17,7 @@ export function CartDrawer({ items, onChange, onQuote }: { items: CartItem[]; on
 
   useEffect(() => {
     if (!open || !panelRef.current) return;
-    const releaseFocus = mountCartDialogFocus(panelRef.current, triggerRef.current);
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); setOpen(false); } };
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); releaseFocus(); };
+    return mountCartDialogFocus(panelRef.current, triggerRef.current, () => setOpen(false));
   }, [open]);
 
   const update = (id: string, patch: Partial<CartItem>) => onChange(items.map(item => item.product.id === id ? { ...item, ...patch } : item));

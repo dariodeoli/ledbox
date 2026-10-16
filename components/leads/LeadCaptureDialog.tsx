@@ -2,6 +2,7 @@
 import { Input as SharedInput, Textarea as SharedTextarea, Select as SharedSelect } from "owncoding-ui";
 
 import Link from "next/link";
+import { useModalBehavior } from "@/components/overlays/useModalBehavior";
 import { PhonePartsField } from "@/components/fields/PhonePartsField";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { EmailField as LibEmailField, RucField as LibRucField, soloDigitos } from "owncoding-ui";
@@ -50,7 +51,8 @@ export function LeadCaptureDialog({ open, items, onClose }: { open: boolean; ite
   const [ruc, setRuc] = useState("");
   const [reason, setReason] = useState("Alquiler de equipos");
   const [message, setMessage] = useState("");
-  useEffect(() => { if (!open) return; closeRef.current?.focus(); const onKey=(e:KeyboardEvent)=>e.key === "Escape"&&onClose(); document.addEventListener("keydown", onKey); return ()=>document.removeEventListener("keydown", onKey); }, [open,onClose]);
+  const panelRef = useRef<HTMLElement>(null);
+  useModalBehavior(panelRef, onClose, { enabled: open, initialFocus: closeRef });
   useEffect(() => { if (open) { setSent(false); setSubmitting(false); setError(""); } }, [open]);
   if (!open) return null;
   const telefono = `${countryCode} ${soloDigitos(phone)}`.trim();
@@ -76,7 +78,7 @@ export function LeadCaptureDialog({ open, items, onClose }: { open: boolean; ite
     window.open(whatsappUrl(text), "_blank", "noopener,noreferrer");
   };
   return <div className="lead-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="lead-dialog" role="dialog" aria-modal="true" aria-labelledby="lead-title">
+    <section ref={panelRef} tabIndex={-1} className="lead-dialog" role="dialog" aria-modal="true" aria-labelledby="lead-title">
       <button ref={closeRef} className="dialog-close" type="button" aria-label="Cerrar formulario" onClick={onClose}>×</button>
       {!sent ? <><div className="sec-kicker">Antes de cotizar</div><h2 id="lead-title">Contanos de tu evento<span className="led">.</span></h2><p>Con estos datos te respondemos más rápido. Son pocos campos y no te comprometen a contratar.</p>
         <form onSubmit={submit} aria-busy={submitting}><div className="f-row">
