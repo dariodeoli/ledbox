@@ -15,7 +15,7 @@ test("planes HTTP/PG local: solicitud concurrente única, tenant, demo y cola pr
   const suffix = randomUUID(), A = `plans-A-${suffix}`, B = `plans-B-${suffix}`, D = `plans-demo-${suffix}`;
   const p1 = `plans-one-${suffix}`, p2 = `plans-two-${suffix}`, p3 = `plans-three-${suffix}`;
   const users: string[] = [], sessions: string[] = [];
-  const call = (path: string, cookie = "", body?: unknown) => fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", redirect: "manual", headers: { Cookie: cookie, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined });
+  const call = (path: string, cookie = "", body?: unknown, demoHost = false) => fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", redirect: "manual", headers: { Cookie: demoHost ? cookie.replace(/^ledbox_session=/, "ledbox_demo=") : cookie, ...(demoHost ? { "X-Forwarded-Host": "demo.localhost:3160" } : {}), ...(body !== undefined ? { "Content-Type": "application/json" } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined });
   async function account(role: "OWNER" | "VIEWER", org: string) {
     const u = await db.adminUser.create({ data: { id: randomUUID(), name: `Plans QA ${role}`, email: `${randomUUID()}@example.invalid`, passwordHash: "not-a-login", role, autoLockEnabled: false } }); users.push(u.id);
     await db.adminMembership.create({ data: { id: randomUUID(), adminUserId: u.id, organizationId: org, role } });
@@ -23,7 +23,7 @@ test("planes HTTP/PG local: solicitud concurrente única, tenant, demo y cola pr
   }
   try {
     await db.plan.createMany({ data: [{ id: p1, code: p1, name: "QA inicial", priceMonthly: 1 }, { id: p2, code: p2, name: "QA superior", priceMonthly: 2 }, { id: p3, code: p3, name: "QA otro superior", priceMonthly: 3 }] });
-    await db.organization.createMany({ data: [{ id: A, slug: A, name: `Plans A ${suffix}`, planId: p1 }, { id: B, slug: B, name: `Plans B ${suffix}`, planId: p1 }, { id: D, slug: D, name: "Sandbox planes", isDemo: true, planId: p1 }] });
+    await db.organization.createMany({ data: [{ id: A, slug: A, name: `Plans A ${suffix}`, planId: p1 }, { id: B, slug: B, name: `Plans B ${suffix}`, planId: p1 }, { id: D, slug: D, name: "Sandbox planes", isDemo: true, demoParentId: A, demoReady: true, demoExpiresAt: new Date(Date.now() + 3600000), demoLastSeenAt: new Date(), planId: p1 }] });
     const ownerA = await account("OWNER", A), ownerB = await account("OWNER", B), viewer = await account("VIEWER", A), demo = await account("OWNER", D);
     const endpoint = "/api/admin/plan/requests";
     await t.test("doce solicitudes simultáneas crean sólo una pending sin conceder plan", async () => {
@@ -38,7 +38,8 @@ test("planes HTTP/PG local: solicitud concurrente única, tenant, demo y cola pr
     });
     await t.test("permisos, JSON, plan actual y demo no alteran pendientes", async () => {
       assert.equal((await call(endpoint, viewer, { planId: p2 })).status, 403);
-      assert.equal((await call(endpoint, demo, { planId: p2 })).status, 403);
+      assert.equal((await call(endpoint, demo, { planId: p2 })).status, 401, "demo aislada fuera de su host");
+      assert.equal((await call(endpoint, demo, { planId: p2 }, true)).status, 403, "demo en su host no solicita planes");
       assert.equal((await call(endpoint, "", { planId: p2 })).status, 401);
       assert.equal((await call(endpoint, ownerA, null)).status, 400);
       assert.equal((await call(endpoint, ownerA, { planId: p1 })).status, 409);

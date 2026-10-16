@@ -20,7 +20,7 @@ test("slug HTTP/PG local: alias duradero, carreras, token, logo, default y names
   const userIds: string[] = [], sessions: string[] = [];
   const envDefault = process.env.DEFAULT_ORGANIZATION_SLUG;
   const endpoint = "/api/admin/organization/branding";
-  const req = (cookie: string, body: unknown) => fetch(`${base}${endpoint}`, { method: "PATCH", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const req = (cookie: string, body: unknown, demoHost = false) => fetch(`${base}${endpoint}`, { method: "PATCH", headers: { Cookie: demoHost ? cookie.replace(/^ledbox_session=/, "ledbox_demo=") : cookie, "Content-Type": "application/json", ...(demoHost ? { "X-Forwarded-Host": "demo.localhost:3160" } : {}) }, body: JSON.stringify(body) });
   async function cookie(org: string, role: "OWNER" | "VIEWER" = "OWNER") {
     const user = await db.adminUser.create({ data: { id: randomUUID(), name: "Slug QA", email: `${randomUUID()}@example.invalid`, role, passwordHash: "not-a-login", autoLockEnabled: false } }); userIds.push(user.id);
     await db.adminMembership.create({ data: { id: randomUUID(), adminUserId: user.id, organizationId: org, role } });
@@ -28,7 +28,7 @@ test("slug HTTP/PG local: alias duradero, carreras, token, logo, default y names
   }
   try {
     await db.plan.create({ data: { id: planId, code: planId, name: "Slug QA", priceMonthly: 0 } });
-    await db.organization.createMany({ data: [{ id: A, name: "Slug A", slug: old, planId }, { id: B, name: "Slug B", slug: other, planId }, { id: D, name: "Slug Demo", slug: `slug-demo-${run}`, isDemo: true, planId }] });
+    await db.organization.createMany({ data: [{ id: A, name: "Slug A", slug: old, planId }, { id: B, name: "Slug B", slug: other, planId }, { id: D, name: "Slug Demo", slug: `slug-demo-${run}`, isDemo: true, demoParentId: A, demoReady: true, demoExpiresAt: new Date(Date.now() + 3600000), demoLastSeenAt: new Date(), planId }] });
     await db.organizationRentalSettings.create({ data: { id: randomUUID(), organizationId: A, publicCatalogEnabled: true, publicShowPrices: true } });
     const a = await cookie(A), b = await cookie(B), viewer = await cookie(A, "VIEWER"), demo = await cookie(D);
     const client = await db.client.create({ data: { id: randomUUID(), organizationId: A, name: "Cliente ficticio" } });
@@ -38,7 +38,8 @@ test("slug HTTP/PG local: alias duradero, carreras, token, logo, default y names
     await db.organizationLogo.create({ data: { id: randomUUID(), organizationId: A, variant: "light", mime: "image/webp", size: bytes.length, data: bytes } });
     await t.test("rename preserva ID, guarda alias y CAS; JSON/roles/demo no mutan", async () => {
       assert.equal((await req(viewer, { slug: first, expectedSlug: old })).status, 403);
-      assert.equal((await req(demo, { slug: `demo-new-${run}`, expectedSlug: `slug-demo-${run}` })).status, 403);
+      assert.equal((await req(demo, { slug: `demo-new-${run}`, expectedSlug: `slug-demo-${run}` })).status, 401, "la sesión demo no vale en el host real");
+      assert.equal((await req(demo, { slug: `demo-new-${run}`, expectedSlug: `slug-demo-${run}` }, true)).status, 403, "en su host la demo sigue sin poder cambiar identidad");
       assert.equal((await req(a, null)).status, 400);
       assert.equal((await req(a, { slug: first })).status, 409);
       assert.equal((await req(a, { slug: first, expectedSlug: old, organizationId: B })).status, 200);
