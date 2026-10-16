@@ -1,15 +1,22 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { adminSend } from "../lib/admin-api";
 import { inventoryModuleSource } from "./fixtures/inventory-module-source";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
-test("eventos: el 409 de cierre trae código y la UI ofrece «Cerrar igual» con nota obligatoria, solo con permiso de escritura", () => {
+test("eventos: el 409 de cierre trae código y la UI ofrece «Cerrar igual» con nota obligatoria, solo con permiso de escritura", async () => {
   const api = read("app/api/admin/events/route.ts");
   assert.match(api, /409, "closure_blocked"/);
-  const adminApi = read("lib/admin-api.ts");
-  assert.match(adminApi, /return code \? \{ ok: false, error: message, code \}/);
+  const originalFetch = globalThis.fetch, originalWindow = globalThis.window;
+  Object.assign(globalThis, { window: { setTimeout, clearTimeout } });
+  globalThis.fetch = (async () => Response.json({ error: "Faltan devoluciones", code: "closure_blocked" }, { status: 409 })) as typeof fetch;
+  try {
+    const result = await adminSend("/api/admin/events/qa143-close", { kind: "close" });
+    assert.equal(result.ok, false);
+    if (!result.ok) { assert.equal(result.code, "closure_blocked"); assert.equal(result.error, "Faltan devoluciones"); assert.equal(result.uncertain, false, "el rechazo409 es conocido; no es un intento incierto"); }
+  } finally { globalThis.fetch = originalFetch; Object.assign(globalThis, { window: originalWindow }); }
   const ui = read("components/admin/modules/EventosModule.tsx");
   assert.match(ui, /result\.code === "closure_blocked"/);
   assert.match(ui, /Cerrar igual/);
