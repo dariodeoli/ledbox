@@ -19,10 +19,10 @@ export function InventoryCountPanel({ id, registered, writable, onChanged }: { i
     onChanged();
   }
   return <div className="admin-stack">
-    <AdminNote tone="warn">Pendiente conteo. Hay {registered} unidades registradas; el total todavía es desconocido. No se promete disponibilidad hasta confirmar el total. Una compra o una unidad nueva no confirma el total.</AdminNote>
+    <AdminNote tone="warn">Pendiente conteo. Hay {registered} unidades registradas; el total todavía es desconocido. No se promete disponibilidad hasta confirmar el total. Una compra o una unidad nueva no confirma el total. Confirmar un total es una declaración manual; no ejecuta ni acredita un conteo físico.</AdminNote>
     {writable ? <>
-      <NumberField label="Total contado" value={total} onChange={setTotal} strictInteger maxLength={6} size="sm" disabled={busy} error={error || undefined} hint="Confirmar agrega las unidades que falten. No elimina unidades ni modifica reservas, estados o precios." />
-      <AdminButton onClick={() => void confirmCount()} disabled={busy || !total.trim()}>{busy ? "Confirmando…" : "Confirmar conteo"}</AdminButton>
+      <NumberField label="Total declarado" value={total} onChange={setTotal} strictInteger maxLength={6} size="sm" disabled={busy} error={error || undefined} hint="Confirmar agrega las unidades que falten. No elimina unidades ni modifica reservas, estados o precios." />
+      <AdminButton onClick={() => void confirmCount()} disabled={busy || !total.trim()}>{busy ? "Confirmando…" : "Confirmar total"}</AdminButton>
     </> : null}
   </div>;
 }

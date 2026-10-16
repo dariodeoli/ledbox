@@ -180,6 +180,8 @@ Tres campos enteros ≥ 0 por producto: `en_mantenimiento`, `danadas` y `perdida
 
 Cambio #245: **cantidad null/ausente en un producto nuevo queda Pendiente conteo y no crea unidades; cantidad0 es cero confirmado**. En productos existentes, null conserva el conteo y las unidades.
 
+En la ficha, **Confirmar total** es una declaración manual del operador: registra el total indicado y crea solo las unidades faltantes. No inicia un conteo físico E4 ni acredita escaneo, recorrido del depósito o verificación material. `CONFIRMED` significa que el total fue declarado para disponibilidad; no certifica que se haya contado físicamente.
+
 No confundir «capacidad 8 personas», «incluye 8 sillas» y «stock de 8 juegos». No poner 1, 0 ni un número grande para rellenar stock desconocido.
 
 Comportamiento v2.1.121: cantidad null creaba 1 unidad por defecto (en La Vajilla, 304 productos; el panel mostró 1833 unidades que no acreditan existencias reales). Las unidades históricas se conservan hasta revisión explícita; la migración #245 no las borra ni las reclasifica. Las altas nuevas ya no fabrican esa unidad por defecto.
