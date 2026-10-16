@@ -800,3 +800,7 @@ Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 - La selección completa recorre páginas verificadas, sin quedarse sólo con los primeros resultados. Cambiar de empresa descarta la selección; los permisos se comprueban también en el servidor.
 - Fecha del evento, días e invitados quedan alineados en la tienda y la preorden, también en celular, con los campos compactos y los atajos de fecha conservados.
 - La papelera explica que el plazo configura la elegibilidad para el vaciado al abrir Eliminados; no promete una hora exacta de borrado.
+# 2.1.144
+
+- Inventario: separar el depósito de catálogo de la ubicación física de stock en filtros y edición masiva, con etiquetas claras en las opciones.
+
