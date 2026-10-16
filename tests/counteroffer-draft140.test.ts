@@ -83,3 +83,25 @@ test("TOTAL snapshots, manual prices and EVENT keep canonical rental days, exclu
   assert.ok(resolved.ok); if (resolved.ok) assert.equal(resolved.value[0].days, 1);
   for (const bad of ["-2", "1.5", "1e3", "", "9007199254740993", "1000"]) assert.equal(resolveCounterofferDraft(items, { a: { quantity: bad, days: "3" } }).ok, false, bad);
 });
+
+test("actual GET request projection supplies snapshot/billing to validate a legitimate TOTAL exclusion", () => {
+  const text = readFileSync("app/api/admin/budgets/route.ts", "utf8");
+  const route = ts.createSourceFile("route.ts", text, ts.ScriptTarget.Latest, true);
+  const query = nodes(route, node => ts.isCallExpression(node) && node.expression.getText(route) === "db.budgetChangeRequest.findMany")[0] as ts.CallExpression;
+  const options = evaluate(`(${query.arguments[0].getText(route)})`, { organizationId: "tenant", CLIENT_IDENTITY_SELECT: {} });
+  assert.equal(options.where.organizationId, "tenant");
+  const select = options.include.budget.select.items.select;
+  const snapshot = snapshotFromProduct({ basePrice: 100_000, tiers: [{ fromDays: 3, mode: "TOTAL", price: 250_000 }] }, "RETAIL", 3);
+  const stored = { ...items[0], days: 1, unitPrice: 250_000, pricingSnapshot: snapshot, inventory: { billingUnit: "DAILY", costPrice: 999 }, costPrice: 999 };
+  function project(row: Record<string, any>, fields: Record<string, any>): Record<string, any> {
+    return Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, value === true ? row[key] : row[key] == null ? row[key] : project(row[key], value.select)]));
+  }
+  const dto = project(stored, select) as typeof stored;
+  assert.ok(dto.pricingSnapshot); assert.deepEqual(dto.inventory, { billingUnit: "DAILY" }); assert.equal(dto.costPrice, undefined);
+  const removed = counterofferDraftExclusion(dto, { quantity: "5", days: "4" }, true);
+  assert.equal(resolveCounterofferDraft([dto, items[1]], { a: removed }).ok, true);
+  const incomplete = { ...dto, pricingSnapshot: undefined };
+  assert.equal(resolveCounterofferDraft([incomplete, items[1]], { a: removed }).ok, false, "old DTO loses the rental days and blocks this legitimate exclusion");
+  const event = project({ ...stored, days: 1, pricingSnapshot: null, inventory: { billingUnit: "EVENT" } }, select) as typeof stored;
+  assert.equal(counterofferDraftSubtotal([event], { a: { quantity: "2", days: "9" } }), 500_000);
+});
