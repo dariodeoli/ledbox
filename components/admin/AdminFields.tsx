@@ -902,8 +902,10 @@ function DateShortcuts({ kind, value, min, max, disabled, label, onChange }: {
   kind: DateShortcutKind; value: string; min?: string; max?: string; disabled?: boolean;
   label: string; onChange: (value: string) => void;
 }) {
-  return <div className="admin-date-shortcuts" role="group" aria-label={`Fechas rápidas para ${label.toLowerCase()}`}>
-    {dateShortcuts({ kind, value, min, max }).map(choice => {
+  const [clock, setClock] = useState(() => new Date());
+  const refresh = () => setClock(new Date());
+  return <div className="admin-date-shortcuts" role="group" aria-label={`Fechas rápidas para ${label.toLowerCase()}`} onFocusCapture={refresh} onPointerEnter={refresh} onPointerDownCapture={refresh} onKeyDownCapture={refresh}>
+    {dateShortcuts({ kind, value, min, max, now: clock }).map(choice => {
       const detail = `${choice.label}, ${choice.dateLabel}${kind === "datetime-local" ? ` a las ${choice.value.split("T")[1]}` : ""}`;
       return <button key={choice.offset} type="button" disabled={disabled || !choice.allowed} aria-label={detail} title={choice.allowed ? detail : `${detail} · Fuera del rango permitido`} aria-pressed={value === choice.value} onClick={() => {
         // Recheck civil day and bounds at activation, including a page left open across midnight.

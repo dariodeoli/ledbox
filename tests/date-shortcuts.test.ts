@@ -35,6 +35,7 @@ function actual(name: string, extras: Record<string, unknown> = {}) {
   const declaration = file.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === name); assert.ok(declaration);
   return runInNewContext(ts.transpileModule(declaration.getText(file).replace(/^export /, "") + `\n${name};`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText, {
     React: { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) },
+    useState: (value: any) => [typeof value === "function" ? value() : value, () => {}],
     dateShortcuts: (props: Parameters<typeof dateShortcuts>[0]) => dateShortcuts({ ...props, now }), ...extras,
   });
 }
@@ -85,4 +86,12 @@ test("activación revalida día civil y límites si se cruza medianoche con la p
   const bounded = render({ ...props, max: "2026-10-14" });
   clock = new Date("2026-10-15T03:01:00Z");
   all(bounded).find(n => n.type === "button")!.props.onClick(); assert.equal(changes.length, 1, "un atajo mostrado válido no salta un max que ya no cumple");
+});
+test("volver a enfocar/usar atajos refresca el reloj sin cambiar la fecha del formulario", () => {
+  let refreshes = 0;
+  const changes: string[] = [];
+  const render = actual("DateShortcuts", { useState: () => [now, () => { refreshes++; }] });
+  const tree = render({ kind: "date", value: "", label: "Evento", onChange: (value: string) => changes.push(value) });
+  for (const action of ["onFocusCapture", "onPointerEnter", "onPointerDownCapture", "onKeyDownCapture"]) tree.props[action]();
+  assert.equal(refreshes, 4); assert.equal(changes.length, 0);
 });
