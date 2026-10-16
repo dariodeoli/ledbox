@@ -59,4 +59,7 @@ test("libreta independiente: eventos sólo leen defaults, formulario guarda por 
   assert.match(ui, /Guardar recinto en la libreta/); assert.match(ui, /canWriteOperations\(role\)/);
   const api = readFileSync("app/api/admin/venues/route.ts", "utf8"); assert.match(api, /requireAdminContext\("events.write"\)/); assert.match(api, /saveEventVenue\(auth.context.organizationId, body\)/);
   const migration = readFileSync("prisma/migrations/202611040001_event_venue_directory/migration.sql", "utf8"); assert.doesNotMatch(migration, /UPDATE "Event"|ALTER TABLE "Event"|REFERENCES "Event"/); assert.match(migration, /WHERE e."deletedAt" IS NULL/); assert.match(migration, /"needsReview"/); assert.match(migration, /ON CONFLICT.*DO NOTHING/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS "EventVenue"/);
+  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS/);
+  assert.match(migration, /CREATE INDEX IF NOT EXISTS/);
 });

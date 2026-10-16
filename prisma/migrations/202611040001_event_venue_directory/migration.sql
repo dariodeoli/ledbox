@@ -1,5 +1,5 @@
 -- Aditiva: la libreta no depende de la vida del evento y no modifica sus snapshots.
-CREATE TABLE "EventVenue" (
+CREATE TABLE IF NOT EXISTS "EventVenue" (
   "id" TEXT NOT NULL,
   "organizationId" TEXT NOT NULL,
   "key" TEXT NOT NULL,
@@ -19,8 +19,8 @@ CREATE TABLE "EventVenue" (
   CONSTRAINT "EventVenue_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "EventVenue_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
-CREATE UNIQUE INDEX "EventVenue_organizationId_key_key" ON "EventVenue"("organizationId", "key");
-CREATE INDEX "EventVenue_organizationId_location_idx" ON "EventVenue"("organizationId", "location");
+CREATE UNIQUE INDEX IF NOT EXISTS "EventVenue_organizationId_key_key" ON "EventVenue"("organizationId", "key");
+CREATE INDEX IF NOT EXISTS "EventVenue_organizationId_location_idx" ON "EventVenue"("organizationId", "location");
 -- Misma clase Unicode de espacios que JS /\s/; conserva tildes, sólo colapsa espacios/mayúsculas.
 -- Una ficha completa de la última edición viva, sin combinar contactos de eventos distintos.
 WITH source AS (

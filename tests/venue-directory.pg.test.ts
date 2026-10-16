@@ -72,8 +72,14 @@ test("libreta durable HTTP/PG local: defaults explícitos, CAS, snapshots, roles
       const backfill = migration.slice(migration.indexOf("WITH source AS")).replace('WHERE e."deletedAt" IS NULL', 'WHERE e."organizationId" = $1 AND e."deletedAt" IS NULL');
       await db.$executeRawUnsafe(backfill, L);
       const saved = (await all(l))[0]; assert.equal(saved.location, "Salón Patrimonio"); assert.equal(saved.venueContactName, "Ana"); assert.equal(saved.address, "Dirección de Ana"); assert.equal(saved.city, "Ciudad histórica"); assert.equal(saved.needsReview, true);
-      await db.event.deleteMany({ where: { organizationId: L } }); assert.equal((await all(l)).length, 1);
-      const confirm = await call("/api/admin/venues", l, { id: saved.id, expectedRevision: saved.revision, addressReference: "Revisado" }); assert.equal(confirm.status, 200); assert.equal((await confirm.json()).venue.needsReview, false);
+      const confirm = await call("/api/admin/venues", l, { id: saved.id, expectedRevision: saved.revision, addressReference: "Revisado" }); assert.equal(confirm.status, 200); const confirmed = (await confirm.json()).venue; assert.equal(confirmed.needsReview, false);
+      // Segunda ejecución de DDL y backfill: no cambia defaults ya revisados, revisión ni ID.
+      const ddl = migration.slice(0, migration.indexOf("WITH source AS")).split(";").filter(statement => /CREATE\s+(?:UNIQUE\s+)?(?:TABLE|INDEX)/.test(statement));
+      for (const statement of ddl) await db.$executeRawUnsafe(statement);
+      await db.$executeRawUnsafe(backfill, L);
+      const afterReplay = (await all(l))[0]; assert.deepEqual(afterReplay, confirmed);
+      await db.event.deleteMany({ where: { organizationId: L } }); assert.deepEqual((await all(l))[0], confirmed);
+
     });
   } finally {
     await db.adminSession.deleteMany({ where: { id: { in: sessions } } });
