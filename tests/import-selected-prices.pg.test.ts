@@ -112,6 +112,13 @@ test("selective prices: signed preview CAS, atomic receipts, tenant, replay, pre
         const svp = await inspect(sameVariant); assert.ok(!svp.filas[0].detalle.includes("pasa a precio propio"));
         const svr = await (await applySelectedPrices(ctx, sameVariant, svp.confirmationToken, randomUUID(), request)).json(); assert.equal(svr.filasPrecio[0].estado, "conservada");
         assert.equal((await db.inventoryItem.findUniqueOrThrow({ where: { id: variants[1].id } })).variantOwnPrice, false);
+        const legacyIntent = { productos: [{ codigo: "V2", cambios: { listPrice: { op: "REPLACE", value: 1600 } } }] };
+        const legacyPreview = await inspect(legacyIntent), legacyPayload = decodeJwt(legacyPreview.confirmationToken);
+        const expectedWithoutFamily = (legacyPayload.expected as any[]).map(({ familyId: _familyId, ...expectation }) => expectation);
+        const legacyToken = await new SignJWT({ ...legacyPayload, expected: expectedWithoutFamily }).setProtectedHeader({ alg: "HS256" }).sign(new TextEncoder().encode(process.env.JWT_SECRET || process.env.AUTH_SECRET!));
+        const legacyResult = await (await applySelectedPrices(ctx, legacyIntent, legacyToken, randomUUID(), request)).json();
+        assert.equal(legacyResult.filasPrecio[0].estado, "conflicto", "old signed previews cannot omit the family-first contract");
+        assert.equal((await db.inventoryItem.findUniqueOrThrow({ where: { id: variants[1].id } })).listPrice, 1000);
         const bad = { productos: [{ codigo: "MISSING", cambios: { listPrice: { op: "CLEAR" } } }, { codigo: "A", cambios: { cantidad: { op: "CLEAR" } } }] };
         const bp = await inspect(bad);
         const br = await (await applySelectedPrices(ctx, bad, bp.confirmationToken, randomUUID(), request)).json();

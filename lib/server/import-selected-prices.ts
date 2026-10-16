@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { db } from "./db";
 import { withIdempotency, requestHashOf } from "./idempotency";
 import { lockInventoryItems } from "./inventory-availability";
-import { markOwnPrice } from "./inventory-families";
+import { markOwnPrice, lockInventoryFamily } from "./inventory-families";
 import { replaceAudienceTiers } from "./price-tier-store";
 import { recordAudit, type AuditContext } from "./audit";
 import { readSelectedPrices, selectedPriceValue, type SelectedPriceRow, type SelectedPriceResult, type SelectedPriceField } from "../import-selected-prices";
@@ -13,11 +13,7 @@ const ROW_SCOPE = "import:selected-prices:row:v1";
 const ISSUER = "ledbox:import-price-preview";
 const AUDIENCE = "ledbox:import-price-apply";
 const selection = { id: true, sku: true, name: true, archivedAt: true, familyId: true, variantOwnPrice: true, listPrice: true, wholesalePrice: true, minimumPrice: true, comboIncomplete: true, _count: { select: { components: true } } } as const;
-type Expectation = {
-    fila: number;
-    id: string;
-    fingerprint: string;
-};
+type Expectation = { fila: number; id: string; familyId: string | null; fingerprint: string; };
 type Manifest = {
     lote: string;
     hash: string;
@@ -64,7 +60,7 @@ export async function previewSelectedPrices(context: AuditContext, raw: unknown)
         if (!row.errores.length && !current)
             errors.push("El código no existe activo en esta empresa; este modo no crea productos.");
         if (current)
-            expected.push({ fila: row.fila, id: current.item.id, fingerprint: current.fingerprint });
+            expected.push({ fila: row.fila, id: current.item.id, familyId: current.item.familyId, fingerprint: current.fingerprint });
         filas.push({ fila: row.fila, codigo: row.codigo, nombre: current?.item.name ?? row.codigo, accion: errors.length ? "omitir" : "actualizar", detalle: errors.join(" ") || (current?.item.familyId && !current.item.variantOwnPrice && differences(row, current.values).some(c => requestHashOf({ value: c.antes }) !== requestHashOf({ value: c.despues })) ? "Sólo precios; la variante pasa a precio propio." : "Sólo los precios elegidos; el resto se conserva."), cambios: current ? differences(row, current.values) : [], errores: errors });
     }
     const hash = requestHashOf({ catalogo: raw });
@@ -122,6 +118,12 @@ export async function applySelectedPrices(context: AuditContext, raw: unknown, t
             const result = (estado: SelectedPriceResult["estado"], mensaje: string, cambios?: SelectedPriceResult["cambios"]) => ({ status: 200, body: { fila: row.fila, codigo: row.codigo, estado, mensaje, ...(cambios ? { cambios } : {}) } });
             if (!expectation)
                 return result("invalida", "El código no estaba disponible en la vista previa; no se crea ni se modifica.");
+            // Family must precede item, matching all canonical family writers.
+            // A preview from before this contract cannot bypass the family lock.
+            if (!Object.hasOwn(expectation, "familyId") || expectation.familyId !== null && typeof expectation.familyId !== "string")
+                return result("conflicto", "Volvé a generar la vista previa para revisar la familia actual.");
+            if (expectation.familyId && !await lockInventoryFamily(tx, context.organizationId, expectation.familyId))
+                return result("conflicto", "La familia cambió o fue eliminada; no se modificaron precios.");
             await lockInventoryItems(tx, context.organizationId, [expectation.id]);
             const current = await snapshot(tx as unknown as typeof db, context.organizationId, row, expectation.id);
             if (!current || current.fingerprint !== expectation.fingerprint)
