@@ -14,9 +14,8 @@ function source(path: string, mocks: Record<string, unknown>, globals = {}) {
   return exports;
 }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
-function harness(perform = async (_type: any, row: any) => ({ row, status: "success", message: "ok" })) {
+function harness(perform = async (_type: any, row: any) => ({ row, status: "success", message: "ok" }), store = new Map<string, string>()) {
   let at = 0; const values: any[] = [], dependencies: any[] = [], cleanups: any[] = [], effects: (() => void)[] = [];
-  const store = new Map<string, string>();
   const react = { ...React,
     useState(initial: any) { const i = at++; if (!(i in values)) values[i] = typeof initial === "function" ? initial() : initial; return [values[i], (next: any) => { values[i] = typeof next === "function" ? next(values[i]) : next; }]; },
     useRef(initial: any) { const i = at++; return values[i] ??= { current: initial }; },
@@ -67,4 +66,29 @@ test("real loader materializes over 600 rows and fails closed for missing, dupli
     if (mode === "ok") assert.equal((await mod.loadBulkTrashRows("/api/admin/clients", "clients")).length, 605);
     else await assert.rejects(mod.loadBulkTrashRows("/api/admin/clients", "clients"));
   }
+});
+
+
+test("reporte de dos éxitos permanece al recargar el recurso y se recupera tras remount sin repetir acciones", async () => {
+  let calls = 0, refreshed = 0;
+  const h = harness(async (_type, selected) => { calls++; return { row: selected, status: "success", message: "Archivado" }; });
+  h.render({ onChanged() {
+    refreshed++;
+    // La recarga de useAdminResource vuelve a renderizar; no borra el reporte del hook.
+    assert.equal(h.render({ visibleRows: [] }).report.length, 2);
+  } }).selectVisible();
+  h.render().setAction("archive");
+  await h.render().apply();
+  let bulk = h.render();
+  assert.equal(calls, 2); assert.equal(refreshed, 1); assert.equal(bulk.count, 0); assert.equal(bulk.action, null);
+  assert.equal(bulk.report.length, 2); assert.ok(bulk.report.every((row: rules.BulkTrashOutcome) => row.status === "success"));
+  h.unmount();
+  const reopened = harness(async () => { calls++; throw new Error("No debe reenviar al recuperar el reporte"); }, h.store);
+  bulk = reopened.render();
+  assert.equal(bulk.report.length, 2); assert.deepEqual([...bulk.report.map((result: rules.BulkTrashOutcome) => result.row.id)], ["1", "2"]);
+  assert.equal(bulk.count, 0); assert.equal(bulk.action, null); assert.equal(calls, 2);
+  reopened.render({ organizationId: "b" });
+  assert.equal(reopened.render().report.length, 0);
+  reopened.render({ organizationId: "a" });
+  assert.equal(reopened.render().report.length, 2); assert.equal(calls, 2);
 });
