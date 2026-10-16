@@ -8,7 +8,7 @@ import { adminSend } from "@/lib/admin-api";
 import type { AdminInventoryItemRow, AdminInventoryUnitRow } from "@/lib/admin-types";
 import { INVENTORY_FIELD_HELP } from "@/lib/inventory-bulk";
 import { AdminButton, AdminCell, AdminDisclosure, AdminNote, AdminRow, AdminTable } from "../AdminUI";
-import { DayField, MoneyField, NumberField, SelectField, TextField } from "../AdminFields";
+import { CheckboxField, DayField, MoneyField, NumberField, SelectField, TextField } from "../AdminFields";
 
 /**
  * Bloques de la ficha del producto que salen del rediseño E1: «Datos» (categoría, subcategoría,
@@ -144,10 +144,32 @@ export function WarehouseStockSection({
   const groups = useMemo(() => stockByWarehouse(item.units, taxonomy.warehouses), [item.units, taxonomy.warehouses]);
   const active = taxonomy.warehouses.filter((warehouse) => !warehouse.archivedAt);
   const [move, setMove] = useState({ from: "", to: "", quantity: "1", location: "" });
+  const [relocate, setRelocate] = useState({ warehouseId: "", location: "", unitIds: [] as string[] });
   const [purchase, setPurchase] = useState({ quantity: "1", unitCost: "", supplierId: item.supplierId ?? "", purchasedAt: "", warrantyUntil: "", warehouseId: "", location: "", conditionScore: "" });
   const [busy, setBusy] = useState<"move" | "purchase" | "">("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  const relocateUnits = item.units.filter((unit) => unit.status === "AVAILABLE" && unit.warehouseId === relocate.warehouseId);
+
+  async function submitRelocate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    setError("");
+    setNotice("");
+    if (!relocate.warehouseId) return setError("Elegí el depósito de las unidades.");
+    if (relocate.unitIds.length === 0) return setError("Seleccioná al menos una unidad disponible.");
+    setBusy("move");
+    const result = await adminSend<{ moved: number }>("/api/admin/inventory/warehouses", {
+      kind: "relocate-units", inventoryId: item.id, warehouseId: relocate.warehouseId,
+      unitIds: relocate.unitIds, location: relocate.location,
+    });
+    setBusy("");
+    if (!result.ok) return setError(result.error);
+    setNotice(`Se cambió la ubicación de ${formatNumber(result.data.moved)} unidad${result.data.moved === 1 ? "" : "es"} en el mismo depósito.`);
+    setRelocate({ warehouseId: "", location: "", unitIds: [] });
+    onChanged();
+  }
 
   async function submitMove(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -244,6 +266,20 @@ export function WarehouseStockSection({
                   Mover unidades
                 </AdminButton>
               </div>
+            </form>
+          </AdminDisclosure>
+          <AdminDisclosure title="Cambiar ubicación de unidades" hint="en el mismo depósito">
+            <form className="admin-form admin-form-grid" onSubmit={(event) => void submitRelocate(event)} aria-label="Cambiar ubicación de unidades en el mismo depósito">
+              <SelectField label="Depósito" value={relocate.warehouseId} onChange={(warehouseId) => setRelocate({ ...relocate, warehouseId, unitIds: [] })} options={[{ value: "", label: "Elegir depósito" }, ...warehouseOptions(active)]} disabled={busy !== ""} />
+              <TextField label="Ubicación nueva" help={INVENTORY_FIELD_HELP.location} required value={relocate.location} onChange={(location) => setRelocate({ ...relocate, location })} maxLength={40} placeholder="Ej.: E3-B2" disabled={busy !== ""} />
+              {relocate.warehouseId ? <fieldset className="admin-pick-list">
+                <legend>Unidades disponibles (máximo 200)</legend>
+                {relocateUnits.length ? relocateUnits.map((unit) => {
+                  const checked = relocate.unitIds.includes(unit.id);
+                  return <CheckboxField key={unit.id} checked={checked} onChange={(selected) => setRelocate((current) => ({ ...current, unitIds: selected ? [...current.unitIds, unit.id] : current.unitIds.filter((id) => id !== unit.id) }))} text={`${unit.code} · ${unit.location || "Sin ubicación"}`} disabled={busy !== "" || (relocate.unitIds.length >= 200 && !checked)} />;
+                }) : <AdminNote>No hay unidades disponibles para reubicar en este depósito.</AdminNote>}
+              </fieldset> : null}
+              <div className="admin-form-actions"><AdminButton variant="primary" icon="check" type="submit" busy={busy === "move"} busyLabel="Guardando…" disabled={relocate.unitIds.length === 0}>Cambiar ubicación</AdminButton></div>
             </form>
           </AdminDisclosure>
           <AdminDisclosure title="Registrar compra" hint="suma unidades nuevas con proveedor y garantía">

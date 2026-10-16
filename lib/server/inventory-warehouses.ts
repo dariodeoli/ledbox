@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { lockInventoryItems } from "@/lib/server/inventory-availability";
+import { committedAssignmentWhere } from "@/lib/server/inventory-availability";
 import { INVENTORY_TAXONOMY_NAME_MAX, FIELD_MESSAGES, normalizeWarehouseCode, warehouseCodeValid } from "@/lib/field-rules";
 
 /**
@@ -48,6 +49,44 @@ export type WarehouseFailure = { ok: false; status: 400 | 404 | 409; error: stri
 const fail = (status: WarehouseFailure["status"], error: string): WarehouseFailure => ({ ok: false, status, error });
 
 export type WarehouseInput = { name?: unknown; code?: unknown; address?: unknown; sortOrder?: unknown };
+
+/** Cambia la ubicación de unidades explícitas dentro del mismo depósito. */
+export async function relocateUnitsWithinWarehouse(
+  tx: Tx,
+  options: { organizationId: string; inventoryId: string; warehouseId: string; unitIds: readonly string[]; location: string | null },
+): Promise<{ ok: true; moved: number } | WarehouseFailure> {
+  const { organizationId, inventoryId, warehouseId } = options;
+  const unitIds = [...new Set(options.unitIds)];
+  if (unitIds.length === 0 || unitIds.length > 200 || unitIds.length !== options.unitIds.length || unitIds.some((id) => !id || id.length > 200)) {
+    return fail(400, "Seleccioná entre 1 y 200 unidades distintas.");
+  }
+  const [item, warehouse] = await Promise.all([
+    tx.inventoryItem.findFirst({ where: { id: inventoryId, organizationId }, select: { id: true } }),
+    findUsableWarehouse(tx, organizationId, warehouseId),
+  ]);
+  if (!item) return fail(404, "El producto no existe en esta empresa.");
+  if (!warehouse) return fail(404, "El depósito no existe en esta empresa.");
+  await lockInventoryItems(tx, organizationId, [inventoryId]);
+  // Las reservas se guardan por producto, no por código físico. Hasta que el modelo
+  // permita asignar una unidad a una reserva, cualquier compromiso vivo bloquea
+  // reubicar unidades de ese producto para no mover una unidad reservada a ciegas.
+  const committed = await tx.eventInventory.count({ where: { organizationId, inventoryId, ...committedAssignmentWhere(organizationId) } });
+  if (committed > 0) return fail(409, "El producto tiene unidades reservadas o comprometidas; liberá la reserva antes de cambiar ubicaciones.");
+  const units = await tx.inventoryUnit.findMany({
+    where: { organizationId, inventoryId, id: { in: unitIds } },
+    select: { id: true, status: true, warehouseId: true },
+  });
+  if (units.length !== unitIds.length) return fail(404, "Una o más unidades no pertenecen a este producto y empresa.");
+  if (units.some((unit) => unit.status !== "AVAILABLE" || unit.warehouseId !== warehouseId)) {
+    return fail(409, "Solo se pueden reubicar unidades disponibles del mismo depósito.");
+  }
+  const result = await tx.inventoryUnit.updateMany({
+    where: { organizationId, inventoryId, id: { in: unitIds }, status: "AVAILABLE", warehouseId },
+    data: { location: options.location },
+  });
+  if (result.count !== unitIds.length) throw new WarehouseMoveConflict(result.count);
+  return { ok: true, moved: result.count };
+}
 
 function readName(raw: unknown): string | null {
   const name = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim() : "";

@@ -180,7 +180,7 @@ test("VIEWER no muta nada; OPERATIONS carga y cuenta pero no entra a Ajustes →
   const categories = source("app/api/admin/inventory/categories/route.ts");
   const warehouses = source("app/api/admin/inventory/warehouses/route.ts");
   assert.match(categories, /kind === "quick" \? "inventory\.write" : "org\.manage"/, "alta rápida con inventory.write; el resto con org.manage");
-  assert.match(warehouses, /kind === "move-units" \? "inventory\.write" : "org\.manage"/);
+  assert.match(warehouses, /kind === "move-units" \|\| kind === "relocate-units" \? "inventory\.write" : "org\.manage"/);
   assert.match(categories, /export async function GET\(\) \{\s*const auth = await requireAdminContext\(\);/, "leer lo ve cualquier rol");
   assert.match(source("lib/admin-policy.ts"), /"\/ajustes\/inventario": \["OWNER", "ADMIN"\]/);
   assert.match(source("components/admin/modules/AjustesTabs.tsx"), /key: "inventario"[^}]*restricted: true/);
