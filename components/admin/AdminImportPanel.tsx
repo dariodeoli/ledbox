@@ -241,7 +241,7 @@ export function AdminImportPanel({ moduloId, onClose, onApplied }: { moduloId: I
               ))}
             </ul>
           ) : null}
-          <p className="admin-field-hint">Lote {resultado.lote.slice(0, 8)} auditado. Reimportar el mismo archivo actualiza, no duplica.</p>
+          <p className="admin-field-hint">Lote {resultado.lote.slice(0, 8)} auditado. {modulo.id === "productos" && importMode === "CREATE_ONLY" ? "Los códigos existentes se conservan sin cambios." : "Reimportar el mismo archivo actualiza, no duplica."}</p>
         </div>
       ) : preview ? (
         <div className="admin-import">

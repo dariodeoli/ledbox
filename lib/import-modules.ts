@@ -166,7 +166,7 @@ export const IMPORT_MODULES: Readonly<Record<ImportModuleId, ImportModule>> = {
     instructions: [
       "Completá una fila por producto, debajo de la fila de ejemplo (podés borrarla).",
       "No cambies los encabezados ni el orden de las columnas.",
-      "Mismo código que un producto ya cargado = se actualiza; un código nuevo = se crea.",
+      "Un código nuevo se crea. Los existentes se conservan con «Crear sólo nuevos» o se actualizan si elegís «Crear y actualizar».",
       "Categoría y subcategoría van en columnas separadas (o juntas en «categoria» como «Vajilla / Copas»). Si no existen, se crean; si ya existen, se usan sin duplicar.",
       "Depósito (código, por ejemplo D1) y ubicación (por ejemplo E3-B2) son opcionales: sin ellos las unidades nuevas van al depósito principal.",
       "Los precios van en guaraníes, números enteros, sin símbolos.",
