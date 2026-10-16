@@ -172,7 +172,7 @@ export function InventoryMovementDialog({
             onChange={setCondition}
             options={ITEM_CONDITIONS.map((item) => ({ value: item, label: item }))}
           />
-          <NumberField
+          <NumberField strictInteger
             label={checkout ? "Unidades a despachar" : "Unidades que vuelven"}
             hint={checkout ? `Hasta ${formatNumber(remaining)}. Podés despachar en partes.` : `Hasta ${formatNumber(pending)}. Las que falten quedan pendientes.`}
             maxLength={6}
@@ -184,8 +184,8 @@ export function InventoryMovementDialog({
 
         {checkout ? null : (
           <AdminDialogSection title="Daños y faltantes" collapsible defaultOpen={damagedCount > 0 || missingCount > 0} hint="abren un incidente">
-            <NumberField label="De esas, dañadas" hint="Abre un incidente de daño." maxLength={6} value={damaged} onChange={setDamaged} />
-            <NumberField label="Faltantes (no vuelven)" hint="Abre un incidente de faltante." maxLength={6} value={missing} onChange={setMissing} />
+            <NumberField strictInteger label="De esas, dañadas" hint="Abre un incidente de daño." maxLength={6} value={damaged} onChange={setDamaged} />
+            <NumberField strictInteger label="Faltantes (no vuelven)" hint="Abre un incidente de faltante." maxLength={6} value={missing} onChange={setMissing} />
           </AdminDialogSection>
         )}
 

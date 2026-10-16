@@ -36,7 +36,7 @@ import {
   type AdminTone,
 } from "@/lib/admin-format";
 import { InventoryLinkPicker } from "./BudgetInventoryPicker";
-import { counterofferExclusion } from "@/lib/quote-selection";
+import { counterofferDraft, originalCounterofferDraft, counterofferDraftExclusion, counterofferDraftSubtotal, resolveCounterofferDraft, type CounterofferDraft } from "@/lib/counteroffer-draft";
 import { BudgetPricingDialog } from "./BudgetPricingDialog";
 import { BudgetItemsEditor } from "./BudgetItemsEditor";
 import { BudgetCreationDeposit, EMPTY_CREATION_DEPOSIT, SecurityDepositDialog, creationDepositBody } from "./BudgetSecurityDeposit";
@@ -721,7 +721,7 @@ export function PresupuestosModule() {
   const [resolution, setResolution] = useState<{ request: AdminBudgetRequestRow; decision: RequestDecision } | null>(null);
   /** Conversación comparativa de una solicitud del portal (issue #143). */
   const [talkRequest, setTalkRequest] = useState<AdminBudgetRequestRow | null>(null);
-  const [counterItems, setCounterItems] = useState<Record<string, { quantity: number; days: number; excluded?: boolean }>>({});
+  const [counterItems, setCounterItems] = useState<Record<string, CounterofferDraft>>({});
   const [counterDiscount, setCounterDiscount] = useState("");
   const [paymentsOpen, setPaymentsOpen] = useState(false);
   const [plan, setPlan] = useState<{ budget: AdminBudgetRow; advance: string; terms: string; installments: BudgetConditionDraft[] } | null>(null);
@@ -1171,7 +1171,7 @@ export function PresupuestosModule() {
         : "",
     );
     setCounterItems(
-      Object.fromEntries((request.payload.items ?? []).map((item) => [item.id, { quantity: item.quantity, days: item.days, excluded: Boolean(item.excluded) }])),
+      Object.fromEntries((request.payload.items ?? []).map((item) => [item.id, counterofferDraft(item)])),
     );
     setResolution({ request, decision });
   }
@@ -1477,9 +1477,9 @@ export function PresupuestosModule() {
     };
     if (resolution.decision === "accept") {
       if (resolution.request.kind === "items") {
-        body.counter = {
-          items: Object.entries(counterItems).map(([id, value]) => ({ id, quantity: value.quantity, days: value.days, excluded: Boolean(value.excluded) })),
-        };
+        const parsed = resolveCounterofferDraft(resolution.request.budget.items, counterItems);
+        if (!parsed.ok) { setDialogError(parsed.error); return; }
+        body.counter = { items: parsed.value };
       }
       if (resolution.request.kind === "discount") {
         const amount = Number(counterDiscount.replace(/\D/g, ""));
@@ -1544,15 +1544,12 @@ export function PresupuestosModule() {
   const resolutionLabel = resolution
     ? `${resolution.decision === "accept" ? "Aceptar" : "Rechazar"} · ${resolution.request.budget.title}`
     : "";
-  const counterSubtotal = resolution
-    ? resolution.request.budget.items.reduce((sum, item) => {
-        const value = counterItems[item.id] ?? { quantity: item.quantity, days: item.days, excluded: Boolean(item.excluded) };
-        return sum + (value.excluded ? 0 : item.unitPrice * value.quantity * value.days);
-      }, 0)
-    : 0;
+  const counterDraftCheck = resolution?.decision === "accept" && resolution.request.kind === "items"
+    ? resolveCounterofferDraft(resolution.request.budget.items, counterItems) : null;
+  const counterSubtotal = resolution ? counterofferDraftSubtotal(resolution.request.budget.items, counterItems) : 0;
   const counterDiscountAmount =
     resolution?.request.kind === "discount" ? Number(counterDiscount.replace(/\D/g, "")) || 0 : 0;
-  const counterTotal = Math.max(0, counterSubtotal - counterDiscountAmount);
+  const counterTotal = counterSubtotal === null ? null : Math.max(0, counterSubtotal - counterDiscountAmount);
 
   return (
     <div className="admin-module-page">
@@ -2217,6 +2214,7 @@ export function PresupuestosModule() {
                 type="button"
                 busy={dialogBusy}
                 busyLabel="Guardando…"
+                disabled={counterDraftCheck !== null && !counterDraftCheck.ok}
                 onClick={() => void submitResolution()}
               >
                 {resolution.decision === "accept" ? "Aceptar y aplicar" : "Rechazar con nota"}
@@ -2259,45 +2257,45 @@ export function PresupuestosModule() {
                 </span>
               </div>
               {resolution.request.budget.items.map((item) => {
-                const proposed = counterItems[item.id] ?? { quantity: item.quantity, days: item.days, excluded: Boolean(item.excluded) };
-                const subtotal = proposed.excluded ? 0 : item.unitPrice * proposed.quantity * proposed.days;
+                const proposed = counterItems[item.id] ?? originalCounterofferDraft(item);
+                const subtotal = counterofferDraftSubtotal([item], { [item.id]: proposed });
                 return (
                   <div className="admin-dialog-table-row" role="row" key={item.id}>
                     <span role="cell">{item.name}</span>
                     <span role="cell">
-                      {formatNumber(item.quantity)} × {formatNumber(item.days)} d
+                      {formatNumber(item.quantity)} × {originalCounterofferDraft(item).days} d
                     </span>
                     <span role="cell" className="admin-dialog-counter">
-                      <CheckboxField checked={Boolean(proposed.excluded)} onChange={(checked) => setCounterItems((rows) => ({ ...rows, [item.id]: counterofferExclusion(item, proposed, checked) }))} text="Retirado / no incluido" />
-                      <NumberField
+                      <CheckboxField checked={Boolean(proposed.excluded)} onChange={(checked) => setCounterItems((rows) => ({ ...rows, [item.id]: counterofferDraftExclusion(item, proposed, checked) }))} text="Retirado / no incluido" />
+                      <NumberField strictInteger
                         disabled={Boolean(proposed.excluded)}
                         ariaLabel={`Cantidad propuesta de ${item.name}`}
                         maxLength={4}
-                        value={String(proposed.quantity)}
+                        value={proposed.quantity}
                         onChange={(value) =>
                           setCounterItems((current) => ({
                             ...current,
-                            [item.id]: { ...proposed, quantity: Math.max(1, Number(value) || 1) },
+                            [item.id]: { ...proposed, quantity: value },
                           }))
                         }
                       />
                       <span aria-hidden="true">×</span>
-                      <NumberField
+                      <NumberField strictInteger
                         disabled={Boolean(proposed.excluded)}
                         ariaLabel={`Días propuestos de ${item.name}`}
                         maxLength={4}
-                        value={String(proposed.days)}
+                        value={proposed.days}
                         onChange={(value) =>
                           setCounterItems((current) => ({
                             ...current,
-                            [item.id]: { ...proposed, days: Math.max(1, Number(value) || 1) },
+                            [item.id]: { ...proposed, days: value },
                           }))
                         }
                       />
                       <span aria-hidden="true">d</span>
                     </span>
                     <span role="cell" className="admin-dialog-num">
-                      {formatMoney(subtotal)}
+                      {subtotal === null ? "Completá cantidad y días" : formatMoney(subtotal)}
                     </span>
                   </div>
                 );
@@ -2323,8 +2321,7 @@ export function PresupuestosModule() {
                 <>Queda auditado a tu nombre y el cliente lo ve en su portal.</>
               ) : (
                 <>
-                  Nuevo subtotal <strong>{formatMoney(counterSubtotal)}</strong> · nuevo total{" "}
-                  <strong>{formatMoney(counterTotal)}</strong>
+                  {counterDraftCheck && !counterDraftCheck.ok ? counterDraftCheck.error : <>Nuevo subtotal <strong>{formatMoney(counterSubtotal)}</strong> · nuevo total{" "}<strong>{formatMoney(counterTotal)}</strong></>}
                   {resolution.request.budget.status === "APPROVED" ? (
                     <>
                       {" "}

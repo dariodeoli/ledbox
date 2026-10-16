@@ -457,7 +457,7 @@ export function InventoryCreateDialog({
             onChange={(value) => setForm({ ...form, inventoryKind: value })}
             options={KIND_PICK_OPTIONS}
           />
-          <NumberField
+          <NumberField strictInteger
             label="Cantidad"
             disabled={busy || form.defaultStockOrigin === "EXTERNAL_RENTAL"}
             help="Crea esta cantidad de unidades físicas con códigos automáticos; después se gestiona por unidad."
@@ -869,7 +869,7 @@ export function InventoryEditDialog({
             hint="Ej.: Ø 1,40 m o 1,60 × 0,75 m."
             disabled={editBusy}
           />
-          <NumberField
+          <NumberField strictInteger
             label="Capacidad (personas)"
             size="sm"
             value={editForm.capacity}

@@ -226,7 +226,7 @@ function ModifyLine({
       <div className="admin-settings-grid">
         <SelectField label="Qué hacer" value={draft.action} onChange={(value) => onChange({ action: value as Action })} options={ACTION_OPTIONS} />
         {draft.action === "quantity" || draft.action === "substitute" ? (
-          <NumberField label="Cantidad" value={draft.quantity} onChange={(value) => onChange({ quantity: value.replace(/\D/g, "").slice(0, 2) })} maxLength={2} />
+          <NumberField strictInteger label="Cantidad" value={draft.quantity} onChange={(value) => onChange({ quantity: value.replace(/\D/g, "").slice(0, 2) })} maxLength={2} />
         ) : null}
         {draft.action === "substitute" ? (
           substitutes === "loading" || substitutes === undefined ? (

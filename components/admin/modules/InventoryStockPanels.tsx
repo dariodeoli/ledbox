@@ -237,7 +237,7 @@ export function WarehouseStockSection({
             <form className="admin-form admin-form-grid" onSubmit={(event) => void submitMove(event)} aria-label="Mover unidades entre depósitos">
               <SelectField label="Desde" value={move.from} onChange={(value) => setMove({ ...move, from: value })} options={[{ value: "", label: "Elegir depósito" }, ...warehouseOptions(taxonomy.warehouses)]} disabled={busy !== ""} />
               <SelectField label="Hacia" value={move.to} onChange={(value) => setMove({ ...move, to: value })} options={[{ value: "", label: "Elegir depósito" }, ...warehouseOptions(active)]} disabled={busy !== ""} />
-              <NumberField label="Cantidad" value={move.quantity} onChange={(value) => setMove({ ...move, quantity: value })} maxLength={4} hint="Se mueven unidades disponibles, por orden de código." disabled={busy !== ""} />
+              <NumberField strictInteger label="Cantidad" value={move.quantity} onChange={(value) => setMove({ ...move, quantity: value })} maxLength={4} hint="Se mueven unidades disponibles, por orden de código." disabled={busy !== ""} />
               <TextField label="Ubicación nueva" help={INVENTORY_FIELD_HELP.location} value={move.location} onChange={(value) => setMove({ ...move, location: value })} maxLength={40} placeholder="Ej.: E3-B2" hint="Opcional." disabled={busy !== ""} />
               <div className="admin-form-actions">
                 <AdminButton variant="primary" icon="check" type="submit" busy={busy === "move"} busyLabel="Moviendo…">
@@ -248,7 +248,7 @@ export function WarehouseStockSection({
           </AdminDisclosure>
           <AdminDisclosure title="Registrar compra" hint="suma unidades nuevas con proveedor y garantía">
             <form className="admin-form admin-form-grid" onSubmit={(event) => void submitPurchase(event)} aria-label="Registrar compra de unidades">
-              <NumberField label="Cantidad comprada" required value={purchase.quantity} onChange={(value) => setPurchase({ ...purchase, quantity: value })} maxLength={3} hint="Se crean con código automático." disabled={busy !== ""} />
+              <NumberField strictInteger label="Cantidad comprada" required value={purchase.quantity} onChange={(value) => setPurchase({ ...purchase, quantity: value })} maxLength={3} hint="Se crean con código automático." disabled={busy !== ""} />
               <MoneyField label="Costo por unidad" help={INVENTORY_FIELD_HELP.purchaseCost} value={purchase.unitCost} onChange={(value) => setPurchase({ ...purchase, unitCost: value })} disabled={busy !== ""} />
               <SelectField label="Proveedor" help={INVENTORY_FIELD_HELP.supplierId} value={purchase.supplierId} onChange={(value) => setPurchase({ ...purchase, supplierId: value })} options={supplierOptions(taxonomy.suppliers, "Sin proveedor")} disabled={busy !== ""} />
               <DayField label="Fecha de compra" help={INVENTORY_FIELD_HELP.purchasedAt} value={purchase.purchasedAt} onChange={(value) => setPurchase({ ...purchase, purchasedAt: value })} disabled={busy !== ""} />

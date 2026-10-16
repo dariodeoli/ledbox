@@ -307,7 +307,7 @@ export function AddVariantDialog({ family, referenceId, onClose, onDone }: { fam
         </AdminDialogSection>
         <AdminDialogSection title="Código y unidades" stack>
           <TextField label="Código (SKU)" value={sku} onChange={setSku} maxLength={60} required hint="Tiene que ser nuevo. Letras, números, espacios, puntos y guiones." disabled={busy} />
-          <NumberField label="Unidades iniciales" value={units} onChange={setUnits} maxLength={3} disabled={busy} />
+          <NumberField strictInteger label="Unidades iniciales" value={units} onChange={setUnits} maxLength={3} disabled={busy} />
           <p className="admin-fam-preview">0 si todavía no las tenés: se cargan después desde «Unidades» en la ficha de la variante.</p>
         </AdminDialogSection>
         {family.variants.length > 1 ? (

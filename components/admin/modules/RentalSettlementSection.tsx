@@ -86,7 +86,7 @@ export function RentalSettlementSection({ budgetId, canEdit, onChanged }: { budg
                   ) : null}
                   {!locked && mode?.id === charge.id && mode.type === "edit" ? (
                     <div className="settlement-inline">
-                      <NumberField label="Cantidad" value={quantity} maxLength={5} disabled={busy} onChange={setQuantity} />
+                      <NumberField strictInteger label="Cantidad" value={quantity} maxLength={5} disabled={busy} onChange={setQuantity} />
                       <MoneyField label="Monto unitario" value={unitAmount} limit={BUDGET_INT_MAX} disabled={busy} onChange={setUnitAmount} />
                       <AdminButton type="button" disabled={busy} onClick={() => setMode(null)}>Cancelar</AdminButton>
                       <AdminButton type="button" variant="primary" busy={busy} disabled={quantity === "" || unitAmount === ""} onClick={() => void post({ action: "charge", chargeId: charge.id, decision: "update", quantity: Number(quantity), unitAmount: Number(unitAmount) }, "Guardamos el cargo.")}>Guardar</AdminButton>
@@ -115,7 +115,7 @@ export function RentalSettlementSection({ budgetId, canEdit, onChanged }: { budg
                 {view.offers.map((offer) => (
                   <div className="settlement-inline" key={offer.typeId}>
                     <span className="settlement-offer-name">{offer.name} · {formatMoney(offer.amount)} {offer.unit === "PIECE" ? "por pieza" : "por evento"}</span>
-                    {offer.unit === "PIECE" ? <NumberField label={`Piezas · ${offer.name}`} value={offerQuantity[offer.typeId] ?? String(offer.suggestedQuantity)} maxLength={5} disabled={busy} onChange={(value) => setOfferQuantity({ ...offerQuantity, [offer.typeId]: value })} /> : null}
+                    {offer.unit === "PIECE" ? <NumberField strictInteger label={`Piezas · ${offer.name}`} value={offerQuantity[offer.typeId] ?? String(offer.suggestedQuantity)} maxLength={5} disabled={busy} onChange={(value) => setOfferQuantity({ ...offerQuantity, [offer.typeId]: value })} /> : null}
                     <AdminButton type="button" icon="plus" disabled={busy} onClick={() => void post({ action: "add-charge", typeId: offer.typeId, quantity: offer.unit === "PIECE" ? Number(offerQuantity[offer.typeId] ?? offer.suggestedQuantity) : 1 }, `Agregamos «${offer.name}».`)}>Agregar</AdminButton>
                   </div>
                 ))}

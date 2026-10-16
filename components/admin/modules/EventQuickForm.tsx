@@ -102,7 +102,7 @@ export function EventQuickFields({ values, onChange, autoFocus, moreOpen = false
         error={values.responsibleEmail && !emailValid(values.responsibleEmail) ? FIELD_MESSAGES.email : null} />
     </>;
   const modality = <TextField label="Modalidad" maxLength={120} value={values.modality} onChange={(modality) => onChange({ modality })} hint="Opcional · presencial, virtual, híbrida u otra." />;
-  const attendees = <NumberField label="Asistentes" value={values.attendees} onChange={(attendees) => onChange({ attendees })} />;
+  const attendees = <NumberField strictInteger label="Asistentes" value={values.attendees} onChange={(attendees) => onChange({ attendees })} />;
 
   if (layout === "sections") {
     return <>
