@@ -214,6 +214,14 @@ export function InventarioModule() {
   const stateOptions = useMemo(() => [{ value: "ALL", label: "Todos los estados" }, ...INVENTORY_STATE_FILTER_OPTIONS], []);
   const familyChoices = useMemo(() => familyFilterOptions(inventory), [inventory]);
   const warehouseChoices = useMemo(() => warehouseOptions(taxonomy.warehouses, { includeEmpty: "Todos los depósitos" }), [taxonomy.warehouses]);
+  const catalogWarehouseChoices = useMemo(() => warehouseChoices.map((option) => ({
+    ...option,
+    label: option.value ? `Catálogo · ${option.label}` : "Catálogo · Todos los depósitos",
+  })), [warehouseChoices]);
+  const stockWarehouseChoices = useMemo(() => warehouseChoices.map((option) => ({
+    ...option,
+    label: option.value ? `Stock · ${option.label}` : "Stock · Todos los depósitos",
+  })), [warehouseChoices]);
   const supplierChoices = useMemo(() => supplierOptions(taxonomy.suppliers, "Todos los proveedores"), [taxonomy.suppliers]);
 
   const totals = useMemo(() => {
@@ -488,8 +496,8 @@ export function InventarioModule() {
           <AdminSelect value={filters.kind} onChange={(value) => setFilter("kind", value)} label="Filtrar por tipo" options={KIND_OPTIONS} />
           <AdminSelect value={filters.categoryId} onChange={(value) => setFilter("categoryId", value)} label="Filtrar por categoría" options={categoryOptions} />
           {familyChoices.length > 1 ? <AdminSelect value={filters.familyId} onChange={(value) => setFilter("familyId", value)} label="Filtrar por familia" options={familyChoices} /> : null}
-          <AdminSelect value={filters.defaultWarehouseId} onChange={(value) => setFilter("defaultWarehouseId", value)} label="Depósito por defecto del catálogo" options={warehouseChoices} />
-          <AdminSelect value={filters.warehouseId} onChange={(value) => setFilter("warehouseId", value)} label="Depósito físico de unidades" options={warehouseChoices} />
+          <AdminSelect value={filters.defaultWarehouseId} onChange={(value) => setFilter("defaultWarehouseId", value)} label="Depósito por defecto del catálogo" options={catalogWarehouseChoices} />
+          <AdminSelect value={filters.warehouseId} onChange={(value) => setFilter("warehouseId", value)} label="Depósito físico de unidades" options={stockWarehouseChoices} />
           <AdminSelect value={filters.state} onChange={(value) => setFilter("state", value)} label="Filtrar por estado" options={stateOptions} />
           {showCosts ? <AdminSelect value={filters.supplierId} onChange={(value) => setFilter("supplierId", value)} label="Filtrar por proveedor" options={supplierChoices} /> : null}
           {filtersActive > 0 ? (
