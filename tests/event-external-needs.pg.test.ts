@@ -48,12 +48,24 @@ test("necesidades externas fase A: aislamiento, replay, CAS y ninguna mutación 
     const cancel = await patch(2, { status: "CANCELLED" });
     assert.equal(cancel.status, 200);
     assert.equal((await cancel.json()).need.status, "CANCELLED");
+    const second = await post(sessions[0], "need-270-confirm-create", { ...payload, startsAt: "2031-05-12T10:00:00.000Z", endsAt: "2031-05-13T18:00:00.000Z" });
+    assert.equal(second.status, 201, await second.clone().text());
+    const secondId = (await second.json()).need.id;
+    const confirmNeed = (key: string) => fetch(new URL(path, base), { method: "PATCH", headers: { Cookie: sessions[0], "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify({ id: secondId, expectedRevision: 1, changes: { status: "CONFIRMED" } }) });
+    const confirmationRace = await Promise.all([confirmNeed("need-270-confirm-a"), confirmNeed("need-270-confirm-b")]);
+    assert.deepEqual(confirmationRace.map(response => response.status).sort(), [200, 409]);
+    const confirmed = await db.eventExternalNeed.findFirstOrThrow({ where: { id: secondId, organizationId: orgIds[0] } });
+    assert.equal(confirmed.status, "CONFIRMED");
+    assert.equal(confirmed.revision, 2);
     const read = await fetch(new URL(path, base), { headers: { Cookie: sessions[1] } });
     assert.equal(read.status, 404);
-    assert.equal(await db.eventExternalNeed.count({ where: { organizationId: orgIds[0], eventId: event.id } }), 1);
+    assert.equal(await db.eventExternalNeed.count({ where: { organizationId: orgIds[0], eventId: event.id } }), 2);
     assert.equal((await db.inventoryItem.findUniqueOrThrow({ where: { id: item.id } })).quantity, 2);
     assert.equal(await db.eventInventory.count({ where: { eventId: event.id } }), 0);
-    assert.equal(await db.auditLog.count({ where: { organizationId: orgIds[0], entity: "EventExternalNeed" } }), 3);
+    const ownRead = await fetch(new URL(path, base), { headers: { Cookie: sessions[0] } });
+    assert.equal(ownRead.status, 200);
+    assert.equal((await ownRead.json()).coverage, "none");
+    assert.equal(await db.auditLog.count({ where: { organizationId: orgIds[0], entity: "EventExternalNeed" } }), 5);
   } finally {
     await db.organization.deleteMany({ where: { id: { in: orgIds } } });
     await db.adminUser.deleteMany({ where: { id: { in: userIds } } });

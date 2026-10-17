@@ -2404,6 +2404,7 @@ model CatalogAccessRequest {
 
 enum EventExternalNeedStatus {
   OPEN
+  CONFIRMED
   CANCELLED
 }
 

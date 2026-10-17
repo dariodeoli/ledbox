@@ -113,21 +113,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (Object.keys(changesInput).some(key => !allowed.has(key as typeof fields[number]))) return jsonError("El cambio incluye un campo no permitido.", 400);
   const parsed = parseFields(changesInput, true);
   if (parsed.error || !parsed.data) return jsonError(parsed.error ?? "Datos inválidos.", 400);
-  if ("status" in changesInput && changesInput.status !== "CANCELLED") return jsonError("La única transición disponible en Fase A es cancelar.", 400);
-  const patch = { ...parsed.data, ...(changesInput.status === "CANCELLED" ? { status: "CANCELLED" as const } : {}) };
+  const transition = changesInput.status;
+  if (transition !== undefined && transition !== "CONFIRMED" && transition !== "CANCELLED") return jsonError("La transición disponible debe ser CONFIRMED o CANCELLED.", 400);
+  if (transition && Object.keys(changesInput).length !== 1) return jsonError("La transición de estado se registra en una operación separada.", 400);
+  const transitionStatus: "CONFIRMED" | "CANCELLED" | undefined = transition === "CONFIRMED" || transition === "CANCELLED" ? transition : undefined;
+  const patch = { ...parsed.data, ...(transitionStatus ? { status: transitionStatus } : {}) };
   try {
     return await withIdempotency({ request, organizationId: auth.context.organizationId, scope: "event-external-needs:PATCH", body }, async tx => {
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} AND "organizationId" = ${auth.context.organizationId} FOR UPDATE`;
       const current = await tx.eventExternalNeed.findFirst({ where: { id: body.id as string, eventId, organizationId: auth.context.organizationId } });
       if (!current) return jsonError("External need not found.", 404);
-      if (current.status !== "OPEN") return jsonError("La necesidad ya está cancelada.", 409);
+      if (current.status !== "OPEN") return jsonError(`La necesidad ya está ${current.status}.`, 409);
       if (current.revision !== body.expectedRevision) return jsonError("La necesidad cambió. Actualizá la ficha antes de guardar.", 409);
       if (patch.inventoryId && !await tx.inventoryItem.findFirst({ where: { id: patch.inventoryId, organizationId: auth.context.organizationId }, select: { id: true } })) return jsonError("Inventory item not found.", 404);
       if (patch.preferredSupplierId && !await tx.supplier.findFirst({ where: { id: patch.preferredSupplierId, organizationId: auth.context.organizationId }, select: { id: true } })) return jsonError("Supplier not found.", 404);
       const next = { ...current, ...patch };
       if (next.startsAt >= next.endsAt) return jsonError("El fin del rango debe ser posterior al inicio.", 400);
       const updated = await tx.eventExternalNeed.update({ where: { id: current.id }, data: { ...patch, revision: { increment: 1 }, updatedById: auth.context.user.id }, select: DTO });
-      await recordAudit({ context: auth.context, action: patch.status ? "status" : "update", entity: "EventExternalNeed", entityId: current.id, summary: patch.status ? `Canceló una necesidad externa del evento ${eventId}` : `Actualizó una necesidad externa del evento ${eventId}`, detail: { changes: Object.fromEntries(Object.entries(patch).map(([key, value]) => [key, { from: current[key as keyof typeof current] ?? null, to: value }])) } }, tx);
+      const statusSummary = patch.status === "CONFIRMED" ? "Confirmó" : "Canceló";
+      await recordAudit({ context: auth.context, action: patch.status ? "status" : "update", entity: "EventExternalNeed", entityId: current.id, summary: patch.status ? `${statusSummary} una necesidad externa del evento ${eventId}` : `Actualizó una necesidad externa del evento ${eventId}`, detail: { changes: Object.fromEntries(Object.entries(patch).map(([key, value]) => [key, { from: current[key as keyof typeof current] ?? null, to: value }])) } }, tx);
       return { status: 200, body: { need: updated } };
     });
   } catch (error) {
