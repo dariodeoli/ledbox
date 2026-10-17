@@ -3545,6 +3545,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-field select { width: 100%; padding: 11px 12px; border: 1px solid var(--line-control); border-radius: var(--p-radius); background: var(--surface-2); color: var(--text); font: 500 15px/1.4 var(--font-body); }
 .portal-field input:focus, .portal-field textarea:focus { outline: none; border-color: var(--led); box-shadow: 0 0 0 3px var(--led-soft); }
 .portal-field select:focus { outline: none; border-color: var(--led); box-shadow: 0 0 0 3px var(--led-soft); }
+.portal .portal-field :is(input, textarea, select):focus-visible { outline: 2px solid var(--p-action); outline-offset: 2px; }
 .portal-field input[aria-invalid="true"] { border-color: var(--p-danger); }
 .portal-field input:not([type="file"]):not([type="checkbox"]):not([type="radio"]), .portal-field textarea, .portal-field select { min-height: 44px; padding: 8px 2px; border: 0; border-bottom: 1px solid var(--line-control); border-radius: 0; background: transparent; }
 .portal-field input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):focus, .portal-field textarea:focus, .portal-field select:focus { border-bottom-color: var(--p-action); box-shadow: 0 1px 0 var(--p-action); }
