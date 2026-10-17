@@ -117,6 +117,7 @@ const INVENTORY_ITEM_FIELDS = [
   "publicDescription",
   "visibleOnWeb",
   "catalogAudience",
+  "saleCatalogEnabled",
   "imageUrl",
   "bufferBeforeMin",
   "bufferAfterMin",
@@ -142,6 +143,7 @@ type InventoryItemUpdate = Partial<{
   dimensions: string | null;
   visibleOnWeb: boolean;
   catalogAudience: CatalogAudience;
+  saleCatalogEnabled: boolean;
   imageUrl: string | null;
   bufferBeforeMin: number | null;
   bufferAfterMin: number | null;
@@ -225,6 +227,10 @@ function readInventoryItemUpdate(body: Record<string, unknown>):
   if (audience.audience !== undefined) {
     data.catalogAudience = audience.audience;
     data.visibleOnWeb = visibleOnWebFor(audience.audience);
+  }
+  if (body.saleCatalogEnabled !== undefined) {
+    if (typeof body.saleCatalogEnabled !== "boolean") return { ok: false, error: "La inclusión en el catálogo de venta debe ser verdadera o falsa." };
+    data.saleCatalogEnabled = body.saleCatalogEnabled;
   }
   for (const field of ["bufferBeforeMin", "bufferAfterMin"] as const) {
     if (body[field] === undefined) continue;
@@ -750,6 +756,7 @@ export async function POST(request: Request) {
         dimensions: true,
         visibleOnWeb: true,
         catalogAudience: true,
+        saleCatalogEnabled: true,
         imageUrl: true,
         bufferBeforeMin: true,
         bufferAfterMin: true,
