@@ -16,7 +16,7 @@ const expiresAt = new Date("2026-10-20T18:00:00Z");
 /** Execute the actual consumer modules with IO boundaries replaced. The shared
  * renderer is real, not a snapshot or a second implementation. Unexpected DB,
  * filesystem, provider or package access fails closed; no emails are sent. */
-function consumerHarness(db: Record<string, unknown> = {}, extras: Record<string, unknown> = {}) {
+function consumerHarness(db: Record<string, unknown> = {}, extras: Record<string, unknown> = {}, sendResult: Record<string, unknown> = { status: "sent", logId: "offline-log" }) {
   const rendered: { kind: string; content: MailContent }[] = [];
   const sent: Record<string, unknown>[] = [];
   const audited: unknown[] = [];
@@ -24,7 +24,7 @@ function consumerHarness(db: Record<string, unknown> = {}, extras: Record<string
   const mail = {
     renderMail(content: MailContent) { rendered.push({ kind: "html", content }); return renderMail(content); },
     renderMailText(content: MailContent) { rendered.push({ kind: "text", content }); return renderMailText(content); },
-    async sendMail(payload: Record<string, unknown>) { sent.push(payload); return { status: "sent", logId: "offline-log" }; },
+    async sendMail(payload: Record<string, unknown>) { sent.push(payload); return sendResult; },
     PLATFORM_BRAND,
     // Identidad de la empresa de prueba: marca con su nombre, `From` «<Empresa> vía EventOS» y reply-to propio.
     async mailIdentityFor(organizationId: string | null, options: { platform?: boolean } = {}) {
@@ -170,6 +170,14 @@ test("password reset uses shared content and keeps account tenant, encoded token
   assert.equal(h.rendered.length, 2);
   assert.equal(payload.html, renderMail(h.rendered[0].content)); assert.equal(payload.text, renderMailText(h.rendered[0].content));
   assert.ok(!String(payload.html).includes("&lt;img"), "el nombre de la empresa no viaja en un correo de plataforma");
+});
+
+test("password reset mail treats an unconfigured skip as failure but keeps demo simulation successful", async () => {
+  const db = { adminUser: { findUnique: async () => null } };
+  const skipped = consumerHarness(db, {}, { status: "skipped", error: "missing RESEND_API_KEY" });
+  await assert.rejects(skipped.load("lib/server/resend.ts").sendPasswordResetEmail("ana@example.invalid", "fixture-token"), /PASSWORD_RESET_EMAIL_SKIPPED/);
+  const simulated = consumerHarness(db, {}, { status: "skipped", simulated: true, error: "Demo: simulado" });
+  await assert.doesNotReject(simulated.load("lib/server/resend.ts").sendPasswordResetEmail("ana@example.invalid", "fixture-token"));
 });
 
 test("mail test route uses real shared renderer and preserves tenant, actor, audit and sender", async () => {

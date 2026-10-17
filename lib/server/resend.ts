@@ -52,7 +52,10 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
     // El reset es de la cuenta, no de una empresa: sale como EventOS (el historial sí lo guarda con la empresa).
     platform: true,
   });
-  if (result.status === "failed") throw new Error(result.error ?? "Password reset email could not be sent");
+  if (result.status === "failed") throw new Error("PASSWORD_RESET_EMAIL_FAILED");
+  // A simulated delivery is an intentional demo success. Other skipped sends
+  // (for example, missing RESEND_API_KEY) must never be mistaken for delivery.
+  if (result.status === "skipped" && !result.simulated) throw new Error("PASSWORD_RESET_EMAIL_SKIPPED");
 }
 
 export type ReminderEmailPayload = {

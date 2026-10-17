@@ -3,11 +3,21 @@ import { clearSessionCookie, hashPassword, tokenDigest } from "@/lib/server/auth
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 import { isHoneypotTriggered, resetPasswordSchema, validationError } from "@/lib/server/validation";
 import { jsonError, readJson } from "@/lib/server/http";
+import { authUnavailable, isHttpResponse } from "@/lib/server/auth-http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  try {
+    return await resetPassword(request);
+  } catch (error) {
+    if (isHttpResponse(error)) return error;
+    return authUnavailable("reset-password", error);
+  }
+}
+
+async function resetPassword(request: Request): Promise<Response> {
   const limited = await rateLimit(`auth:reset:${getClientIp(request)}`, 5);
   if (!limited.allowed) return rateLimitResponse(limited.retryAfter);
   const parsed = resetPasswordSchema.safeParse(await readJson(request));
@@ -26,8 +36,10 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof Error && error.message === "RESET_TOKEN_ALREADY_USED") return jsonError("Invalid or expired reset token.", 400);
-    return jsonError("Password reset is temporarily unavailable.", 503);
+    return authUnavailable("reset-password", error);
   }
-  await clearSessionCookie();
+  // Session revocation committed above; clearing this browser cookie is only best effort.
+  try { await clearSessionCookie(); }
+  catch (error) { console.error("[auth/reset-password] session cookie cleanup failed", error instanceof Error ? error.name : "Error"); }
   return Response.json({ ok: true });
 }
