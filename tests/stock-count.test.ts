@@ -5,6 +5,7 @@ import { test } from "node:test";
 import ts from "typescript";
 import { normalizeCatalog, planCatalog, parseCatalogQuantity } from "../lib/import-catalog";
 import { buildAvailability } from "../lib/server/inventory-availability";
+import { listInventoryCountHistory } from "../lib/server/inventory-counts";
 import { withComboAvailability } from "../lib/server/inventory-combos";
 import { inventoryVisualState } from "../lib/inventory-visual-state";
 import { itemInFocus, stockSummary } from "../lib/inventory-view";
@@ -73,6 +74,18 @@ test("the panel presents total confirmation as a manual declaration, not a physi
   assert.match(panel, /label="Total declarado"/);
   assert.match(panel, /Confirmar total/);
   assert.doesNotMatch(panel, /conteo físico (completado|registrado|verificado)/i);
+});
+test("physical count history filters tenant-scoped snapshots and returns only the requested product/depot lines", async () => {
+  const calls: any[] = [];
+  const tx: any = { inventoryCountSession: { findMany: async (query: unknown) => { calls.push(query); return []; } } };
+  await listInventoryCountHistory(tx, { organizationId: "tenant-a", take: 25, inventoryId: "item-a", warehouseId: "warehouse-a" });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].where, { organizationId: "tenant-a", lines: { some: { organizationId: "tenant-a", inventoryId: "item-a", warehouseId: "warehouse-a" } } });
+  assert.deepEqual(calls[0].include.lines.where, { organizationId: "tenant-a", inventoryId: "item-a", warehouseId: "warehouse-a" });
+  assert.equal(calls[0].take, 25);
+  calls.length = 0;
+  await listInventoryCountHistory(tx, { organizationId: "tenant-a", take: 50, inventoryId: "foreign-item-id" });
+  assert.deepEqual(calls[0].where, { organizationId: "tenant-a", lines: { some: { organizationId: "tenant-a", inventoryId: "foreign-item-id" } } });
 });
 test("count confirmation refuses foreign or combo items without writes", async () => {
   for (const mode of ["foreign", "combo"]) { const f = confirmationFixture(mode); await assert.rejects(f.confirm(1)); assert.equal(f.state().creates, 0); assert.equal(f.state().audits.length, 0); }

@@ -2,7 +2,7 @@ import { db } from "@/lib/server/db";
 import { jsonError, isJsonObject, readJson } from "@/lib/server/http";
 import { recordAudit } from "@/lib/server/audit";
 import { requireAdminContext } from "@/lib/server/tenancy";
-import { createInventoryCount, InventoryCountInputError } from "@/lib/server/inventory-counts";
+import { createInventoryCount, InventoryCountInputError, listInventoryCountHistory } from "@/lib/server/inventory-counts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,11 +14,10 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const requestedTake = Number(params.get("take") ?? 50);
   const take = Number.isInteger(requestedTake) ? Math.min(100, Math.max(1, requestedTake)) : 50;
-  const sessions = await db.inventoryCountSession.findMany({
-    where: { organizationId: auth.context.organizationId },
-    orderBy: [{ countedAt: "desc" }, { id: "desc" }], take,
-    include: { lines: { orderBy: [{ productName: "asc" }, { warehouseCode: "asc" }] } },
-  });
+  const inventoryId = params.get("inventoryId")?.trim() || undefined;
+  const warehouseId = params.get("warehouseId")?.trim() || undefined;
+  if ((inventoryId && inventoryId.length > 120) || (warehouseId && warehouseId.length > 120)) return jsonError("El filtro de producto o depósito no es válido.", 400);
+  const sessions = await listInventoryCountHistory(db, { organizationId: auth.context.organizationId, take, inventoryId, warehouseId });
   return Response.json({ sessions });
 }
 
