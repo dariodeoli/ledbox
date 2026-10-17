@@ -27,7 +27,7 @@ test("278 HTTP:50fichas sinstock cambian defaults; unidades, reservas, precios y
     await db.eventInventory.create({ data: { id: randomUUID(), organizationId: org, eventId: event.id, inventoryId: physical.id, quantity: 1 } });
     const foreign = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: otherOrg, name: "Ajeno", category: "QA" } });
     const owner = await cookie("OWNER"), viewer = await cookie("VIEWER");
-    const call = (changes: unknown, selected: string[] = ids, session = owner) => fetch(`${base.origin}/api/admin/inventory`, { method: "POST", headers: { Cookie: session, "Content-Type": "application/json" }, body: JSON.stringify({ kind: "bulk-items", ids: selected, changes }) });
+    const call = (changes: unknown, selected: string[] = ids, session = owner) => fetch(`${base.origin}/api/admin/inventory`, { method: "POST", headers: { Cookie: session, "Content-Type": "application/json", "Idempotency-Key": randomUUID() }, body: JSON.stringify({ kind: "bulk-items", ids: selected, changes }) });
     const beforeUnits = await db.inventoryUnit.findMany({ where: { organizationId: org }, orderBy: { id: "asc" } }), beforeReserve = await db.eventInventory.findMany({ where: { eventId: event.id } });
     assert.equal(beforeReserve.length, 1);
     const beforeItems = await db.inventoryItem.findMany({ where: { id: { in: ids } }, orderBy: { id: "asc" } });

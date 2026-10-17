@@ -5,6 +5,7 @@ import { pendingStockCount } from "@/lib/stock-count";
 import { readBillingUnit } from "@/lib/quote-sharing";
 import { readAudienceInput, visibleOnWebFor, type CatalogAudience } from "@/lib/catalog-audience";
 import { randomUUID } from "node:crypto";
+import { beginBulkOperationRun, finishBulkOperationRun, idempotencyForBulkRun, type BulkRowOutcome } from "@/lib/server/bulk-operation-run";
 import { readBulkChanges, readBulkSelection } from "@/lib/inventory-bulk";
 import type { InventoryKind, InventoryStatus, Prisma } from "@prisma/client";
 import { damageSummary, inventoryStatusLabel } from "@/lib/admin-format";
@@ -279,6 +280,12 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
   const url = new URL(request.url);
+  const bulkOperationRunId = url.searchParams.get("bulkOperationRunId");
+  if (bulkOperationRunId) {
+    const run = await db.bulkOperationRun.findFirst({ where: { id: bulkOperationRunId, organizationId } });
+    if (!run) return jsonError("La operación masiva no existe en esta empresa.", 404);
+    return Response.json({ run });
+  }
   const inventoryId = url.searchParams.get("inventoryId");
 
   if (inventoryId) {
@@ -542,6 +549,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await requireAdminContext("inventory.write");
   if (!auth.ok) return auth.response;
+  let activeBulkRunId: string | null = null;
   try {
   const { organizationId } = auth.context;
   const body = await readJson(request);
@@ -595,6 +603,30 @@ export async function POST(request: Request) {
         ...(defaultLocation !== undefined ? { defaultLocation } : {}),
       };
     }
+    // La unidad durable cubre primero al escritor masivo de artículos; las
+    // unidades tienen un flujo distinto porque cambian estado/cantidad real.
+    let bulkRunId: string | null = null;
+    if (kind === "bulk-items") {
+      const idem = idempotencyForBulkRun(request, body);
+      if (!idem) return jsonError("Esta acción requiere una clave Idempotency-Key válida.", 400);
+      const begun = await beginBulkOperationRun({
+        context: auth.context,
+        operation: "inventory.bulk-items",
+        ids,
+        ...idem,
+      });
+      if (begun.kind === "conflict") return jsonError("Esa clave de idempotencia ya se usó para otra operación: generá una nueva.", 409);
+      if (begun.kind === "existing") {
+        if (begun.run.status === "IN_PROGRESS") return Response.json({ runId: begun.run.id, status: begun.run.status, outcomes: begun.run.outcomes }, { status: 202, headers: { "Idempotent-Replay": "true" } });
+        const saved = begun.run.response as { payload?: Record<string, unknown>; httpStatus?: number } | null;
+        return Response.json(saved?.payload ?? { runId: begun.run.id, status: begun.run.status, outcomes: begun.run.outcomes }, {
+          status: saved?.httpStatus ?? 200,
+          headers: { "Idempotent-Replay": "true" },
+        });
+      }
+      bulkRunId = begun.run.id;
+      activeBulkRunId = bulkRunId;
+    }
     // Selección completa scopeada y guardado atómico: cero cambios ante un ID ajeno/inexistente.
     const result = await db.$transaction(async tx => {
       // El producto se bloquea antes de tocar unidades o leer su cantidad agregada.
@@ -626,9 +658,21 @@ export async function POST(request: Request) {
       if (error instanceof InventoryUnitIncidentConflict) return "open-incidents" as const;
       throw error;
     });
-    if (result === "family-category") return jsonError("La selección incluye variantes. Cambiá la categoría desde Variantes. No se aplicó ningún cambio.", 409);
-    if (result === "open-incidents") return jsonError(new InventoryUnitIncidentConflict().message, 409);
-    if (!result) return jsonError("La selección contiene registros que no existen en esta empresa. No se aplicó ningún cambio.", 404);
+    if (result === "family-category" || result === "open-incidents" || !result) {
+      const status = result === "family-category" || result === "open-incidents" ? 409 : 404;
+      const error = result === "family-category"
+        ? "La selección incluye variantes. Cambiá la categoría desde Variantes. No se aplicó ningún cambio."
+        : result === "open-incidents"
+          ? new InventoryUnitIncidentConflict().message
+          : "La selección contiene registros que no existen en esta empresa. No se aplicó ningún cambio.";
+      if (bulkRunId) {
+        const outcomes: BulkRowOutcome[] = ids.map(id => ({ id, status: "failed", message: error }));
+        const payload = { runId: bulkRunId, status: "FAILED", updated: 0, outcomes, error: `${error} Operación: ${bulkRunId}.` };
+        await finishBulkOperationRun({ id: bulkRunId, status: "FAILED", outcomes, response: { payload, httpStatus: status } });
+        activeBulkRunId = null;
+      }
+      return Response.json({ error: bulkRunId ? `${error} Operación: ${bulkRunId}.` : error, runId: bulkRunId, status: "FAILED", outcomes: bulkRunId ? ids.map(id => ({ id, status: "failed", message: error })) : undefined }, { status });
+    }
     for (const row of result) {
       const audit = auditChanges(row, { ...row, ...data }, Object.keys(data));
       if (audit) await recordAudit({ context: auth.context, action: "update", entity: isUnits ? "InventoryUnit" : "InventoryItem", entityId: row.id, summary: "Edición masiva de inventario sobre selección explícita", detail: { changes: audit } });
@@ -638,6 +682,13 @@ export async function POST(request: Request) {
       const warning = inventoryPriceWarning({ ...merged, listFromPrice: 0, wholesaleFromPrice: 0 });
       return warning ? [`${(row as { name: string }).name}: ${warning}`] : [];
     });
+    if (bulkRunId) {
+      const outcomes: BulkRowOutcome[] = ids.map(id => ({ id, status: "succeeded" }));
+      const payload = { runId: bulkRunId, status: "COMPLETED", updatedIds: ids, updated: ids.length, warnings, outcomes };
+      await finishBulkOperationRun({ id: bulkRunId, status: "COMPLETED", outcomes, response: { payload, httpStatus: 200 } });
+      activeBulkRunId = null;
+      return Response.json(payload);
+    }
     return Response.json({ updatedIds: ids, updated: ids.length, warnings });
   }
 
@@ -1282,6 +1333,18 @@ export async function POST(request: Request) {
 
   return jsonError("Operación de inventario desconocida.", 400);
   } catch (error) {
+    if (activeBulkRunId) {
+      const run = await db.bulkOperationRun.findUnique({ where: { id: activeBulkRunId }, select: { requestedIds: true } }).catch(() => null);
+      const ids = Array.isArray(run?.requestedIds) ? run.requestedIds.filter((id): id is string => typeof id === "string") : [];
+      const outcomes: BulkRowOutcome[] = ids.map(id => ({ id, status: "unknown", message: "La solicitud terminó sin confirmación; consultá el estado antes de reintentar." }));
+      await finishBulkOperationRun({
+        id: activeBulkRunId,
+        status: "INCOMPLETE",
+        outcomes,
+        response: { payload: { runId: activeBulkRunId, status: "INCOMPLETE", outcomes, error: "La operación quedó sin confirmación." }, httpStatus: 500 },
+      }).catch(() => undefined);
+      return Response.json({ runId: activeBulkRunId, status: "INCOMPLETE", outcomes, error: `La operación quedó sin confirmación. Consultá el estado antes de reintentar. Operación: ${activeBulkRunId}.` }, { status: 500 });
+    }
     if (error instanceof InventoryOriginError) return jsonError(error.message, error.status);
     throw error;
   }

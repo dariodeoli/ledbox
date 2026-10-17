@@ -45,9 +45,10 @@ export function InventoryBulkEditor({ target, selection, taxonomy, onSaved, onCl
     if (!Object.keys(changes).length) { setError("Elegí al menos un campo para cambiar o vaciar."); return; }
     if (changes.subcategory !== undefined && changes.category === undefined) { setError("La subcategoría se elige junto con su categoría: cambiá también la Categoría."); return; }
     setBusy(true);
-    const result = await adminSend<{ updated: number; warnings?: string[] }>("/api/admin/inventory", { kind: target === "items" ? "bulk-items" : "bulk-units", ids: selection.map(row => row.id), changes });
+    const result = await adminSend<{ updated?: number; warnings?: string[]; status?: string; runId?: string }>("/api/admin/inventory", { kind: target === "items" ? "bulk-items" : "bulk-units", ids: selection.map(row => row.id), changes }, "POST", { ...(target === "items" ? { idempotencyKey: true } : {}) });
     setBusy(false);
     if (!result.ok) { setError(result.error); return; }
+    if (result.data.updated === undefined) { setError(`La operación ${result.data.status === "IN_PROGRESS" ? "sigue en curso" : "quedó sin confirmación"}${result.data.runId ? ` (id ${result.data.runId})` : ""}. Consultá el estado antes de volver a intentarla.`); return; }
     setNotice(`${result.data.updated} registros guardados. Solo se modificó la selección indicada. ${(result.data.warnings ?? []).join(" ")}`.trim());
     setDrafts({}); onSaved();
   }

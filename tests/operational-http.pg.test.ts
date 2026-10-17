@@ -65,7 +65,7 @@ test("API operativa: estados concurrentes, lote atómico, renombre público y pe
       const loose = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: org, name: "MantelQA", category: "Textil", listPrice: 50 } });
       const before = await db.inventoryItem.findMany({ where: { organizationId: org }, orderBy: { id: "asc" }, select: { id: true, categoryId: true, category: true, listPrice: true } });
       const categories = await db.inventoryCategory.count({ where: { organizationId: org } });
-      const r = await inventory({ kind: "bulk-items", ids: [loose.id, item.id], changes: { category: "Nueva inválida", listPrice: 999 } });
+      const r = await inventory({ kind: "bulk-items", ids: [loose.id, item.id], changes: { category: "Nueva inválida", listPrice: 999 }, idempotencyKey: randomUUID() });
       assert.equal(r.status, 409); assert.match(r.data.error, /Variantes/);
       assert.deepEqual(await db.inventoryItem.findMany({ where: { organizationId: org }, orderBy: { id: "asc" }, select: { id: true, categoryId: true, category: true, listPrice: true } }), before);
       assert.equal(await db.inventoryCategory.count({ where: { organizationId: org } }), categories);

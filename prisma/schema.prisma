@@ -191,6 +191,7 @@ model Organization {
   bankStatements        BankStatement[]
   bankStatementRows     BankStatementRow[]
   idempotencyKeys       IdempotencyKey[]
+  bulkOperationRuns     BulkOperationRun[]
   teamInvitations       TeamInvitation[]
   invoices              Invoice[]
   purchaseInvoices      PurchaseInvoice[]
@@ -2539,6 +2540,39 @@ model IdempotencyKey {
   @@unique([organizationId, scope, key])
   @@index([expiresAt])
   @@index([organizationId, createdAt])
+}
+
+enum BulkOperationRunStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  INCOMPLETE
+}
+
+/// Snapshot durable de una ejecución de acción masiva y sus resultados por ID.
+/// El actor se copia para que la evidencia sobreviva a cambios/bajas de membresía.
+model BulkOperationRun {
+  id             String                 @id
+  organizationId String
+  operation      String
+  actorId        String
+  actorName      String
+  actorEmail     String
+  actorRole      AdminRole
+  idempotencyKey String
+  requestHash    String
+  requestedIds   Json
+  outcomes       Json?
+  response       Json?
+  status         BulkOperationRunStatus @default(IN_PROGRESS)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  completedAt    DateTime?
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status, createdAt])
 }
 
 /**
