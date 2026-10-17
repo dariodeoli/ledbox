@@ -6,8 +6,8 @@ import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { ADMIN_ROOT_ID } from "@/lib/admin-theme";
 import { moduleHelpFor } from "@/lib/module-help";
+import { AdminButton, AdminDialog, AdminIconButton } from "@/components/ui";
 import { AdminIcon } from "./AdminIcons";
-import { AdminButton, AdminDialog, AdminIconButton } from "./AdminUI";
 
 /**
  * Ayuda contextual del módulo («¿Qué es esto?»): botón de interrogación junto al
