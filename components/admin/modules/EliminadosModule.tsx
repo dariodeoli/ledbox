@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { kpiState } from "@/components/admin/kpi-state";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { formatDateTime, formatNumber } from "@/lib/admin-format";
@@ -22,8 +22,10 @@ import { useAdminNarrowViewport } from "../AdminBoard";
 import { AdminCardGrid, type AdminCardData } from "../AdminCards";
 import { AdminIcon } from "../AdminIcons";
 import { DayField, SelectField } from "../AdminFields";
-import { AdminBadge, AdminButton, AdminCell, AdminDataState, AdminEmpty, AdminKpi, AdminKpis, AdminLoadingRows, AdminNote, AdminRow, AdminSelect, AdminTable, AdminToolbar } from "../AdminUI";
+import { AdminBadge, AdminButton, AdminCell, AdminDataState, AdminDialog, AdminEmpty, AdminKpi, AdminKpis, AdminLoadingRows, AdminNote, AdminRow, AdminSelect, AdminTable, AdminToolbar } from "../AdminUI";
 import { TrashBlockersNote, TrashDialog, runTrashAction, type TrashDialogMode } from "../TrashDialogs";
+import { RowCheck } from "./InventoryParts";
+import { restoreTrashBatch, type RestoreOutcome } from "@/lib/bulk-restore";
 
 /**
  * Ajustes → Eliminados (docs/PAPELERA.md §UI): lo que se mandó a la papelera, con quién y
@@ -58,11 +60,52 @@ function EliminadosView() {
   const [target, setTarget] = useState<Target | null>(null);
   const [busyKey, setBusyKey] = useState("");
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [confirmRestore, setConfirmRestore] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreReport, setRestoreReport] = useState<RestoreOutcome[]>([]);
 
   const all = useMemo(() => trash.data?.items ?? [], [trash.data]);
   const purgeDays = trash.data?.purgeDays ?? null;
   const rows = useMemo(() => filterTrashItems(all, { type, by, from, to }), [all, type, by, from, to]);
   const filtersActive = type !== "ALL" || by !== "ALL" || Boolean(from) || Boolean(to);
+  const selectionScope = `${type}|${by}|${from}|${to}`;
+  useEffect(() => { setSelected(new Set()); setRestoreReport([]); }, [selectionScope]);
+  const eligibleRows = rows.filter((item) => isTrashEntityType(item.type) && !item.anonymized);
+  const selectedRows = rows.filter((item) => selected.has(`${item.type}:${item.id}`));
+
+  function toggleSelected(item: TrashItem) {
+    if (!isTrashEntityType(item.type) || item.anonymized || restoring) return;
+    const id = `${item.type}:${item.id}`;
+    setSelected((previous) => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+    setRestoreReport([]);
+  }
+
+  function selectFiltered() {
+    setSelected(new Set(eligibleRows.map((item) => `${item.type}:${item.id}`)));
+    setRestoreReport([]);
+  }
+
+  async function restoreSelected() {
+    if (restoring || !selectedRows.length) return;
+    setRestoring(true); setConfirmRestore(false); setMessage(null); setRestoreReport([]);
+    const outcomes = await restoreTrashBatch(selectedRows.map((item) => ({
+      key: `${item.type}:${item.id}`, id: item.id, name: item.name,
+      restorable: isTrashEntityType(item.type) && !item.anonymized,
+    })), async (candidate) => {
+      const item = selectedRows.find((row) => `${row.type}:${row.id}` === candidate.key)!;
+      const result = await runTrashAction(item.type as TrashEntityType, item.id, "restore");
+      return result.ok ? { ok: true } : { ok: false, uncertain: result.uncertain, error: result.error };
+    });
+    setRestoreReport(outcomes);
+    setSelected((previous) => {
+      const next = new Set(previous);
+      for (const outcome of outcomes) if (outcome.status === "success") next.delete(outcome.candidate.key);
+      return next;
+    });
+    setRestoring(false);
+    if (outcomes.some((outcome) => outcome.status === "success")) trash.reload();
+  }
 
   const typeOptions = useMemo(
     () => [
@@ -187,6 +230,9 @@ function EliminadosView() {
 
       <div className="admin-trash-toolbar">
       <AdminToolbar>
+        <AdminButton disabled={!eligibleRows.length || restoring} onClick={selectFiltered}>Seleccionar todos los filtrados</AdminButton>
+        <AdminButton disabled={!selectedRows.length || restoring} onClick={() => setConfirmRestore(true)}>Restaurar seleccionados ({formatNumber(selectedRows.length)})</AdminButton>
+        {selectedRows.length ? <AdminButton icon="close" disabled={restoring} onClick={() => { setSelected(new Set()); setRestoreReport([]); }}>Quitar selección</AdminButton> : null}
         <SelectField
           label="Vaciar automáticamente"
           help="El plazo corre desde la eliminación. Al abrir esta pantalla se revisan los vencidos en lotes; no hay un horario garantizado. Los bloqueados y el historial contable se conservan. Nunca mantiene el vaciado apagado."
@@ -215,6 +261,13 @@ function EliminadosView() {
       </div>
 
       {message ? <AdminNote tone={message.tone}>{message.text}</AdminNote> : null}
+      {restoreReport.length ? <AdminNote tone={restoreReport.some((row) => row.status === "failed" || row.status === "unknown") ? "warn" : "ok"}>
+        {restoreReport.filter((row) => row.status === "success").length} restaurados · {restoreReport.filter((row) => row.status === "failed").length} fallidos · {restoreReport.filter((row) => row.status === "unknown").length} por confirmar.
+        {restoreReport.some((row) => row.status === "unknown") ? " No se reintentó automáticamente; actualizá la lista antes de repetir." : ""}
+      </AdminNote> : null}
+      {restoreReport.length ? <ul className="admin-overdue-list" aria-label="Detalle de restauración en lote">
+        {restoreReport.map((outcome) => <li key={outcome.candidate.key}><strong>{outcome.candidate.name}:</strong> {outcome.message}</li>)}
+      </ul> : null}
 
       <AdminDataState
         loading={trash.loading}
@@ -229,12 +282,16 @@ function EliminadosView() {
         {rows.length === 0 ? (
           <AdminEmpty icon="search" title="Sin resultados" hint="Probá con otro filtro o ampliá el rango de fechas." />
         ) : compact ? (
-          <AdminCardGrid label="Eliminados" cards={cards} />
+          <AdminCardGrid label="Eliminados" cards={cards.map((card, index) => ({ ...card, fields: [
+            { label: "Seleccionar para restaurar", value: <RowCheck checked={selected.has(key(rows[index]))} disabled={restoring || rows[index].anonymized || !isTrashEntityType(rows[index].type)} label={`Seleccionar ${rows[index].name} para restaurar`} onToggle={() => toggleSelected(rows[index])} /> },
+            ...(card.fields ?? []),
+          ] }))} />
         ) : (
           <AdminTable
             view="eliminados"
             label="Eliminados"
             columns={[
+              { label: "Seleccionar" },
               { label: "Tipo" },
               { label: "Nombre" },
               { label: "Eliminado por" },
@@ -247,6 +304,7 @@ function EliminadosView() {
           >
             {rows.map((item) => (
               <AdminRow key={key(item)}>
+                <AdminCell><RowCheck checked={selected.has(key(item))} disabled={restoring || item.anonymized || !isTrashEntityType(item.type)} label={`Seleccionar ${item.name} para restaurar`} onToggle={() => toggleSelected(item)} /></AdminCell>
                 <AdminCell title={typeLabel(item.type)}>
                   <span className="admin-trash-type">
                     {isTrashEntityType(item.type) ? <AdminIcon name={TRASH_ENTITIES[item.type].icon} size={14} /> : null}
@@ -287,6 +345,11 @@ function EliminadosView() {
           }}
         />
       ) : null}
+      {confirmRestore ? <AdminDialog title="Restaurar selección" description={`${formatNumber(selectedRows.length)} registros seleccionados. Se restauran uno por uno y vuelven a archivados.`}
+        onClose={() => { if (!restoring) setConfirmRestore(false); }}
+        footer={<><AdminButton disabled={restoring} onClick={() => setConfirmRestore(false)}>Cancelar</AdminButton><AdminButton variant="primary" busy={restoring} onClick={() => void restoreSelected()}>Confirmar restauración</AdminButton></>}>
+        <AdminNote>Los registros anonimizados no se pueden restaurar. Si un resultado queda por confirmar, el lote se detiene para evitar repetir la acción; revisá la lista antes de reintentar.</AdminNote>
+      </AdminDialog> : null}
     </div>
   );
 }
