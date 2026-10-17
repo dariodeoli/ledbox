@@ -141,6 +141,7 @@ test("incidentes: resolver no revierte bajas y la edición de unidades no libera
       await db.adminMembership.create({ data: { id: randomUUID(), adminUserId: userId, organizationId: org, role: "OWNER" } });
       const cookie = `ledbox_session=${(await createSession(user, org)).jwt}`;
       const call = (body: unknown) => fetch(`${base}/api/admin/inventory`, { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const incidentCall = (body: unknown) => fetch(`${base}/api/admin/inventory/incidents`, { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const s = await seed(), clean = await seed(), foreign = await seed(otherOrg), a = await s.open("REPAIR");
       assert.equal((await call({ kind: "unit-update", id: s.unit.id, status: "AVAILABLE", notes: "No debe guardarse" })).status, 409);
       assert.equal(await s.status(), "MAINTENANCE"); assert.equal(await s.free(), 0);
@@ -149,6 +150,19 @@ test("incidentes: resolver no revierte bajas y la edición de unidades no libera
       for (const id of [s.unit.id, clean.unit.id]) assert.equal((await db.inventoryUnit.findUniqueOrThrow({ where: { id } })).notes, null);
       assert.equal((await call({ kind: "unit-update", id: foreign.unit.id, status: "AVAILABLE" })).status, 404);
       assert.equal((await call({ kind: "bulk-units", ids: [clean.unit.id, foreign.unit.id], changes: { notes: "No" } })).status, 404);
+      const foreignIncident = await createIncident({ organizationId: otherOrg, inventoryId: foreign.item.id, unitId: foreign.unit.id, kind: "REPAIR", quantity: 1 });
+      assert.ok(foreignIncident.ok);
+      assert.equal((await incidentCall({ kind: "transition", id: foreignIncident.incident.id, to: "IN_REPAIR" })).status, 404);
+      assert.equal((await db.inventoryIncident.findUniqueOrThrow({ where: { id: foreignIncident.incident.id } })).status, "OPEN");
+      const auditIncident = await incidentCall({ kind: "create", inventoryId: s.item.id, incidentKind: "DAMAGE", unitId: s.unit.id, notes: "Daño QA" });
+      assert.equal(auditIncident.status, 201);
+      const auditIncidentId = (await auditIncident.json() as { incident: { id: string } }).incident.id;
+      assert.equal((await incidentCall({ kind: "transition", id: auditIncidentId, to: "IN_REPAIR", notes: "En reparación QA" })).status, 200);
+      assert.equal((await incidentCall({ kind: "transition", id: auditIncidentId, to: "RESOLVED", notes: "Disponible QA" })).status, 200);
+      const incidentAudit = await db.auditLog.findMany({ where: { organizationId: org, entity: "InventoryIncident", entityId: auditIncidentId }, select: { action: true, detail: true } });
+      assert.deepEqual(incidentAudit.map(row => row.action).sort(), ["create", "status", "status"]);
+      assert.match(JSON.stringify(incidentAudit), /IN_REPAIR|RESOLVED/);
+      assert.equal((await db.inventoryUnit.findUniqueOrThrow({ where: { id: s.unit.id } })).status, "MAINTENANCE", "la otra reparación abierta aún retiene la unidad");
       assert.equal((await call({ kind: "unit-update", id: s.unit.id, status: "RETIRED" })).status, 200);
       await close(a.id, "RESOLVED"); assert.equal(await s.status(), "RETIRED");
       assert.equal((await call({ kind: "unit-update", id: s.unit.id, status: "AVAILABLE" })).status, 200);
