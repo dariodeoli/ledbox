@@ -55,3 +55,30 @@ export async function createInventoryCount(
     include: { lines: { orderBy: [{ productName: "asc" }, { warehouseCode: "asc" }] } },
   });
 }
+
+/** Reads matching snapshots only inside the active organization; filtered reads return matching lines only. */
+export async function listInventoryCountHistory(
+  tx: Tx,
+  options: { organizationId: string; take: number; inventoryId?: string; warehouseId?: string },
+) {
+  const lineWhere = {
+    organizationId: options.organizationId,
+    ...(options.inventoryId ? { inventoryId: options.inventoryId } : {}),
+    ...(options.warehouseId ? { warehouseId: options.warehouseId } : {}),
+  };
+  const filtered = Boolean(options.inventoryId || options.warehouseId);
+  return tx.inventoryCountSession.findMany({
+    where: {
+      organizationId: options.organizationId,
+      ...(filtered ? { lines: { some: lineWhere } } : {}),
+    },
+    orderBy: [{ countedAt: "desc" }, { id: "desc" }],
+    take: options.take,
+    include: {
+      lines: {
+        ...(filtered ? { where: lineWhere } : {}),
+        orderBy: [{ productName: "asc" }, { warehouseCode: "asc" }],
+      },
+    },
+  });
+}
