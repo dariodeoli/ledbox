@@ -1920,6 +1920,8 @@ model InventoryItem {
   /// «Visible en la web» (issue #111): la landing es estática hoy; el flag queda
   /// listo para el catálogo dinámico. Por defecto, nada se publica solo.
   visibleOnWeb       Boolean              @default(false)
+  /// Marca administrativa independiente para el catálogo de venta; aún no publica ni altera alquiler/stock.
+  saleCatalogEnabled Boolean              @default(false)
   /// Alcance en la tienda web de la empresa: HIDDEN, RETAIL (cliente final),
   /// WHOLESALE (mayorista) o BOTH. `visibleOnWeb` se mantiene sincronizado
   /// (= alcance distinto de HIDDEN). NULL = fila vieja: rige `visibleOnWeb`.
