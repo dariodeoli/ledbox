@@ -372,7 +372,7 @@ export function InventarioModule() {
         >
           Incidentes{incidentCount == null ? "" : ` (${formatNumber(incidentCount)})`}
         </AdminButton>
-        <InventoryCountHistory />
+        <InventoryCountHistory writable={writable} />
         <span className="admin-inv-actions-end admin-export">
           <AdminButtonLink icon="download" href="/api/admin/inventory/export" download title="Todas las unidades físicas de la empresa, una fila por unidad con su depósito y ubicación; incluye retiradas y productos archivados">
             Unidades por depósito
