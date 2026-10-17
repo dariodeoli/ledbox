@@ -209,6 +209,7 @@ model Organization {
   inventoryFamilies     InventoryFamily[]
   eventVenues           EventVenue[]
   warehouses            Warehouse[]
+  externalNeeds         EventExternalNeed[]
 
   @@index([active, createdAt])
   @@index([planId])
@@ -922,6 +923,7 @@ model Event {
   incidents         InventoryIncident[]
   tasks             EventTask[]
   supplierJobs      SupplierJob[]
+  externalNeeds     EventExternalNeed[]
   expenses          Expense[]
   invoices          Invoice[]
 
@@ -933,6 +935,7 @@ model Event {
   anonymizedAt  DateTime?
   deliveryNotes DeliveryNote[]
 
+  @@unique([id, organizationId])
   @@index([startsAt, status])
   @@index([clientId, createdAt])
   @@index([organizationId, startsAt])
@@ -1577,6 +1580,7 @@ model Supplier {
   createdAt        DateTime          @default(now())
   organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   jobs             SupplierJob[]
+  suggestedNeeds   EventExternalNeed[]
   expenses         Expense[]
   purchaseInvoices PurchaseInvoice[]
   inventoryItems   InventoryItem[]
@@ -1592,6 +1596,7 @@ model Supplier {
   anonymizedAt DateTime?
 
   @@index([category, active])
+  @@unique([id, organizationId])
   @@index([organizationId, name])
   @@index([organizationId, deletedAt])
 }
@@ -1959,6 +1964,7 @@ model InventoryItem {
   updatedAt          DateTime             @updatedAt
   organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignments        EventInventory[]
+  externalNeeds      EventExternalNeed[]
   /// Combo: componentes que arma (este ítem es el padre) y combos que lo usan.
   components         InventoryComponent[] @relation("ComboParent")
   usedInCombos       InventoryComponent[] @relation("ComboComponent")
@@ -2021,6 +2027,7 @@ model InventoryItem {
   @@index([status, category])
   @@index([organizationId, name])
   @@index([organizationId, categoryId])
+  @@unique([id, organizationId])
   @@index([organizationId, deletedAt])
 }
 
@@ -2393,6 +2400,38 @@ model CatalogAccessRequest {
 
   @@index([organizationId, status, createdAt])
   @@index([organizationId, email])
+}
+
+enum EventExternalNeedStatus {
+  OPEN
+  CANCELLED
+}
+
+/// Solicitud operativa de suministro externo; nunca representa cobertura ni stock.
+model EventExternalNeed {
+  id                  String                  @id
+  organizationId      String
+  eventId             String
+  inventoryId         String
+  requestedQuantity   Int
+  startsAt            DateTime
+  endsAt              DateTime
+  preferredSupplierId String?
+  status              EventExternalNeedStatus @default(OPEN)
+  revision            Int                     @default(1)
+  notes               String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  createdById         String
+  updatedById         String
+  organization        Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  event               Event                   @relation(fields: [eventId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  inventory           InventoryItem           @relation(fields: [inventoryId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  preferredSupplier   Supplier?               @relation(fields: [preferredSupplierId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@index([organizationId, eventId, status, startsAt])
+  @@index([organizationId, inventoryId])
+  @@index([preferredSupplierId])
 }
 
 model EventInventory {
