@@ -30,6 +30,12 @@ export function PortalComparisonView({ initial, token }: { initial: PublicQuoteC
     {group.selectedBudgetId ? <section className="portal-card" role="status"><h2>Alternativa elegida</h2><p>{group.alternatives.find((q) => q.id === group.selectedBudgetId)?.label}. La elección quedó registrada; las demás alternativas no pueden aprobarse.</p></section> : null}
     <form onSubmit={approve}>
       <fieldset className="portal-comparison-choices"><legend>Elegí una alternativa</legend>
+      {!group.selectedBudgetId ? <div className="portal-comparison-selector" aria-label="Selector de alternativas">
+        {group.alternatives.map((quote, index) => <label className="portal-comparison-selector-option" key={quote.id}>
+          <RadioControl name="alternative" value={quote.id} checked={choice === quote.id} onChange={() => setChoice(quote.id)} disabled={busy} required />
+          <span><strong>{String.fromCharCode(65 + index)}</strong><span>{quote.label}</span></span>
+        </label>)}
+      </div> : null}
       <div className="portal-comparison-grid">
         {group.alternatives.map((quote) => <section className="portal-card portal-comparison-option" key={quote.id} aria-labelledby={`alternative-${quote.id}`}>
           <h2 id={`alternative-${quote.id}`}>{quote.label}</h2><p>{quote.title}</p>
@@ -48,7 +54,6 @@ export function PortalComparisonView({ initial, token }: { initial: PublicQuoteC
           {quote.attachments.length || quote.referenceLinks.length ? <h3>Documentos y referencias</h3> : null}
           {quote.attachments.map((file) => <div className="portal-quote-resource" key={file.id}><strong>{file.name}</strong><a href={`${quote.resourcePath}/pdf/${file.id}`} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Ver PDF</a><a href={`${quote.resourcePath}/pdf/${file.id}?download=1`} referrerPolicy="no-referrer">Descargar</a></div>)}
           {quote.referenceLinks.map((link, i) => <p key={i}><a href={link.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{link.label} ↗</a></p>)}
-          {!group.selectedBudgetId ? <label className="portal-comparison-select"><RadioControl name="alternative" value={quote.id} checked={choice === quote.id} onChange={() => setChoice(quote.id)} disabled={busy} required /> Elegir {quote.label}</label> : null}
         </section>)}
       </div>
       </fieldset>

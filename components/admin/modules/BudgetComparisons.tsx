@@ -35,7 +35,7 @@ export function BudgetComparisons({ quotes }: { quotes: AdminBudgetRow[] }) {
   return <>
     <AdminButton icon="budgets" onClick={() => setOpen(true)}>Comparar alternativas</AdminButton>
     {open ? <AdminDialog title="Comparaciones opcionales" onClose={() => setOpen(false)}>
-      <p className="admin-dialog-text">Elegí de 2 a 4 presupuestos vigentes del mismo cliente. Solo se podrá aprobar una alternativa, también desde sus enlaces individuales o firmas. Crear el enlace no envía mensajes ni cambia los estados.</p>
+      <p className="admin-dialog-text">Elegí de 2 a 5 presupuestos vigentes del mismo cliente. Solo se podrá aprobar una alternativa, también desde sus enlaces individuales o firmas. Crear el enlace no envía mensajes ni cambia los estados.</p>
       {groups.loading ? <p>Cargando comparaciones…</p> : null}
       {groups.error ? <AdminNote tone="error">{groups.error}</AdminNote> : null}
       {(groups.data ?? []).map((group) => {
@@ -54,7 +54,7 @@ export function BudgetComparisons({ quotes }: { quotes: AdminBudgetRow[] }) {
       <DateField label="Vencimiento de la comparación" value={expiresAt} required onChange={setExpiresAt} />
       <div className="admin-comparison-candidates">
         {candidates.map((quote) => <div key={quote.id}>
-          <SwitchField label={`Incluir ${quote.title}`} checked={Object.hasOwn(chosen, quote.id)} disabled={busy || (!Object.hasOwn(chosen, quote.id) && ids.length >= 4)} onChange={(checked) => setChosen((rows) => { const next = { ...rows }; if (checked) next[quote.id] = quote.title.slice(0,80); else delete next[quote.id]; return next; })} />
+          <SwitchField label={`Incluir ${quote.title}`} checked={Object.hasOwn(chosen, quote.id)} disabled={busy || (!Object.hasOwn(chosen, quote.id) && ids.length >= 5)} onChange={(checked) => setChosen((rows) => { const next = { ...rows }; if (checked) { const used = new Set(Object.values(rows)); const letter = "ABCDE".split("").find((value) => !used.has(`Alternativa ${value}`)); if (letter) next[quote.id] = `Alternativa ${letter}`; } else delete next[quote.id]; return next; })} />
           <ClientIdentityView client={quote.client} />
           {Object.hasOwn(chosen, quote.id) ? <TextField label={`Nombre de alternativa: ${quote.title}`} value={chosen[quote.id]} maxLength={80} required onChange={(value) => setChosen((rows) => ({ ...rows, [quote.id]: value }))} /> : null}
         </div>)}
