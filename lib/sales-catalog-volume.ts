@@ -12,7 +12,7 @@ export type SalesCatalogVolumeInput = {
 };
 
 type DimensionKey = "altoCm" | "anchoCm" | "largoCm";
-type DimensionParse = { kind: "missing" } | { kind: "valid"; digits: bigint; decimals: number } | { kind: "invalid" };
+type DecimalParse = { kind: "missing" } | { kind: "valid"; digits: bigint; decimals: number } | { kind: "invalid" };
 
 export type SalesCatalogVolumeResult =
   | { status: "missing"; cbm: null }
@@ -23,14 +23,14 @@ export type SalesCatalogVolumeResult =
 
 const DIMENSION_KEYS: DimensionKey[] = ["altoCm", "anchoCm", "largoCm"];
 
-function parsePositiveDecimal(value: number | string | null | undefined): DimensionParse {
+function parseDecimal(value: number | string | null | undefined, allowZero = false): DecimalParse {
   if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) return { kind: "missing" };
   const raw = typeof value === "number" ? String(value) : value.trim();
   // Avoid locale ambiguity and exponent notation in portable JSON inputs.
   if (raw.length > 48 || !/^\d+(?:\.\d+)?$/.test(raw)) return { kind: "invalid" };
   const [whole, fraction = ""] = raw.split(".");
   const digits = BigInt(`${whole}${fraction}`);
-  if (digits <= BigInt(0)) return { kind: "invalid" };
+  if (digits < BigInt(0) || (!allowZero && digits === BigInt(0))) return { kind: "invalid" };
   return { kind: "valid", digits, decimals: fraction.length };
 }
 
@@ -42,7 +42,7 @@ function decimalString(numerator: bigint, decimalPlaces: number): string {
 }
 
 function parseCbm(value: number | string | null | undefined): { kind: "missing" } | { kind: "valid"; value: string } | { kind: "invalid" } {
-  const parsed = parsePositiveDecimal(value);
+  const parsed = parseDecimal(value);
   if (parsed.kind !== "valid") return parsed.kind === "missing" ? parsed : { kind: "invalid" };
   return { kind: "valid", value: decimalString(parsed.digits, parsed.decimals) };
 }
@@ -59,7 +59,7 @@ function calculateDimensionsCbm(dimensions: { digits: bigint; decimals: number }
  * they must agree exactly at their supplied precision; conflicts need review.
  */
 export function resolveSalesCatalogCbm(input: SalesCatalogVolumeInput): SalesCatalogVolumeResult {
-  const dimensionResults = DIMENSION_KEYS.map(key => [key, parsePositiveDecimal(input[key])] as const);
+  const dimensionResults = DIMENSION_KEYS.map(key => [key, parseDecimal(input[key])] as const);
   const invalidDimension = dimensionResults.find(([, parsed]) => parsed.kind === "invalid");
   if (invalidDimension) return { status: "invalid", cbm: null, field: invalidDimension[0] };
 
@@ -88,4 +88,25 @@ export function resolveSalesCatalogCbm(input: SalesCatalogVolumeInput): SalesCat
     source: "dimensions",
     ...(provided.kind === "valid" ? { dimensionsCbm } : {}),
   };
+}
+
+export type SalesCatalogFreightResult =
+  | { status: "missing"; freightUsd: null }
+  | { status: "invalid"; freightUsd: null; field: "cbm" | "usdPerCbm" }
+  | { status: "known"; freightUsd: string };
+
+/** Calculates only CBM × the company's configured USD rate; no default rate is assumed. */
+export function calculateSalesCatalogFreightUsd(
+  cbm: number | string | null | undefined,
+  usdPerCbm: number | string | null | undefined,
+): SalesCatalogFreightResult {
+  const volume = parseDecimal(cbm);
+  if (volume.kind === "invalid") return { status: "invalid", freightUsd: null, field: "cbm" };
+  if (volume.kind === "missing") return { status: "missing", freightUsd: null };
+
+  const rate = parseDecimal(usdPerCbm, true);
+  if (rate.kind === "invalid") return { status: "invalid", freightUsd: null, field: "usdPerCbm" };
+  if (rate.kind === "missing") return { status: "missing", freightUsd: null };
+
+  return { status: "known", freightUsd: decimalString(volume.digits * rate.digits, volume.decimals + rate.decimals) };
 }
