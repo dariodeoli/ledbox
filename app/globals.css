@@ -2197,7 +2197,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--resumen-vencidas { --resumen-vencidas-cols: minmax(7rem, 1.6fr) minmax(6.5rem, 1.2fr) 6rem; --admin-cols: var(--resumen-vencidas-cols); --admin-table-min: 20.5rem; }
 .admin-table--auditoria { --auditoria-cols: 9.5rem minmax(11rem, 1.3fr) 7rem 9.5rem minmax(14rem, 2fr) 4.5rem; --admin-cols: var(--auditoria-cols); --admin-table-min: 60rem; }
 /* Ajustes → Eliminados (papelera): tipo, nombre, quién, fecha, motivo, bloqueos y acciones. */
-.admin-table--eliminados { --trash-cols: 4.25rem minmax(0, 1.7fr) minmax(0, .85fr) 7.5rem minmax(0, .7fr) minmax(0, .9fr) minmax(0, .8fr) 4.25rem; --admin-cols: var(--trash-cols); --admin-table-min: 0; width: 100%; }
+.admin-table--eliminados { --trash-cols: 2.75rem 4.25rem minmax(0, 1.7fr) minmax(0, .85fr) 7.5rem minmax(0, .7fr) minmax(0, .9fr) minmax(0, .8fr) 4.25rem; --admin-cols: var(--trash-cols); --admin-table-min: 0; width: 100%; }
 .admin-trash-page { min-width: 0; }
 .admin-trash-toolbar .admin-toolbar > .admin-field,
 .admin-trash-toolbar .admin-toolbar > .admin-field--filter { flex: 0 1 9rem; min-width: 0; width: 9rem; }

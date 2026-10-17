@@ -274,7 +274,9 @@ test("Eliminados compacta acciones de tabla y conserva texto y click de Restaura
     if (ts.isJsxAttribute(node) && node.name.getText(ast) === "columns" && node.initializer && ts.isJsxExpression(node.initializer) && node.initializer.expression && ts.isArrayLiteralExpression(node.initializer.expression)) headers = node.initializer.expression.elements.length;
     if (ts.isJsxOpeningElement(node) && node.tagName.getText(ast) === "AdminCell") cells++;
     ts.forEachChild(node, countColumns);
-  }; countColumns(ast); assert.equal(headers, 8); assert.equal(cells, headers, "one shared table with matching header/row columns");
+  }; countColumns(ast); assert.equal(headers, 9); assert.equal(cells, headers, "one shared table with matching header/row columns");
+  assert.match(text, /Seleccionar \$\{item\.name\} para restaurar/);
+  assert.match(text, /restoreTrashBatch\(/);
   const code = ts.transpileModule(fn.getText(ast) + ";actions;", { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText;
   for (const compact of [false, true]) {
     const restored: string[] = [];
