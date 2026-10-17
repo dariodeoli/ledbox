@@ -78,6 +78,42 @@ test("#179 reparaciones: aislamiento por empresa, transición inválida y RETIRE
     const trace = await db.inventoryIncident.findMany({ where: { organizationId, unitId: traceUnit.id }, orderBy: { openedAt: "asc" } });
     assert.equal(trace.length, 1, "el daño y su reparación continúan como una sola causa trazable");
     assert.deepEqual([trace[0].kind, trace[0].unitCycle, trace[0].status], ["DAMAGE", damageIncident.unitCycle, "RESOLVED"]);
+
+    const completeTrace = async (unitId: string, sessionCookie: string) => fetch(`${baseUrl}/api/admin/inventory/incidents?unitTrace=${encodeURIComponent(unitId)}`, { headers: { Cookie: sessionCookie } });
+    const availableTrace = await completeTrace(traceUnit.id, cookie);
+    assert.equal(availableTrace.status, 200);
+    const availableHistory = await availableTrace.json() as { unit: { code: string; status: string }; history: Array<{ incidentId: string; action: string; detail: { changes?: { status?: { to?: string } } } | null }> };
+    assert.deepEqual([availableHistory.unit.code, availableHistory.unit.status], [traceUnit.code, "AVAILABLE"]);
+    assert.deepEqual(availableHistory.history.map((entry) => entry.action), ["create", "status", "status"]);
+    assert.deepEqual(availableHistory.history.slice(1).map((entry) => entry.detail?.changes?.status?.to), ["IN_REPAIR", "RESOLVED"]);
+    assert.equal((await completeTrace(traceUnit.id, otherCookie)).status, 404, "la lectura detallada no revela unidades de otra empresa");
+
+    const retiredItem = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId, name: "Equipo retirado QA", category: "QA", quantity: 1 } });
+    const retiredUnit = await db.inventoryUnit.create({ data: { id: randomUUID(), organizationId, inventoryId: retiredItem.id, code: `RET-${randomUUID()}` } });
+    const retiredDamage = await call({ kind: "create", inventoryId: retiredItem.id, incidentKind: "DAMAGE", unitId: retiredUnit.id, notes: "Daño QA para baja" });
+    assert.equal(retiredDamage.status, 201);
+    const retiredIncident = (await retiredDamage.json() as { incident: { id: string } }).incident;
+    assert.equal((await call({ kind: "transition", id: retiredIncident.id, to: "IN_REPAIR" })).status, 200);
+    assert.equal((await call({ kind: "transition", id: retiredIncident.id, to: "WRITTEN_OFF", notes: "No recuperable en QA" })).status, 200);
+    const retiredResult = await completeTrace(retiredUnit.id, cookie);
+    const retiredHistory = await retiredResult.json() as { unit: { status: string }; incidents: Array<{ kind: string; status: string }>; history: Array<{ detail: { changes?: { status?: { to?: string } } } | null }> };
+    assert.equal(retiredResult.status, 200);
+    assert.equal(retiredHistory.unit.status, "RETIRED");
+    assert.deepEqual(retiredHistory.incidents.map((incident) => [incident.kind, incident.status]), [["DAMAGE", "WRITTEN_OFF"]]);
+    assert.deepEqual(retiredHistory.history.slice(1).map((entry) => entry.detail?.changes?.status?.to), ["IN_REPAIR", "WRITTEN_OFF"]);
+
+    const lostItem = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId, name: "Equipo perdido QA", category: "QA", quantity: 1 } });
+    const lostUnit = await db.inventoryUnit.create({ data: { id: randomUUID(), organizationId, inventoryId: lostItem.id, code: `PER-${randomUUID()}` } });
+    const missing = await call({ kind: "create", inventoryId: lostItem.id, incidentKind: "MISSING", unitId: lostUnit.id, notes: "Faltante QA" });
+    assert.equal(missing.status, 201);
+    const missingIncident = (await missing.json() as { incident: { id: string } }).incident;
+    assert.equal((await call({ kind: "transition", id: missingIncident.id, to: "WRITTEN_OFF", notes: "Pérdida confirmada en QA" })).status, 200);
+    const lostResult = await completeTrace(lostUnit.id, cookie);
+    const lostHistory = await lostResult.json() as { unit: { status: string }; incidents: Array<{ kind: string; status: string }>; history: Array<{ detail: { changes?: { status?: { to?: string } } } | null }> };
+    assert.equal(lostResult.status, 200);
+    assert.equal(lostHistory.unit.status, "LOST");
+    assert.deepEqual(lostHistory.incidents.map((incident) => [incident.kind, incident.status]), [["MISSING", "WRITTEN_OFF"]]);
+    assert.deepEqual(lostHistory.history.slice(1).map((entry) => entry.detail?.changes?.status?.to), ["WRITTEN_OFF"]);
   } finally {
     await db.auditLog.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } });
     await db.inventoryIncident.deleteMany({ where: { organizationId: { in: [organizationId, otherOrganizationId] } } });

@@ -50,6 +50,56 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
   const { organizationId } = auth.context;
   const params = new URL(request.url).searchParams;
+  // Lectura causal completa de una unidad: su estado actual, los incidentes de
+  // todos sus ciclos y la auditoría de cada alta/transición dentro de la empresa.
+  const traceUnitId = params.get("unitTrace");
+  if (traceUnitId) {
+    const trace = await db.$transaction(async (tx) => {
+      const unit = await tx.inventoryUnit.findFirst({
+        where: { id: traceUnitId, organizationId },
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          incidentCycle: true,
+          inventory: { select: { id: true, name: true, sku: true } },
+        },
+      });
+      if (!unit) return null;
+      const incidents = await tx.inventoryIncident.findMany({
+        where: { organizationId, unitId: unit.id },
+        orderBy: [{ openedAt: "asc" }, { id: "asc" }],
+        include: {
+          inventory: { select: { id: true, name: true, sku: true, _count: { select: { units: true } } } },
+          unit: { select: { id: true, code: true, status: true } },
+          event: { select: { id: true, name: true } },
+        },
+      });
+      const audit = incidents.length === 0 ? [] : await tx.auditLog.findMany({
+        where: {
+          organizationId,
+          entity: "InventoryIncident",
+          entityId: { in: incidents.map((incident) => incident.id) },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true, entityId: true, action: true, actorName: true, summary: true, detail: true, createdAt: true },
+      });
+      return {
+        unit,
+        incidents,
+        history: audit.map(({ entityId, action, actorName, summary, detail, createdAt }) => ({
+          incidentId: entityId,
+          action,
+          actorName,
+          summary,
+          detail,
+          occurredAt: createdAt,
+        })),
+      };
+    }, { isolationLevel: "RepeatableRead" });
+    if (!trace) return jsonError("La unidad no existe en esta empresa.", 404);
+    return Response.json(trace);
+  }
   // `?units=<inventoryId>`: unidades con código que se pueden marcar dañadas o faltantes
   // (las que ya figuran dañadas, perdidas o retiradas no se ofrecen).
   const unitsOf = params.get("units");
