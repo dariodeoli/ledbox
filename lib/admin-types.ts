@@ -2344,6 +2344,7 @@ export const AUDIT_ENTITIES = [
   "InventoryFamily",
   "Warehouse",
   "EventInventory",
+  "EventExternalNeed",
   "EventTask",
   "Promoter",
   "AdminUser",
