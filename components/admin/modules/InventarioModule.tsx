@@ -48,6 +48,7 @@ import { InventoryList } from "./InventoryList";
 import { TrashDialog, trashMenuItems } from "../TrashDialogs";
 import { KIND_OPTIONS, dayRangeLabel, priceText } from "./InventoryParts";
 import { supplierOptions, warehouseOptions } from "./InventoryTaxonomy";
+import { InventoryCountHistory } from "./InventoryCountHistory";
 
 /** Vistas del inventario: lista densa, cuadrícula compacta y «Por categoría» (rediseño E2). */
 const INVENTARIO_VIEWS = ["list", "grid", "category"] as const;
@@ -371,6 +372,7 @@ export function InventarioModule() {
         >
           Incidentes{incidentCount == null ? "" : ` (${formatNumber(incidentCount)})`}
         </AdminButton>
+        <InventoryCountHistory />
         <span className="admin-inv-actions-end admin-export">
           <AdminButtonLink icon="download" href="/api/admin/inventory/export" download title="Todas las unidades físicas de la empresa, una fila por unidad con su depósito y ubicación; incluye retiradas y productos archivados">
             Unidades por depósito
