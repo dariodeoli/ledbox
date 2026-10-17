@@ -87,6 +87,16 @@ test("physical count history filters tenant-scoped snapshots and returns only th
   await listInventoryCountHistory(tx, { organizationId: "tenant-a", take: 50, inventoryId: "foreign-item-id" });
   assert.deepEqual(calls[0].where, { organizationId: "tenant-a", lines: { some: { organizationId: "tenant-a", inventoryId: "foreign-item-id" } } });
 });
+test("physical count creation and its audit entry share one transaction", () => {
+  const route = readFileSync("app/api/admin/inventory/counts/route.ts", "utf8");
+  const transaction = route.match(/db\.\$transaction\(async \(tx\) => \{([\s\S]*?)\n    \}\);/);
+  assert(transaction, "count endpoint must use an async transaction callback");
+  const body = transaction[1];
+  assert.match(body, /await createInventoryCount\(tx,/);
+  assert.match(body, /await recordAudit\([\s\S]*?\}, tx\);/);
+  assert.ok(body.indexOf("await createInventoryCount(tx,") < body.indexOf("await recordAudit("), "audit follows the persisted snapshot inside the same transaction");
+  assert.match(route, /\n    \}\);\n    return Response\.json\(\{ session \}, \{ status: 201 \}\);/);
+});
 test("count confirmation refuses foreign or combo items without writes", async () => {
   for (const mode of ["foreign", "combo"]) { const f = confirmationFixture(mode); await assert.rejects(f.confirm(1)); assert.equal(f.state().creates, 0); assert.equal(f.state().audits.length, 0); }
 });

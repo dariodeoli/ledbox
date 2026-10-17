@@ -38,15 +38,18 @@ export async function POST(request: Request) {
   const notes = typeof body.notes === "string" ? body.notes.trim() : "";
   if (notes.length > 1000) return jsonError("Las notas no pueden superar 1000 caracteres.", 400);
   try {
-    const session = await db.$transaction((tx) => createInventoryCount(tx, {
-      organizationId: auth.context.organizationId,
-      actor: { id: auth.context.user.id, name: auth.context.user.name, email: auth.context.user.email },
-      lines: lines as NonNullable<(typeof lines)[number]>[], notes,
-    }));
-    await recordAudit({
-      context: auth.context, action: "create", entity: "InventoryCountSession", entityId: session.id,
-      summary: `Registró un conteo físico de ${session.lines.length} producto${session.lines.length === 1 ? "" : "s"}`,
-      detail: { fields: { lineas: session.lines.length, discrepancias: session.lines.filter((line) => line.discrepancy !== 0).length } },
+    const session = await db.$transaction(async (tx) => {
+      const created = await createInventoryCount(tx, {
+        organizationId: auth.context.organizationId,
+        actor: { id: auth.context.user.id, name: auth.context.user.name, email: auth.context.user.email },
+        lines: lines as NonNullable<(typeof lines)[number]>[], notes,
+      });
+      await recordAudit({
+        context: auth.context, action: "create", entity: "InventoryCountSession", entityId: created.id,
+        summary: `Registró un conteo físico de ${created.lines.length} producto${created.lines.length === 1 ? "" : "s"}`,
+        detail: { fields: { lineas: created.lines.length, discrepancias: created.lines.filter((line) => line.discrepancy !== 0).length } },
+      }, tx);
+      return created;
     });
     return Response.json({ session }, { status: 201 });
   } catch (error) {

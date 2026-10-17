@@ -13,6 +13,7 @@ test("conteo físico guarda actor, fecha y discrepancia sin modificar stock", { 
   for (let i = 0; i < 2; i++) execFileSync("psql", [psqlUrl.toString(), "-v", "ON_ERROR_STOP=1", "-q", "-f", file], { stdio: "pipe" });
   const { db } = await import("../lib/server/db");
   const { createInventoryCount, listInventoryCountHistory, InventoryCountInputError } = await import("../lib/server/inventory-counts");
+  const { recordAudit } = await import("../lib/server/audit");
   const organizationId = randomUUID(); const otherOrganizationId = randomUUID();
   await db.organization.create({ data: { id: organizationId, name: "Conteos QA", slug: `conteo-${organizationId}` } });
   await db.organization.create({ data: { id: otherOrganizationId, name: "Otro tenant QA", slug: `conteo-${otherOrganizationId}` } });
@@ -24,10 +25,19 @@ test("conteo físico guarda actor, fecha y discrepancia sin modificar stock", { 
   const units = await Promise.all(["AVAILABLE", "AVAILABLE", "MAINTENANCE"].map((status, i) => db.inventoryUnit.create({ data: { id: randomUUID(), organizationId, inventoryId: item.id, warehouseId: warehouse.id, code: `QC-${organizationId.slice(0, 5)}-${i}`, status: status as "AVAILABLE" | "MAINTENANCE" } })));
   await db.inventoryUnit.create({ data: { id: randomUUID(), organizationId, inventoryId: item.id, warehouseId: warehouse.id, code: `QC-${organizationId.slice(0, 5)}-R`, status: "RETIRED" } });
   try {
-    const session = await db.$transaction((tx) => createInventoryCount(tx, {
-      organizationId, actor: { id: "actor-1", name: "Operadora QA", email: "ops@example.test" },
-      lines: [{ inventoryId: item.id, warehouseId: warehouse.id, countedQuantity: 2 }, { inventoryId: secondItem.id, warehouseId: warehouse.id, countedQuantity: 1 }],
-    }));
+    const session = await db.$transaction(async (tx) => {
+      const created = await createInventoryCount(tx, {
+        organizationId, actor: { id: "actor-1", name: "Operadora QA", email: "ops@example.test" },
+        lines: [{ inventoryId: item.id, warehouseId: warehouse.id, countedQuantity: 2 }, { inventoryId: secondItem.id, warehouseId: warehouse.id, countedQuantity: 1 }],
+      });
+      await recordAudit({
+        context: { organizationId, user: { id: "actor-1", name: "Operadora QA", email: "ops@example.test", role: "OPERATIONS" } },
+        action: "create", entity: "InventoryCountSession", entityId: created.id,
+        summary: `Registró un conteo físico de ${created.lines.length} productos`,
+        detail: { fields: { lineas: created.lines.length, discrepancias: created.lines.filter((line) => line.discrepancy !== 0).length } },
+      }, tx);
+      return created;
+    });
     assert.equal(session.actorId, "actor-1");
     assert.equal(session.actorName, "Operadora QA");
     assert.ok(session.countedAt instanceof Date);
@@ -35,6 +45,10 @@ test("conteo físico guarda actor, fecha y discrepancia sin modificar stock", { 
     assert.equal(countedItemLine.expectedQuantity, 3, "retiradas no se consideran en stock esperado");
     assert.equal(countedItemLine.countedQuantity, 2);
     assert.equal(countedItemLine.discrepancy, -1);
+    const audit = await db.auditLog.findFirst({ where: { organizationId, entity: "InventoryCountSession", entityId: session.id } });
+    assert.equal(audit?.actorId, "actor-1");
+    assert.equal(audit?.action, "create");
+    assert.deepEqual(audit?.detail, { fields: { lineas: 2, discrepancias: 2 } });
     assert.equal(await db.inventoryUnit.count({ where: { id: { in: units.map((unit) => unit.id) } } }), 3);
     assert.equal((await db.inventoryItem.findUniqueOrThrow({ where: { id: item.id } })).quantity, 3);
     const itemHistory = await db.$transaction((tx) => listInventoryCountHistory(tx, { organizationId, take: 50, inventoryId: item.id }));
