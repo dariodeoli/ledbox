@@ -29,9 +29,9 @@ export async function POST(request: Request) {
   const alternatives: Array<{ budgetId: string; label: string }> = Array.isArray(body?.alternatives) ? body.alternatives : [];
   const expiresAt = new Date(typeof body?.expiresAt === "string" ? body.expiresAt : "");
   if (!title || title.length > 120 || !Number.isFinite(+expiresAt) || expiresAt <= new Date() || +expiresAt > Date.now() + 90 * 86400000 ||
-      alternatives.length < 2 || alternatives.length > 4 || alternatives.some((a) => !a || typeof a.budgetId !== "string" || typeof a.label !== "string" || !a.label.trim() || a.label.trim().length > 80) ||
+      alternatives.length < 2 || alternatives.length > 5 || alternatives.some((a) => !a || typeof a.budgetId !== "string" || typeof a.label !== "string" || !a.label.trim() || a.label.trim().length > 80) ||
       new Set(alternatives.map((a) => a.budgetId)).size !== alternatives.length ||
-      new Set(alternatives.map((a) => a.label.trim().toLowerCase())).size !== alternatives.length) return jsonError("Elegí de 2 a 4 presupuestos, nombres distintos y un vencimiento válido (hasta 90 días).", 400);
+      new Set(alternatives.map((a) => a.label.trim().toLowerCase())).size !== alternatives.length) return jsonError("Elegí de 2 a 5 presupuestos, nombres distintos y un vencimiento válido (hasta 90 días).", 400);
   const { organizationId } = auth.context;
   try {
     const group = await db.$transaction(async (tx) => {

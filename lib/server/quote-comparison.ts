@@ -46,7 +46,7 @@ export async function withQuoteApproval<T>(budgetId: string, organizationId: str
 export async function findPublicComparison(token: string) {
   const group = await db.quoteComparison.findUnique({ where: { publicToken: token }, include: { budgets: { where: live, orderBy: { comparisonLabel: "asc" } } } });
   if (group && (await sandboxHiddenHere(group.organizationId))) return null;
-  if (!group || group.revokedAt || group.expiresAt <= new Date() || group.budgets.length < 2 || group.budgets.length > 4) return null;
+  if (!group || group.revokedAt || group.expiresAt <= new Date() || group.budgets.length < 2 || group.budgets.length > 5) return null;
   if (group.budgets.some((q) => q.organizationId !== group.organizationId || q.clientId !== group.clientId || !quotePortalAvailable(q))) return null;
   return group;
 }
