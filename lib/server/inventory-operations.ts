@@ -473,7 +473,7 @@ export async function transitionIncident(options: {
         if (options.to === "RESOLVED") {
           // Otro incidente abierto sobre la misma unidad la mantiene fuera de lo libre.
           const others = await tx.inventoryIncident.count({
-            where: { unitId: incident.unitId, id: { not: incident.id }, status: { in: [...OPEN_STATUSES] } },
+            where: { organizationId: options.organizationId, unitId: incident.unitId, id: { not: incident.id }, status: { in: [...OPEN_STATUSES] } },
           });
           // Resolver limpieza/reparación no revierte una baja de otro incidente ni un retiro manual.
           // La restauración explícita de unidades sigue siendo una operación del inventario.
