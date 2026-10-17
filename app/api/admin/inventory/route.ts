@@ -6,7 +6,7 @@ import { readBillingUnit } from "@/lib/quote-sharing";
 import { readAudienceInput, visibleOnWebFor, type CatalogAudience } from "@/lib/catalog-audience";
 import { randomUUID } from "node:crypto";
 import { beginBulkOperationRun, finishBulkOperationRun, idempotencyForBulkRun, type BulkRowOutcome } from "@/lib/server/bulk-operation-run";
-import { readBulkChanges, readBulkSelection } from "@/lib/inventory-bulk";
+import { bulkUnitPlacementError, readBulkChanges, readBulkSelection } from "@/lib/inventory-bulk";
 import type { InventoryKind, InventoryStatus, Prisma } from "@prisma/client";
 import { damageSummary, inventoryStatusLabel } from "@/lib/admin-format";
 import { requireAdminContext } from "@/lib/server/tenancy";
@@ -647,6 +647,18 @@ export async function POST(request: Request) {
         ? await tx.inventoryUnit.findMany({ where: { id: { in: ids }, organizationId } })
         : await tx.inventoryItem.findMany({ where: { id: { in: ids }, organizationId }, omit: { imageData: true } });
       if (before.length !== ids.length) return null;
+      if (isUnits && (data.warehouseId !== undefined || data.location !== undefined)) {
+        const inventoryIds = [...new Set(before.map((row) => (row as { inventoryId: string }).inventoryId))];
+        const hasCommittedAssignments = inventoryIds.length > 0 && await tx.eventInventory.count({
+          where: { organizationId, inventoryId: { in: inventoryIds }, ...committedAssignmentWhere(organizationId) },
+        }) > 0;
+        const placementError = bulkUnitPlacementError(
+          before as Array<{ status: string; warehouseId: string | null; location: string | null }>,
+          data,
+          hasCommittedAssignments,
+        );
+        if (placementError) return "unit-placement" as const;
+      }
       if (taxonomy) {
         const resolved = await resolveInventoryCategory(tx, organizationId, taxonomy);
         if (!resolved) return null;
@@ -667,12 +679,14 @@ export async function POST(request: Request) {
       if (error instanceof InventoryUnitIncidentConflict) return "open-incidents" as const;
       throw error;
     });
-    if (result === "family-category" || result === "open-incidents" || !result) {
-      const status = result === "family-category" || result === "open-incidents" ? 409 : 404;
+    if (result === "family-category" || result === "open-incidents" || result === "unit-placement" || !result) {
+      const status = result === "family-category" || result === "open-incidents" || result === "unit-placement" ? 409 : 404;
       const error = result === "family-category"
         ? "La selección incluye variantes. Cambiá la categoría desde Variantes. No se aplicó ningún cambio."
         : result === "open-incidents"
           ? new InventoryUnitIncidentConflict().message
+          : result === "unit-placement"
+            ? "Solo se pueden mover o reubicar unidades disponibles sin reservas vigentes del producto. No se aplicó ningún cambio."
           : "La selección contiene registros que no existen en esta empresa. No se aplicó ningún cambio.";
       if (bulkRunId) {
         const outcomes: BulkRowOutcome[] = ids.map(id => ({ id, status: "failed", message: error }));
