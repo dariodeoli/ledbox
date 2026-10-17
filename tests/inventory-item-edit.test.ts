@@ -21,6 +21,7 @@ test("la migración de «visible en la web» es aditiva y nada se publica solo",
   const types = repoFile("lib/admin-types.ts");
   assert.match(types, /visibleOnWeb: boolean/, "falta en AdminInventoryRow");
   assert.match(types, /imageUploaded: boolean/, "la fila tiene que decir si la foto es subida");
+  assert.match(types, /saleCatalogEnabled: boolean/, "la marca de venta debe viajar en la fila administrativa");
 });
 
 test("el endpoint suma la edición del ítem sin romper los contratos", () => {
@@ -74,6 +75,8 @@ test("el formulario de edición cubre el ítem completo", () => {
   // El alta también trae el toggle y el detalle lo muestra.
   // El alcance en la tienda (Oculto / Cliente final / Mayorista / Ambos) reemplaza al switch «Visible en la web».
   assert.match(module, /catalogAudience: form\.catalogAudience/);
+  assert.match(module, /saleCatalogEnabled: form\.saleCatalogEnabled/);
+  assert.match(module, /label="Incluir en el catálogo de venta"/);
   assert.match(module, /audience === "HIDDEN"\s*\?\s*"No se publica en la tienda web de la empresa\."/, "la ficha dice si se publica o no");
 });
 

@@ -194,6 +194,8 @@ export type GridPageOptions = {
   now?: Date;
   /** Descubrimiento de selección masiva: excluir filas creadas después de la primera página. */
   createdBefore?: Date;
+  /** Catálogo interno de ventas: filtro independiente de la tienda de alquiler. */
+  saleCatalogOnly?: boolean;
 };
 
 export class GridCursorError extends Error {}
@@ -230,12 +232,15 @@ export async function listInventoryGrid(options: GridPageOptions) {
   const after = options.cursor ? decodeGridCursor(options.cursor) : null;
   const query = options.query?.trim() ?? "";
   const search: Prisma.InventoryItemWhereInput = query ? { OR: ["name", "sku", "category"].map((field) => ({ [field]: { contains: query, mode: "insensitive" as const } })) } : {};
+  const scope: Prisma.InventoryItemWhereInput = {
+    organizationId,
+    AND: [search, ...(options.saleCatalogOnly ? [{ saleCatalogEnabled: true }] : [])],
+    ...(options.createdBefore ? { createdAt: { lte: options.createdBefore } } : {}),
+  };
   const [rows, total] = await Promise.all([
     db.inventoryItem.findMany({
       where: {
-        organizationId,
-        AND: [search],
-        ...(options.createdBefore ? { createdAt: { lte: options.createdBefore } } : {}),
+        ...scope,
         ...(after ? { OR: [{ name: { gt: after.name } }, { name: after.name, id: { gt: after.id } }] } : {}),
       },
       orderBy: [{ name: "asc" }, { id: "asc" }],
@@ -246,7 +251,7 @@ export async function listInventoryGrid(options: GridPageOptions) {
         _count: { select: MAINTENANCE_UNITS_SELECT },
       },
     }),
-    after ? Promise.resolve(undefined) : db.inventoryItem.count({ where: { organizationId, ...search, ...(options.createdBefore ? { createdAt: { lte: options.createdBefore } } : {}) } }),
+    after ? Promise.resolve(undefined) : db.inventoryItem.count({ where: scope }),
   ]);
   const hasMore = rows.length > limit;
   const items = hasMore ? rows.slice(0, limit) : rows;

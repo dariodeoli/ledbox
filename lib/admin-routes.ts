@@ -21,6 +21,7 @@ export const ADMIN_ROUTES = [
   "/clientes/mensajes",
   "/leads",
   "/presupuestos",
+  "/ventas/catalogo",
   "/firmas",
   "/facturacion",
   "/finanzas",

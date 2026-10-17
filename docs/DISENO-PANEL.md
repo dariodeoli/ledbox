@@ -119,6 +119,7 @@ se unifican los componentes, sin cambiar datos ni contratos.
 | --- | --- |
 | **Inicio** (suelto) | Inicio (`/dashboard`) |
 | **Ventas** (flujo, con línea vertical) | Leads → Presupuestos → Eventos |
+| **Catálogo** | Catálogo de venta (lista interna, separada del alquiler) |
 | **Clientes** (suelto) | Clientes |
 | **Operación** | Inventario · Proveedores · Promotoras |
 | **Plata** | Finanzas · Facturación |
