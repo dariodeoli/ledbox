@@ -5672,3 +5672,22 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
   .cart-stepper > button, .cart-controls .cart-stepper > input { height: 44px; }
   .cart-stepper > button { width: 44px; }
 }
+
+/* Muestrario interno del kit: compara ambos temas con los tokens canónicos. */
+.ui-kit-page { display: grid; gap: 24px; }
+.ui-kit-header, .ui-kit-section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.ui-kit-section { display: grid; gap: 12px; min-width: 0; }
+.ui-kit-section-head h2 { margin: 5px 0 0; color: var(--a-text-strong); font: 700 20px/1.2 var(--font-display); }
+.ui-kit-section-head p { margin: 0; color: var(--a-muted); font-size: 12px; }
+.ui-kit-themes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ui-kit-sample { display: grid; align-content: start; gap: 14px; min-width: 0; padding: 16px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius-lg); background: var(--a-bg-art); color: var(--a-text); }
+.ui-kit-sample h3 { margin: 0; color: var(--a-text-strong); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+.ui-kit-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.ui-kit-notes, .ui-kit-fields { display: grid; gap: 10px; min-width: 0; }
+.ui-kit-footnote { margin: 0; color: var(--a-muted); font-size: 11px; text-align: right; }
+@media (max-width: 760px) {
+  .ui-kit-page { padding-inline: 12px; }
+  .ui-kit-header, .ui-kit-section-head { align-items: flex-start; flex-direction: column; }
+  .ui-kit-themes { grid-template-columns: minmax(0, 1fr); }
+  .ui-kit-row > .admin-btn { min-height: 44px; }
+}

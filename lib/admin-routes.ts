@@ -45,6 +45,7 @@ export const ADMIN_ROUTES = [
   "/estado",
   "/estado/sistema",
   "/estado/auditoria",
+  "/ui-kit",
   "/usuarios",
   "/configuracion",
   "/empresa",
