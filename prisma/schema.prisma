@@ -174,6 +174,8 @@ model Organization {
   inventoryItems        InventoryItem[]
   inventoryUnits        InventoryUnit[]
   inventoryIncidents    InventoryIncident[]
+  inventoryCountSessions InventoryCountSession[]
+  inventoryCountLines    InventoryCountLine[]
   deliveryNotes         DeliveryNote[]
   deliveryNotePhotos    DeliveryNotePhoto[]
   inventoryComponents   InventoryComponent[]
@@ -1965,6 +1967,7 @@ model InventoryItem {
   priceTiers         InventoryPriceTier[]
   units              InventoryUnit[]
   incidents          InventoryIncident[]
+  physicalCountLines InventoryCountLine[]
   /// Unidades retenidas por incidentes abiertos sin unidad con código (daño o faltante por
   /// cantidad). Se mantiene bajo el lock del ítem y se descuenta de la capacidad.
   incidentHold       Int                  @default(0)
@@ -2108,6 +2111,7 @@ model Warehouse {
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   units          InventoryUnit[]
   defaultItems   InventoryItem[] @relation("ItemDefaultWarehouse")
+  physicalCountLines InventoryCountLine[]
 
   @@unique([organizationId, code])
 }
@@ -2162,6 +2166,47 @@ model InventoryIncident {
   @@index([eventId])
   @@index([organizationId, status])
   @@index([inventoryId, status])
+}
+
+/// Relevamiento físico inmutable: registra la sesión, su actor y fecha sin ajustar stock.
+model InventoryCountSession {
+  id             String   @id
+  organizationId String
+  actorId        String
+  actorName      String
+  actorEmail     String
+  countedAt      DateTime @default(now())
+  notes          String?
+  createdAt      DateTime @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lines          InventoryCountLine[]
+
+  @@index([organizationId, countedAt])
+  @@index([organizationId, actorId])
+}
+
+/// Una observación por producto y depósito, con stock esperado congelado y diferencia calculada.
+model InventoryCountLine {
+  id               String   @id
+  organizationId   String
+  sessionId        String
+  inventoryId      String
+  warehouseId      String
+  expectedQuantity Int
+  countedQuantity  Int
+  discrepancy      Int
+  productName      String
+  warehouseName    String
+  warehouseCode    String
+  createdAt        DateTime @default(now())
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  session          InventoryCountSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  inventory        InventoryItem @relation(fields: [inventoryId], references: [id], onDelete: Restrict)
+  warehouse        Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, inventoryId, warehouseId])
+  @@index([organizationId, inventoryId, warehouseId, createdAt])
+  @@index([sessionId, discrepancy])
 }
 
 /// Componente de un combo (alquileres fase 2c). Un combo es un InventoryItem con

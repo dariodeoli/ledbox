@@ -2336,6 +2336,8 @@ export const AUDIT_ENTITIES = [
   "InventoryUnit",
   // Incidente de inventario (alquileres fase 4): daño, faltante, reparación o limpieza.
   "InventoryIncident",
+  // Conteos físicos: registro persistente de diferencias por depósito.
+  "InventoryCountSession",
   // Categorías y depósitos de inventario (rediseño E1).
   "InventoryCategory",
   // Familia de variantes de producto (docs/VARIANTES.md).
