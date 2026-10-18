@@ -36,6 +36,7 @@ function actual(name: string, extras: Record<string, unknown> = {}) {
   return runInNewContext(ts.transpileModule(declaration.getText(file).replace(/^export /, "") + `\n${name};`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText, {
     React: { createElement: (type: unknown, props: object, ...children: unknown[]) => ({ type, props: { ...props, children } }) },
     useState: (value: any) => [typeof value === "function" ? value() : value, () => {}],
+    useRef: () => ({ current: null }),
     dateShortcuts: (props: Parameters<typeof dateShortcuts>[0]) => dateShortcuts({ ...props, now }), ...extras,
   });
 }
@@ -55,13 +56,18 @@ test("botones reales son no-submit, accesibles, deshabilitados por rango/estado;
 test("DayField limpia error/texto inválido al elegir fecha rápida y conserva la edición exacta manual", () => {
   const states: any[] = []; let index = 0;
   const changes: string[] = [];
-  const render = actual("DayField", { dayInputText, maskDayInput, parseDayInput, SharedInput: "input", DateShortcuts: "shortcuts", FieldChrome: "field", describedBy: () => undefined, useFieldIds: () => ({ fieldId: "date", hintId: "hint", errorId: "error" }), useEffect() {}, useState(initial: any) { const i = index++; if (!(i in states)) states[i] = typeof initial === "function" ? initial() : initial; return [states[i], (value: any) => { states[i] = typeof value === "function" ? value(states[i]) : value; }]; } });
+  const picker = { current: { showPicker() {}, focus() {}, click() {} } };
+  let opened = 0;
+  picker.current.showPicker = () => { opened += 1; };
+  const render = actual("DayField", { dayInputText, maskDayInput, parseDayInput, SharedInput: "input", AdminIcon: "icon", DateShortcuts: "shortcuts", FieldChrome: "field", describedBy: () => undefined, useFieldIds: () => ({ fieldId: "date", hintId: "hint", errorId: "error" }), useRef: () => picker, useEffect() {}, useState(initial: any) { const i = index++; if (!(i in states)) states[i] = typeof initial === "function" ? initial() : initial; return [states[i], (value: any) => { states[i] = typeof value === "function" ? value(states[i]) : value; }]; } });
   const props = { label: "Fecha", value: "2026-10-16", min: "2026-10-16", shortcuts: true, onChange: (value: string) => changes.push(value) };
   const draw = () => { index = 0; return render(props); };
   let tree = draw(); all(tree).find(n => n.type === "input")!.props.onChange({ target: { value: "15/10/2026" } });
   tree = draw(); assert.match(tree.props.error, /anterior/);
   all(tree).find(n => n.type === "shortcuts")!.props.onChange("2026-10-16");
   tree = draw(); assert.equal(tree.props.error, ""); assert.equal(all(tree).find(n => n.type === "input")!.props.value, "16/10/2026");
+  const calendarButton = all(tree).find(n => n.type === "button" && n.props.className === "admin-day-calendar");
+  assert.ok(calendarButton); assert.match(calendarButton.props["aria-label"], /calendario para fecha/); calendarButton.props.onClick(); assert.equal(opened, 1);
   all(tree).find(n => n.type === "input")!.props.onChange({ target: { value: "18/10/2026" } }); assert.deepEqual(changes, ["2026-10-18"]);
 });
 test("SSR canónico: opt-in no afecta fechas normales, nacimiento/horas; entrada exacta sigue accesible", async () => {
@@ -70,7 +76,8 @@ test("SSR canónico: opt-in no afecta fechas normales, nacimiento/horas; entrada
   for (const Field of [DateField, DateTimeField, DayField]) {
     assert.doesNotMatch(renderToStaticMarkup(createElement(Field, options)), /Fechas rápidas/);
     const html = renderToStaticMarkup(createElement(Field, { ...options, shortcuts: true, disabled: true }));
-    assert.match(html, /Fechas rápidas para fecha/); assert.equal((html.match(/type="button"/g) ?? []).length, 3); assert.match(html, /disabled=""/);
+    assert.match(html, /Fechas rápidas para fecha/); assert.equal((html.match(/type="button"/g) ?? []).length, Field === DayField ? 4 : 3); assert.match(html, /disabled=""/);
+    if (Field === DayField) { assert.match(html, /Abrir calendario para fecha/); assert.match(html, /admin-day-input/); }
   }
   assert.doesNotMatch(renderToStaticMarkup(createElement(TimeField, options)), /Fechas rápidas/);
 });

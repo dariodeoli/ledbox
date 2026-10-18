@@ -176,7 +176,7 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
             initialCategory={initialCategory}
             showEventPicker={!shownIds.has("hero")}
             categoryPreviewKey={accordionCategories && shownIds.has("categorias") ? basePath : undefined}
-            categoryNavigation={publicCategories ? { allHref: `${withStoreDates(basePath, range)}#catalogo`, links: categoryIndex.map((entry) => ({ name: entry.name, href: categoryHref(entry.name) })) } : undefined}
+            categoryNavigation={publicCategories ? { allHref: `${withStoreDates(basePath, range)}#catalogo`, links: categoryIndex.map((entry) => ({ name: entry.name, href: categoryHref(entry.name) })), clientSide: true } : undefined}
             zones={zones}
             priceMode={priceMode}
             slug={store.slug}

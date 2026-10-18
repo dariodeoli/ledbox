@@ -271,16 +271,23 @@
 
 /* ── Barra de filtros sticky: chips con fade, orden y buscador ── */
 .cp-catalog { gap: var(--sp-4); scroll-margin-top: calc(var(--header-h) + var(--sp-5)); }
-.cp-filter { position: sticky; top: var(--header-compact); z-index: 20; background: var(--color-bg); padding-block: var(--sp-3); display: grid; gap: var(--sp-3); border-bottom: 1px solid var(--color-border-soft); }
+.cp-filter { position: sticky; top: var(--header-compact); z-index: 20; background: var(--color-bg); padding-block: var(--sp-2); display: grid; gap: var(--sp-2); border-bottom: 1px solid var(--color-border-soft); }
 .cp-filter-chips { display: flex; gap: var(--sp-2); overflow-x: auto; scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, transparent 0, currentColor var(--sp-4), currentColor calc(100% - var(--sp-6)), transparent 100%); mask-image: linear-gradient(to right, transparent 0, currentColor var(--sp-4), currentColor calc(100% - var(--sp-6)), transparent 100%); padding-inline: var(--sp-4); margin-inline: calc(var(--sp-4) * -1); scroll-snap-type: x proximity; }
 .cp-filter-chips::-webkit-scrollbar { display: none; }
-.cp-cat { flex: none; scroll-snap-align: start; min-height: var(--tap); padding: 0 var(--sp-3); border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: transparent; color: var(--color-text); font: inherit; font-size: var(--fs-14); font-weight: 500; cursor: pointer; white-space: nowrap; }
+.cp-cat { flex: none; scroll-snap-align: start; min-height: 38px; padding: 0 var(--sp-3); border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: transparent; color: var(--color-text); font: inherit; font-size: var(--fs-14); font-weight: 500; cursor: pointer; white-space: nowrap; }
 .cp-cat:hover { border-color: var(--color-primary); }
 .cp-cat[aria-pressed="true"] { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-primary); }
 .cp-theme[data-grid="dense"] .cp-cat { font-weight: 700; border-radius: var(--radius-sm); }
 .cp-filter-tools { display: grid; gap: var(--sp-2); grid-template-columns: minmax(0, 1fr) minmax(130px, 40%); align-items: end; }
 @media (min-width: 768px) { .cp-filter-tools { grid-template-columns: minmax(0, 320px) 160px; justify-content: start; gap: var(--sp-3); } }
 .cp-filter-tools .admin-field { width: 100%; max-width: none; }
+@media (pointer: coarse) { .cp-cat { min-height: var(--tap); } }
+@media (min-width: 1200px) {
+  .cp-filter { grid-template-columns: minmax(0, 1fr) minmax(190px, 280px) 140px; gap: var(--sp-3); align-items: center; }
+  .cp-filter-tools { display: contents; }
+  .cp-filter-tools .admin-field { min-width: 0; }
+  .cp-filter-chips { padding-inline: var(--sp-2); margin-inline: 0; }
+}
 .cp-results { font-size: var(--fs-14); color: var(--color-muted); }
 
 /* ── Grilla del catálogo y tarjeta de producto ── */
@@ -786,12 +793,13 @@
 .cp-theme .cp-fields [role="option"] { min-height: var(--tap); }
 .cp-theme .cp-fields .admin-field-hint { font-size: var(--fs-12); line-height: 1.5; }
 .cp-theme .cp-event { padding: var(--sp-3) var(--sp-4); border-radius: 0; box-shadow: none; }
-.cp-theme .cp-event-date { position: relative; min-width: 0; flex: 0 0 160px; width: 160px; }
+.cp-theme .cp-event-date { position: relative; min-width: 0; flex: 0 0 190px; width: 190px; }
 .cp-theme .cp-event-days { flex: 0 0 100px; width: 100px; }
 .cp-theme .cp-event-guests { flex: 0 0 80px; width: 80px; }
 .cp-event > .cp-btn--block { width: auto; justify-self: start; min-height: var(--tap); font-size: var(--fs-14); }
-.cp-theme .cp-event-date > .admin-icon { position: absolute; left: 2px; top: 32px; color: var(--color-muted); pointer-events: none; }
-.cp-theme .cp-fields .cp-event-date .admin-field input[data-oc-control]:not([type="hidden"]):not([type="checkbox"]) { padding-inline-start: 30px; }
+.cp-theme .cp-event-date .admin-day-control .admin-day-input[data-oc-control] { padding-inline: 2px 42px; }
+.cp-theme .cp-event-date .admin-date-shortcuts { gap: 4px; }
+.cp-theme .cp-event-date .admin-date-shortcuts button { padding-inline: 8px; font-size: 11px; }
 .cp-theme .cp-event-fields { gap: var(--sp-3); align-items: start; }
 .cp-theme .cp-event-fields > .cp-btn { align-self: end; }
 .cp-theme .cp-stepper { border: 0; border-bottom: 1px solid var(--color-muted); border-radius: 0; background: transparent; gap: 0; }
@@ -830,8 +838,11 @@
 .cp-home-intro { display: grid; gap: var(--sp-4); align-items: center; }
 .cp-home-booking { min-width: 0; }
 .cp-home-booking .cp-event { padding: var(--sp-4) 0 0; }
-.cp-category-head { display: grid; gap: var(--sp-2); padding-block: var(--sp-3); }
-.cp-category-head .cp-h1, .cp-category-head .cp-h3 { font-size: var(--fs-32); }
+.cp-category-head { display: flex; align-items: center; gap: var(--sp-4); padding-block: var(--sp-2); border-bottom: 1px solid var(--color-border-soft); }
+.cp-category-back { flex: none; font-size: var(--fs-14); }
+.cp-category-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); min-width: 0; }
+.cp-category-head .cp-h1, .cp-category-head .cp-h3 { margin: 0; font-size: var(--fs-24); line-height: 1.25; }
+.cp-category-title .cp-hint { margin: 0; }
 .cp-tile-price .cp-price { font-size: var(--fs-20); font-weight: 600; line-height: 1.4; }
 .cp-tile .cp-price-unit { font-size: var(--fs-12); line-height: 1.4; letter-spacing: 0; white-space: normal; }
 .cp-tile .cp-tile-sub { font-size: var(--fs-12); line-height: 1.5; }
@@ -875,14 +886,13 @@
 @media (max-width: 767px) {
   .cp-theme .cp-event-fields { gap: var(--sp-2); }
   .cp-theme .cp-event-fields .admin-field-label { min-height: 2.6em; }
-  .cp-theme .cp-event-date > .admin-icon { top: calc(var(--fs-12) * 2.6 + 15px); }
-  .cp-theme .cp-event-date { flex-basis: 140px; width: 140px; }
+  .cp-theme .cp-event-date { flex-basis: 160px; width: 160px; }
   .cp-theme .cp-event-days { flex-basis: 80px; width: 80px; }
   .cp-theme .cp-event-guests { flex-basis: 76px; width: 76px; }
   .cp-event-fields > .cp-event-go { margin-right: auto; }
 }
 @media (max-width: 380px) {
-  .cp-theme .cp-event-date { flex-basis: 132px; width: 132px; }
+  .cp-theme .cp-event-date { flex-basis: 150px; width: 150px; }
   .cp-theme .cp-event-days, .cp-theme .cp-event-guests { flex-basis: 72px; width: 72px; }
 }
 

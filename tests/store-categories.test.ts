@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { resolveStoreCategory, storeCategories, storeCategoryHref, withStoreDates } from "../lib/store-categories";
+import { resolveStoreCategory, storeCategories, storeCategoryHref, storeCategoryStateHref, withStoreDates } from "../lib/store-categories";
 
 const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 test("categorías públicas: acentos, subcategorías, espacios y caracteres sin equivalencia ASCII", () => {
@@ -33,6 +33,22 @@ test("navegación de categoría conserva solo el período y escapa el nombre de 
   assert.equal(storeCategoryHref("/tienda/empresa", category, null), "/tienda/empresa/categoria/totems");
 });
 
+test("cambiar categoría en catálogo conserva query, fechas y hash sin cambiar de ruta", () => {
+  assert.equal(storeCategoryStateHref("/tienda/empresa?desde=2026-10-30&hasta=2026-11-02&q=sofa&p=demo#catalogo", "Sofás y sillones"), "/tienda/empresa?desde=2026-10-30&hasta=2026-11-02&q=sofa&p=demo&categoria=Sof%C3%A1s+y+sillones#catalogo");
+  assert.equal(storeCategoryStateHref("/tienda/empresa?desde=2026-10-30&hasta=2026-11-02&q=sofa&categoria=Sof%C3%A1s#catalogo", null), "/tienda/empresa?desde=2026-10-30&hasta=2026-11-02&q=sofa#catalogo");
+  const page = read("app/(catalogo)/tienda/[orgSlug]/page.tsx");
+  assert.ok(!page.includes("permanentRedirect"), "la selección de categoría ya no redirige ni solicita otro documento");
+  assert.match(page, /initialCategory=\{initialCategory\}/);
+  const storefront = read("components/catalog-public/StoreFront.tsx");
+  assert.match(storefront, /clientSide: true/);
+  const browser = read("components/catalog-public/CatalogBrowser.tsx");
+  assert.match(browser, /storeCategoryStateHref\(window\.location\.href, nextCategory\)/);
+  assert.match(browser, /window\.history\.replaceState\(window\.history\.state, "", nextUrl\)/);
+  const filterBar = read("components/catalog-public/FilterBar.tsx");
+  assert.match(filterBar, /categoryNavigation\.clientSide[\s\S]*?<button/);
+  assert.match(filterBar, /scroll=\{false\}/);
+});
+
 test("página propia reutiliza el catálogo y carrito de toda la tienda; limpiar filtros conserva la categoría", () => {
   const page = read("components/catalog-public/CategoryPage.tsx");
   assert.match(page, /<h1 className="cp-h3">\{category.name\}/);
@@ -44,7 +60,7 @@ test("página propia reutiliza el catálogo y carrito de toda la tienda; limpiar
   assert.match(browser, /setCategory\(categoryName \?\? null\)/);
   assert.match(browser, /storeCartKey\(slug, cartScope === "visitor" \? "public" : cartScope\)/);
   const route = read("app/(catalogo)/tienda/[orgSlug]/page.tsx");
-  assert.ok(route.indexOf('catalogAccessMode !== "OPEN"') < route.indexOf("query.categoria !== undefined"));
+  assert.ok(route.indexOf('catalogAccessMode !== "OPEN"') < route.indexOf("const range"));
 });
 
 test("el resumen persistente diferencia productos y unidades, con importe y confirmación repetible", async () => {

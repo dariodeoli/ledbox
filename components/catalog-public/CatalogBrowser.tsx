@@ -16,7 +16,7 @@ import { legacyTier, packageSummary, type PackageSummary } from "@/lib/price-tie
 import { readLocalStoreCart, sanitizeStoreCart, storeCartContext, storeCartKey, writeLocalStoreCart, type StoreCartState } from "@/lib/store-cart";
 import type { CartView } from "@/lib/server/store-cart";
 import { MAX_QUANTITY, formatGs, priceUnitLabel, PREORDER_COPY, preorderEstimate, quantityStep, sortCatalog, todayKeyPY, type SortKey } from "@/lib/storefront-ui";
-import { withStoreDates } from "@/lib/store-categories";
+import { storeCategoryStateHref, withStoreDates } from "@/lib/store-categories";
 import { cardSpecs } from "@/lib/catalog-card";
 import { CartDrawer, type Done } from "./CartDrawer";
 import { FiltersDrawer, FiltersPanel } from "./StoreFilters";
@@ -96,7 +96,7 @@ type Props = {
   showEventPicker?: boolean;
   /** Sólo metadatos en el acordeón: este catálogo mantiene el único motor y sus callbacks. */
   categoryPreviewKey?: string;
-  categoryNavigation?: { allHref: string; links: Array<{ name: string; href: string }> };
+  categoryNavigation?: { allHref: string; links: Array<{ name: string; href: string }>; clientSide?: boolean };
 };
 
 const money = formatGs;
@@ -541,7 +541,17 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
 
       {showEventPicker ? <EventPicker slug={slug} range={range} variant="bar" /> : null}
 
-      <FilterBar categoryNavigation={categoryNavigation} categories={categories} category={categoryName ?? category} onCategory={(value) => { setCategory(value); setShown(PAGE_SIZE); }} sort={sort} onSort={setSort} query={query} onQuery={(value) => { setQuery(value); setShown(PAGE_SIZE); }} showPrices={showPrices} activeFilters={activeFilterCount(filters)} onOpenFilters={() => setFiltersOpen(true)} />
+      <FilterBar categoryNavigation={categoryNavigation} categories={categories} category={categoryName ?? category} onCategory={(value) => {
+        const nextCategory = categoryName ?? value;
+        setCategory(nextCategory);
+        setShown(PAGE_SIZE);
+        if (categoryNavigation?.clientSide) {
+          // Native history state is patched by Next.js: URL and useSearchParams stay
+          // in sync without a document request, route reset, or scroll jump.
+          const nextUrl = storeCategoryStateHref(window.location.href, nextCategory);
+          window.history.replaceState(window.history.state, "", nextUrl);
+        }
+      }} sort={sort} onSort={setSort} query={query} onQuery={(value) => { setQuery(value); setShown(PAGE_SIZE); }} showPrices={showPrices} activeFilters={activeFilterCount(filters)} onOpenFilters={() => setFiltersOpen(true)} />
       <div className="cp-catalog-layout">
         {items.length > 0 ? (
           <aside className="cp-filters" aria-label="Filtros del catálogo">

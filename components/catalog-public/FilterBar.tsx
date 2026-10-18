@@ -1,6 +1,7 @@
 "use client";
 
 import { SelectField, TextField } from "@/components/admin/AdminFields";
+import Link from "next/link";
 import { XIcon } from "./StoreIcons";
 import { SORT_OPTIONS, isSortKey, type SortKey } from "@/lib/storefront-ui";
 
@@ -20,7 +21,7 @@ export function FilterBar({ categories, category, onCategory, sort, onSort, quer
   /** Cantidad de filtros del cajón en uso y cómo abrirlo (solo celular y tableta). */
   activeFilters?: number;
   onOpenFilters?: () => void;
-  categoryNavigation?: { allHref: string; links: Array<{ name: string; href: string }> };
+  categoryNavigation?: { allHref: string; links: Array<{ name: string; href: string }>; clientSide?: boolean };
 }) {
   return (
     <div className="cp-filter cp-fields" role="search" aria-label="Filtrar y ordenar el catálogo" data-testid="filter-bar">
@@ -28,8 +29,17 @@ export function FilterBar({ categories, category, onCategory, sort, onSort, quer
         <div className="cp-filter-chips" role="group" aria-label="Filtrar por categoría" tabIndex={-1}>
           {categoryNavigation ? (
             <>
-              <a className="cp-cat" href={categoryNavigation.allHref} aria-current={category === null ? "page" : undefined}>Todas</a>
-              {categoryNavigation.links.map((entry) => <a key={entry.name} className="cp-cat" href={entry.href} aria-current={category === entry.name ? "page" : undefined}>{entry.name}</a>)}
+              {categoryNavigation.clientSide ? (
+                <>
+                  <button type="button" className="cp-cat" aria-pressed={category === null} onClick={() => onCategory(null)}>Todas</button>
+                  {categoryNavigation.links.map((entry) => <button key={entry.name} type="button" className="cp-cat" aria-pressed={category === entry.name} onClick={() => onCategory(category === entry.name ? null : entry.name)}>{entry.name}</button>)}
+                </>
+              ) : (
+                <>
+                  <Link className="cp-cat" href={categoryNavigation.allHref} scroll={false} aria-current={category === null ? "page" : undefined}>Todas</Link>
+                  {categoryNavigation.links.map((entry) => <Link key={entry.name} className="cp-cat" href={entry.href} scroll={false} aria-current={category === entry.name ? "page" : undefined}>{entry.name}</Link>)}
+                </>
+              )}
             </>
           ) : (
             <>

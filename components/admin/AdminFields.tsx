@@ -1083,6 +1083,7 @@ export function DayField({
   const { fieldId, hintId, errorId } = useFieldIds(id);
   const [text, setText] = useState(() => dayInputText(value));
   const [rangeError, setRangeError] = useState("");
+  const calendarRef = useRef<HTMLInputElement>(null);
 
   // El valor externo manda (limpiar filtros, atajos), pero no pisa lo que se
   // está tecleando cuando el texto actual todavía no forma un día.
@@ -1112,25 +1113,42 @@ export function DayField({
   }
 
   const message = error ?? rangeError;
+  function openCalendar() {
+    const input = calendarRef.current;
+    if (disabled || !input) return;
+    try {
+      input.showPicker();
+    } catch {
+      // Browsers without showPicker can still open the native calendar by click.
+      input.focus();
+      input.click();
+    }
+  }
   return (
     <FieldChrome required={required} label={label} help={help} ariaLabel={ariaLabel} hint={hint} error={message} wide={wide} size={size ?? "sm"} htmlFor={fieldId} hintId={hintId} errorId={errorId}>
-      <SharedInput
-        id={label ? fieldId : id}
-        className={className}
-        type="text"
-        inputMode="numeric"
-        autoComplete="off"
-        placeholder="dd/mm/aaaa"
-        maxLength={10}
-        value={text}
-        onChange={(event) => update(event.target.value)}
-        required={required}
-        disabled={disabled}
-        title={title}
-        aria-label={label ? undefined : ariaLabel}
-        aria-invalid={message ? true : undefined}
-        aria-describedby={describedBy(message, hint, hintId, errorId)}
-      />
+      <span className="admin-day-control">
+        <SharedInput
+          id={label ? fieldId : id}
+          className={["admin-day-input", className].filter(Boolean).join(" ")}
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="dd/mm/aaaa"
+          maxLength={10}
+          value={text}
+          onChange={(event) => update(event.target.value)}
+          required={required}
+          disabled={disabled}
+          title={title}
+          aria-label={label ? undefined : ariaLabel}
+          aria-invalid={message ? true : undefined}
+          aria-describedby={describedBy(message, hint, hintId, errorId)}
+        />
+        <button className="admin-day-calendar" type="button" aria-label={`Abrir calendario${label ? ` para ${label.toLowerCase()}` : ""}`} title="Elegir fecha en el calendario" disabled={disabled} onClick={openCalendar}>
+          <AdminIcon name="calendar" size={18} />
+        </button>
+        <input ref={calendarRef} className="sr-only" type="date" tabIndex={-1} aria-hidden="true" value={value} min={min} max={max} disabled={disabled} onChange={(event) => update(dayInputText(event.target.value))} />
+      </span>
       {shortcuts ? <DateShortcuts kind="date" value={value} min={min} max={max} disabled={disabled} label={label ?? ariaLabel ?? "Fecha"} onChange={(next) => { setText(dayInputText(next)); setRangeError(""); if (next !== value) onChange(next); }} /> : null}
     </FieldChrome>
   );
