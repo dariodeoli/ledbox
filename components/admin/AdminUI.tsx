@@ -803,6 +803,65 @@ export function AdminDataState({
   return <>{children}</>;
 }
 
+/**
+ * Marco compartido de colecciones del panel. Mantiene una sola capa para
+ * toolbar y estados de carga/error/vacío; el módulo conserva el control de
+ * columnas de `AdminTable`, campos de `AdminCardGrid` y etapas de `AdminBoard`.
+ * Así se unifica el espacio y los estados sin duplicar los renderizadores ni
+ * ocultar datos específicos de cada módulo.
+ */
+export function AdminCollection({
+  label,
+  view,
+  density = "compact",
+  actions,
+  loading,
+  error,
+  onRetry,
+  empty,
+  emptyTitle,
+  emptyHint,
+  emptyAction,
+  emptyIcon,
+  rows,
+  children,
+}: {
+  label: string;
+  view: "table" | "grid" | "list" | "pipeline";
+  density?: "compact" | "comfortable";
+  /** Acciones del listado permanecen visibles durante carga, error o vacío. */
+  actions?: React.ReactNode;
+  loading?: boolean;
+  error?: string;
+  onRetry?: () => void;
+  empty?: boolean;
+  emptyTitle?: string;
+  emptyHint?: string;
+  emptyAction?: React.ReactNode;
+  emptyIcon?: AdminIconName;
+  rows?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="admin-collection" data-view={view} data-density={density} aria-label={label}>
+      {actions ? <div className="admin-collection-actions">{actions}</div> : null}
+      <AdminDataState
+        loading={loading}
+        error={error}
+        onRetry={onRetry}
+        empty={empty}
+        emptyTitle={emptyTitle}
+        emptyHint={emptyHint}
+        emptyAction={emptyAction}
+        emptyIcon={emptyIcon}
+        rows={rows}
+      >
+        {children}
+      </AdminDataState>
+    </section>
+  );
+}
+
 
 /**
  * Sección plegable de los formularios («Más datos», issues #88 y #106): deja

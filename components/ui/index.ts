@@ -19,6 +19,7 @@ export {
   AdminErrorState,
   AdminLoadingRows,
   AdminDataState,
+  AdminCollection,
   AdminDisclosure,
   AdminDialog,
   AdminDialogSection,

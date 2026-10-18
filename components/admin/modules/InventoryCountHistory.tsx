@@ -5,7 +5,7 @@ import { formatNumber } from "@/lib/admin-format";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import type { AdminInventoryGridRow, AdminWarehouseRow } from "@/lib/admin-types";
 import { buildInventoryCountLines, type InventoryCountDraftLine } from "@/lib/inventory-count-entry";
-import { AdminButton, AdminDataState, AdminDialog, AdminNote, AdminTable, AdminRow, AdminCell } from "@/components/ui";
+import { AdminButton, AdminCollection, AdminDialog, AdminNote, AdminTable, AdminRow, AdminCell } from "@/components/ui";
 import { NumberField, SelectField, TextAreaField, TextField } from "../AdminFields";
 
 type CountLine = { id: string; productName: string; warehouseName: string; warehouseCode: string; expectedQuantity: number; countedQuantity: number; discrepancy: number };
@@ -28,11 +28,22 @@ export function InventoryCountHistory({ writable }: { writable: boolean }) {
     {open ? <AdminDialog title={capture ? "Registrar conteo físico" : "Conteos físicos"} onClose={() => { setOpen(false); setCapture(false); }} size="wide">
       <div className="admin-stack">
         {capture ? <InventoryCountCapture onCancel={() => setCapture(false)} onSaved={() => { setCapture(false); void resource.reload(); }} /> : <>
-          <div className="admin-form-foot">
-            <AdminNote>Las sesiones guardan una fotografía por producto y depósito con cantidades registradas y diferencias. Consultar o registrar el conteo no ajusta el stock.</AdminNote>
-            {writable ? <AdminButton variant="primary" icon="plus" onClick={() => setCapture(true)}>Registrar conteo</AdminButton> : null}
-          </div>
-          <AdminDataState loading={resource.loading} error={resource.error} onRetry={resource.reload} empty={Boolean(resource.data && resource.data.length === 0)} emptyTitle="Todavía no hay conteos físicos" emptyHint="Registrá una sesión para guardar la primera fotografía de stock." emptyIcon="clock">
+          <AdminCollection
+            label="Historial de conteos físicos"
+            view="list"
+            density="compact"
+            loading={resource.loading}
+            error={resource.error}
+            onRetry={resource.reload}
+            empty={Boolean(resource.data && resource.data.length === 0)}
+            emptyTitle="Todavía no hay conteos físicos"
+            emptyHint="Registrá una sesión para guardar la primera fotografía de stock."
+            emptyIcon="clock"
+            actions={<div className="admin-form-foot">
+              <AdminNote>Las sesiones guardan una fotografía por producto y depósito con cantidades registradas y diferencias. Consultar o registrar el conteo no ajusta el stock.</AdminNote>
+              {writable ? <AdminButton variant="primary" icon="plus" onClick={() => setCapture(true)}>Registrar conteo</AdminButton> : null}
+            </div>}
+          >
             <div className="admin-stack">
               {(resource.data ?? []).map((session) => <section className="admin-panel" key={session.id}>
                 <header className="admin-panel-head">
@@ -48,7 +59,7 @@ export function InventoryCountHistory({ writable }: { writable: boolean }) {
                 </AdminTable>
               </section>)}
             </div>
-          </AdminDataState>
+          </AdminCollection>
         </>}
       </div>
     </AdminDialog> : null}

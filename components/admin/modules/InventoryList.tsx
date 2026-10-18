@@ -7,6 +7,7 @@ import { inventoryAvailabilityLabel } from "@/lib/inventory-availability-label";
 import { comboCapacityLabel } from "@/lib/inventory-combos";
 import { stockSummary } from "@/lib/inventory-view";
 import { locationSummary } from "@/lib/inventory-grid-view";
+import { inventoryComboSummary, inventoryVariantSummary } from "@/lib/inventory-collection-display";
 import { inventoryVisualState } from "@/lib/inventory-visual-state";
 import type { AdminInventoryGridRow, AdminWarehouseRow } from "@/lib/admin-types";
 import { trashMenuItems } from "../TrashDialogs";
@@ -50,6 +51,10 @@ function stockTitle(item: AdminInventoryGridRow, rangeActive: boolean, from: str
 
 function isOvercommitted(item: AdminInventoryGridRow, rangeActive: boolean): boolean {
   return rangeActive ? (item.availability.range?.overcommitted ?? false) : item.availability.overcommittedNow;
+}
+
+function inventoryDetails(item: AdminInventoryGridRow): string | null {
+  return item.combo ? inventoryComboSummary(item.combo.components) : inventoryVariantSummary(item.variantOptions);
 }
 
 /** Libres sobre el total: «12/40» con la barra segmentada (hoy) o el medidor del rango (con «Disponible desde/hasta»). */
@@ -134,8 +139,9 @@ export function InventoryList(props: InventoryListProps) {
   }
 
   function identity(item: AdminInventoryGridRow, size: number) {
+    const detail = inventoryDetails(item);
     return (
-      <button type="button" className="admin-inv-product" title={`Abrir la ficha de ${item.name}`} onClick={(event) => activate(item, event)}>
+      <button type="button" className="admin-inv-product" title={[`Abrir la ficha de ${item.name}`, item.familyName ? `Familia: ${item.familyName}` : null, detail].filter(Boolean).join(" · ")} onClick={(event) => activate(item, event)}>
         <InventoryThumb item={item} size={size} />
         <span className="admin-inv-product-text">
           <strong>{item.name}</strong>
@@ -148,6 +154,7 @@ export function InventoryList(props: InventoryListProps) {
             {item.familyId ? " " : ""}
             {item.sku ? `SKU ${item.sku}` : item.combo ? `Combo · ${formatNumber(item.combo.components.length)} componentes` : inventoryKindLabel(item.kind)}
           </small>
+          {detail ? <small className="admin-inv-details" title={detail}>{detail}</small> : null}
         </span>
       </button>
     );
@@ -165,7 +172,7 @@ export function InventoryList(props: InventoryListProps) {
           return {
             id: item.id,
             title: identity(item, 48),
-            titleTooltip: item.sku ? `${item.name} · ${item.sku}` : item.name,
+            titleTooltip: [item.name, item.sku ? `SKU ${item.sku}` : null, item.familyName, inventoryDetails(item)].filter(Boolean).join(" · "),
             subtitle: item.combo ? item.category : `${item.category} · ${inventoryKindLabel(item.kind)}`,
             badges: [
               ...(item.combo ? [{ label: "Combo", tone: "accent" as const, title: "Sin unidades propias: se arma con sus componentes." }] : []),
