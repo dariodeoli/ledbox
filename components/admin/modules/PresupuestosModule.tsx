@@ -200,6 +200,9 @@ type LeadDraft = {
   title: string;
   notes: string;
   eventDate: string | null;
+  quoteRange: { startsAt: string; endsAt: string } | null;
+  items: BudgetItemDraft[];
+  pricing: { fromCatalog: number; fromRequest: number; pending: number };
   client: { id: string; name: string; company: string | null } | null;
   canCreateClient: boolean;
   existingBudgets: Array<{ id: string; title: string; status: string; createdAt: string }>;
@@ -680,6 +683,10 @@ export function PresupuestosModule() {
     if (clientParam && !leadParam) setForm((current) => ({ ...current, clientId: current.clientId || clientParam }));
     if (!leadParam) return;
     let active = true;
+    setLeadDraft(null);
+    setCreateItems([]);
+    setForm(EMPTY_FORM);
+    setNotes("");
     setLeadId(leadParam);
     setLeadLoading(true);
     setFormError("");
@@ -688,11 +695,14 @@ export function PresupuestosModule() {
       setLeadLoading(false);
       if (!result.ok) {
         setLeadId("");
+        setLeadDraft(null);
+        setCreateItems([]);
         setFormError(result.error);
         return;
       }
       const draft = result.data;
       setLeadDraft(draft);
+      setCreateItems(draft.items);
       setForm((current) => ({ ...current, title: current.title || draft.title, clientId: current.clientId || draft.client?.id || "" }));
       setNotes((current) => current || draft.notes);
     });
@@ -806,7 +816,7 @@ export function PresupuestosModule() {
   // Rango del evento elegido en el alta: define la disponibilidad que muestra el
   // buscador de inventario y lo que se reservará al aprobar (issue #18).
   const formEvent = useMemo(() => eventOptions.find((event) => event.id === form.eventId) ?? null, [eventOptions, form.eventId]);
-  const formRange = useMemo(() => eventAvailabilityRange(formEvent), [formEvent]);
+  const formRange = useMemo(() => eventAvailabilityRange(formEvent) ?? leadDraft?.quoteRange ?? null, [formEvent, leadDraft?.quoteRange]);
 
   // Lo archivado (papelera) sale de la lista, el tablero y las etapas; se ve con el filtro «Archivados».
   const allBudgetRows = useMemo(() => budgetsResource.data?.budgets ?? [], [budgetsResource.data]);
@@ -1142,6 +1152,7 @@ export function PresupuestosModule() {
   function closeLeadDraft() {
     setLeadId("");
     setLeadDraft(null);
+    setCreateItems([]);
     setNotes("");
     if (typeof window !== "undefined" && window.location.search) window.history.replaceState(null, "", window.location.pathname);
   }
@@ -1664,6 +1675,13 @@ export function PresupuestosModule() {
                   ? "Todavía no es cliente: se creará al guardar (o se reutilizará uno con el mismo email o teléfono)."
                   : "Todavía no es cliente y tu rol no puede crearlo: pedí que lo conviertan desde Leads."}
             </AdminNote>
+          ) : null}
+          {leadDraft && leadDraft.items.length > 0 ? (
+            <AdminNote>
+              {`Se precargaron ${leadDraft.items.length} líneas del pedido más reciente: ${leadDraft.pricing.fromCatalog} con precio vigente del catálogo, ${leadDraft.pricing.fromRequest} con precio guardado en el pedido y ${leadDraft.pricing.pending} sin precio. Revisá cantidad, duración, precio y disponibilidad${leadDraft.quoteRange ? ` para ${formatDate(leadDraft.quoteRange.startsAt)}–${formatDate(leadDraft.quoteRange.endsAt)}` : ""}. Abrir el editor no reserva stock.`}
+            </AdminNote>
+          ) : leadDraft ? (
+            <AdminNote tone="warn">Este lead no tiene líneas activas de una preorden. Agregá los productos manualmente; abrir el editor no modifica ni reserva stock.</AdminNote>
           ) : null}
           {leadDraft && leadDraft.existingBudgets.length > 0 ? (
             <AdminNote tone="warn">
