@@ -2,6 +2,7 @@
 
 import { SelectField, TextField } from "@/components/admin/AdminFields";
 import Link from "next/link";
+import { useEffect, useId, useRef, useState } from "react";
 import { XIcon } from "./StoreIcons";
 import { SORT_OPTIONS, isSortKey, type SortKey } from "@/lib/storefront-ui";
 
@@ -23,6 +24,23 @@ export function FilterBar({ categories, category, onCategory, sort, onSort, quer
   onOpenFilters?: () => void;
   categoryNavigation?: { allHref: string; links: Array<{ name: string; href: string }>; clientSide?: boolean };
 }) {
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsId = useId();
+  const toolsRef = useRef<HTMLDivElement>(null);
+
+  // Keep the category rail visible while scrolling, but close the larger search/sort
+  // controls once the visitor has moved into the product list. Never hide a focused
+  // control; search, sort, category, and cart state live in CatalogBrowser.
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const collapseOnScroll = () => {
+      if (window.scrollY > 140 && !toolsRef.current?.contains(document.activeElement)) setToolsOpen(false);
+    };
+    window.addEventListener("scroll", collapseOnScroll, { passive: true });
+    return () => window.removeEventListener("scroll", collapseOnScroll);
+  }, [toolsOpen]);
+
+  const sortLabel = SORT_OPTIONS.find((option) => option.value === sort)?.label;
   return (
     <div className="cp-filter cp-fields" role="search" aria-label="Filtrar y ordenar el catálogo" data-testid="filter-bar">
       {categories.length > 1 || categoryNavigation ? (
@@ -49,7 +67,23 @@ export function FilterBar({ categories, category, onCategory, sort, onSort, quer
           )}
         </div>
       ) : null}
-      <div className="cp-filter-tools">
+      <div className="cp-filter-toolbar">
+        <button
+          type="button"
+          className="cp-filter-toggle"
+          aria-expanded={toolsOpen}
+          aria-controls={toolsId}
+          onClick={() => setToolsOpen((open) => !open)}
+          data-testid="filter-tools-toggle"
+        >
+          <XIcon name="search" size={18} />
+          <span>Buscar y ordenar</span>
+          {query.trim() ? <span className="cp-filter-summary">«{query.trim()}»</span> : null}
+          {sort !== "destacados" && sortLabel ? <span className="cp-filter-summary">{sortLabel}</span> : null}
+          <svg className="cp-filter-chevron" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" focusable="false"><path d="m5 7 5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </button>
+      </div>
+      <div id={toolsId} className="cp-filter-tools" ref={toolsRef} hidden={!toolsOpen}>
         <TextField id="buscar-catalogo" label="Buscar productos" ariaLabel="Buscar productos por nombre o código" type="search" size="full" placeholder="Buscar producto" value={query} onChange={onQuery} autoComplete="off" />
         <SelectField
           label="Ordenar"
