@@ -63,3 +63,17 @@ test("el editor recibe las líneas precargadas y comprueba disponibilidad en el 
   assert.match(module, /Abrir el editor no reserva stock/);
   assert.match(module, /Revisá cantidad, duración, precio y disponibilidad/);
 });
+
+test("el editor muestra líneas con SKU, espera la precarga y explica el estado vacío sin mutar stock", () => {
+  const editor = repoFile("components/admin/modules/BudgetItemsEditor.tsx");
+  const module = repoFile("components/admin/modules/PresupuestosModule.tsx");
+  const styles = repoFile("app/globals.css");
+  assert.match(editor, /loading = false/);
+  assert.match(editor, /role="status" aria-label="Cargando líneas del pedido"/);
+  assert.match(editor, /Todavía no hay productos en este presupuesto/);
+  assert.match(editor, /item\.inventory\?\.sku \? `SKU \$\{item\.inventory\.sku\}`/);
+  assert.match(editor, /Sin vínculo a inventario/);
+  assert.match(module, /disabled=\{busy \|\| leadLoading\} loading=\{leadLoading\}/);
+  assert.match(styles, /\.budget-item \{[^}]*border-radius: var\(--a-radius-lg\)/);
+  assert.match(styles, /\.budget-item-row > :nth-child\(4\) input, \.budget-item-row > :nth-child\(5\) input \{ text-align: center/);
+});
