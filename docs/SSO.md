@@ -1,14 +1,14 @@
 # SSO con Google — panel e invitaciones al equipo
 
-Cómo funciona hoy el acceso con Google de LedBox, qué hay que configurar en
+Cómo funciona hoy el acceso con Google de EventOS, qué hay que configurar en
 Google Cloud, cómo se comportan los errores y qué haría falta para el login de
 clientes en el portal (propuesta, **sin implementar**).
 
 - **Google no se usa como proveedor genérico** (no hay NextAuth): el flujo es
   OAuth 2.0 *Authorization Code* propio, en dos endpoints.
-- El **panel vive en `app.ledbox.online`** (EventOS) y sus rutas no llevan
+- El **panel vive en `app.eventoss.online`** (EventOS) y sus rutas no llevan
   `/admin` (regla del 21-09-2026): el callback es `/api/auth/callback/google`.
-  `admin.ledbox.online` redirige al host nuevo (issue #39).
+  `admin.ledbox.online` se conserva como host legado durante la transición.
 - La **aceptación de invitaciones** (issue #31) usa el mismo callback, con el
   token de la invitación en su propia cookie.
 
@@ -35,9 +35,9 @@ Botones que arrancan el flujo:
 1. Crear (o reutilizar) un proyecto en [Google Cloud Console](https://console.cloud.google.com/).
 2. **APIs y servicios → Pantalla de consentimiento de OAuth**:
    - Tipo de usuario: **Externo**.
-   - Nombre de la app: `LedBox`; correo de asistencia: el del equipo.
-   - Dominios autorizados: `ledbox.online` (y los hosts del panel,
-     `admin.ledbox.online` / `app.ledbox.online`, como orígenes si la consola
+   - Nombre de la app: `EventOS`; correo de asistencia: el del equipo.
+   - Dominios autorizados: `eventoss.online` (y el host del panel,
+     `app.eventoss.online`, como origen si la consola
      lo pide).
    - Permisos (*scopes*): `openid`, `email`, `profile`. No se piden permisos de
      Gmail, Drive ni Calendar; el flujo solo necesita identidad.
@@ -45,7 +45,7 @@ Botones que arrancan el flujo:
      cuentas que van a probar; las cuentas fuera de la lista reciben
      `access_denied`.
    - Al publicar (**In production**) la pantalla queda disponible para cualquier
-     cuenta; el control de acceso real lo hace LedBox (usuario activo + rol en la
+     cuenta; el control de acceso real lo hace EventOS (usuario activo + rol en la
      organización activa), no Google.
 
 ### 2.2 Credenciales OAuth (cliente web)
@@ -57,7 +57,7 @@ Orígenes autorizados de JavaScript (no los usa el flujo actual, pero evitan
 ruido al configurar):
 
 ```
-https://app.ledbox.online
+https://app.eventoss.online
 https://admin.ledbox.online
 http://localhost:3000
 ```
@@ -67,19 +67,18 @@ path completo. Estado al 21-09-2026: registrados en Google Cloud el de la app y
 el viejo del panel (transición) y el de desarrollo:
 
 ```
-https://app.ledbox.online/api/auth/callback/google
+https://app.eventoss.online/api/auth/callback/google
 https://admin.ledbox.online/api/auth/callback/google
 http://localhost:3000/api/auth/callback/google
 ```
 
-> Cliente OAuth real: **`LexBox`**, proyecto **`weem-db`**
+> Cliente OAuth real: **`EventOS Admin`**, proyecto **`weem-db`**
 > (ID público `500595134387-k1g1s92q5pr26efbt6fehs8ksn4qeloq`). Verificado en
 > producción: `/api/auth/login/google` redirige a Google con ese `client_id` y
-> con `redirect_uri=https://app.ledbox.online/api/auth/callback/google`, tanto
+> con `redirect_uri=https://app.eventoss.online/api/auth/callback/google`, tanto
 > en el login como en la aceptación de invitaciones.
 >
-> El panel vive en `app.ledbox.online` desde el issue #39 (`admin.ledbox.online`
-> redirige 308); el `NEXT_PUBLIC_ADMIN_URL` define cuál se usa.
+> El panel vive en `app.eventoss.online`; el `NEXT_PUBLIC_ADMIN_URL` define cuál se usa.
 > El callback arma el `redirect_uri` con el origen real de la request
 > (`getPublicOrigin`), así que el mismo deploy funciona en los dos hosts
 > mientras ambos estén registrados en Google. Al comprar el dominio propio de
@@ -142,13 +141,13 @@ contraseña sigue funcionando.
    - abre sesión (`createSession`) y redirige a `/dashboard` (ruta limpia del
      panel). Borra la cookie de `state`.
 
-> El estado real lo decide LedBox: Google solo prueba identidad y correo. Un
+> El estado real lo decide EventOS: Google solo prueba identidad y correo. Un
 > correo verificado sin usuario/membresía **no** entra.
 
 ### 3.2 Invitaciones (`/invitacion/<token>`)
 
 1. El correo de invitación apunta a
-   `https://admin.ledbox.online/invitacion/<token>` (`invitationAcceptUrl`).
+   `https://app.eventoss.online/invitacion/<token>` (`invitationAcceptUrl`).
 2. La página resuelve la invitación por token; si es aceptable, muestra el botón
    **Continuar con Google** → `/api/auth/login/google?invitation=<token>`.
 3. El arranque guarda además el token en la cookie
@@ -199,8 +198,7 @@ detalle técnico.
 
 1. Completar en Owncoding Hub: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
    `AUTH_SECRET`, `NEXT_PUBLIC_ADMIN_URL` con el host real del panel
-   (`https://admin.ledbox.online` hoy, `https://app.ledbox.online` con el
-   cambio de hosts del issue #39).
+   (`https://app.eventoss.online` como host vigente del panel).
 2. En Google Cloud, registrar los *redirect URIs* exactos de §2.2 (el host actual
    del panel y el nuevo, más el de desarrollo).
 3. Desplegar (Coolify reconstruye al integrar a la rama viva).
@@ -216,7 +214,7 @@ detalle técnico.
 
 | Síntoma | Qué revisar |
 | --- | --- |
-| `Error 400: redirect_uri_mismatch` | El `redirect_uri` enviado debe coincidir **carácter por carácter** con uno registrado: `https://admin.ledbox.online/api/auth/callback/google` (y `https://app.ledbox.online/...` tras el cambio de host), sin `/admin`, sin barra final. |
+| `Error 400: redirect_uri_mismatch` | El `redirect_uri` enviado debe coincidir **carácter por carácter** con uno registrado: `https://app.eventoss.online/api/auth/callback/google` (el callback legado de `admin.ledbox.online` se conserva durante la transición), sin `/admin`, sin barra final. |
 | `invalid_client` | `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` mal cargados o de otro proyecto. |
 | `access_denied` | La app está en Testing y la cuenta no es *test user*; o la persona canceló. |
 | `403 org_internal` | La pantalla de consentimiento está restringida al dominio de la organización y la cuenta es externa. |
