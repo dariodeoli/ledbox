@@ -1663,9 +1663,8 @@ export function PresupuestosModule() {
       {boardError ? <AdminNote tone="error">{boardError}</AdminNote> : null}
 
       {writable && showForm && !showRequests ? (
-        <form className="admin-form-panel" onSubmit={submit} aria-busy={busy}>
+        <form className="admin-form-panel" onSubmit={submit} aria-busy={busy || leadLoading}>
           <h2 className="admin-form-title">Nuevo presupuesto</h2>
-          {leadLoading ? <AdminNote>Cargando los datos del lead…</AdminNote> : null}
           {leadDraft ? (
             <AdminNote tone={leadDraft.client || leadDraft.canCreateClient ? undefined : "error"}>
               {`Viene del lead de ${leadDraft.lead.company || leadDraft.lead.name}. `}
@@ -1739,7 +1738,7 @@ export function PresupuestosModule() {
           ) : null}
           </AdminDisclosure>
           </div>
-          <BudgetItemsEditor items={createItems} onChange={setCreateItems} disabled={busy} range={formRange} />
+          <BudgetItemsEditor items={createItems} onChange={setCreateItems} disabled={busy || leadLoading} loading={leadLoading} range={formRange} />
           <BudgetCreationDeposit state={createDeposit} onChange={setCreateDeposit} defaults={budgetsResource.data?.rentalDefaults ?? { depositPercent: null, securityDepositDefault: null }} subtotal={budgetDraftSubtotal(createItems)} disabled={busy} />
           {formError ? <AdminNote tone="error">{formError}</AdminNote> : null}
           <div className="admin-dialog-foot">

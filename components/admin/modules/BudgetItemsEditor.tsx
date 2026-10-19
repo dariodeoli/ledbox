@@ -30,8 +30,10 @@ function productLine(product: AdminInventoryLink | null | undefined, rentalDays:
 }
 
 /** One editor for creation and commercial editing. Search is mounted only when requested. */
-export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
+export function BudgetItemsEditor({ items, onChange, disabled, loading = false, range = null }: {
   items: BudgetItemDraft[]; onChange: (items: BudgetItemDraft[]) => void; disabled?: boolean;
+  /** Holds the editor closed while a lead's lines load, avoiding an empty flash or lost edits. */
+  loading?: boolean;
   range?: { startsAt: string; endsAt: string } | null;
 }) {
   const { role } = useAdminSession();
@@ -58,7 +60,18 @@ export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
     const note = after.mode === "TOTAL" ? `Precio total por ${next} ${next === 1 ? "día" : "días"}` : TOTAL_NOTE.test(item.notes) ? "" : item.notes;
     update(index, { days: String(after.days), rentalDays: String(next), unitPrice: String(after.unitPrice), notes: note });
   };
-  return <div className="admin-plan-list budget-items-editor">
+  return <section className="admin-plan-list budget-items-editor" aria-busy={loading} aria-label="Productos del presupuesto">
+    <header className="budget-items-heading">
+      <div><h3>Productos del presupuesto</h3><p>{loading ? "Recuperando el pedido del lead…" : "Revisá cada línea antes de guardar el borrador."}</p></div>
+      {!loading ? <span className="budget-items-count">{items.length} {items.length === 1 ? "ítem" : "ítems"}</span> : null}
+    </header>
+    {loading ? <div className="budget-items-loading" role="status" aria-label="Cargando líneas del pedido">
+      <span /><span /><span /><span />
+      <small>Cargando productos y precios disponibles…</small>
+    </div> : items.length === 0 ? <div className="budget-items-empty" role="status">
+      <strong>Todavía no hay productos en este presupuesto</strong>
+      <span>Agregá un artículo del inventario o un servicio para empezar. No se modifica el stock al abrir el editor.</span>
+    </div> : <>
     <div className="budget-item-head" aria-hidden="true"><span>Foto</span><span>Ítem</span><span>Precio unitario</span><span>Cantidad</span><span>Días</span><span>Total</span><span>Acciones</span></div>
     {items.map((item, index) => {
       const numeric = { name: item.name, quantity: Number(item.quantity), days: Number(item.days), unitPrice: Number(item.unitPrice), costPrice: Number(item.costPrice) };
@@ -68,7 +81,10 @@ export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
       return <section className="budget-item" key={item.id ?? `draft-${index}`} aria-label={`Ítem ${index + 1}`}>
         <div className="budget-item-row" data-excluded={item.excluded || undefined}>
           <AdminImageBox imageUrl={item.inventory?.imageUrl} size={40} />
-          <TextField label={`Ítem ${index + 1}`} required value={item.name} maxLength={160} disabled={disabled || item.excluded} onChange={(name) => update(index, { name })} />
+          <div className="budget-item-product">
+            <TextField label={`Ítem ${index + 1}`} required value={item.name} maxLength={160} disabled={disabled || item.excluded} onChange={(name) => update(index, { name })} />
+            <small>{item.inventory?.sku ? `SKU ${item.inventory.sku}` : item.inventory ? item.inventory.category : "Sin vínculo a inventario"}</small>
+          </div>
           <MoneyField label="Precio unitario" required limit={BUDGET_INT_MAX} value={item.unitPrice} disabled={disabled || item.excluded} onChange={(unitPrice) => update(index, { unitPrice })} />
           <NumberField strictInteger label="Cantidad" required maxLength={4} value={item.quantity} disabled={disabled || item.excluded} onChange={(quantity) => update(index, { quantity })} />
           {usesDays ? <NumberField strictInteger label="Días" required maxLength={4} value={item.rentalDays ?? item.days} disabled={disabled || item.excluded} onChange={(days) => changeDays(index, days)} /> : <span className="admin-muted">{perEvent ? "Por evento" : "Servicio / pago único"}</span>}
@@ -107,6 +123,7 @@ export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
         </AdminDisclosure>
       </section>;
     })}
+    </>}
     {picker !== null && !disabled ? <div className="admin-plan-list">
       <InventoryLinkPicker label="Buscar producto para agregar" range={range} selected={typeof picker === "number" ? items[picker]?.inventory ?? null : null} onSelect={(product) => {
         const current = typeof picker === "number" ? items[picker] : emptyBudgetItem();
@@ -144,5 +161,5 @@ export function BudgetItemsEditor({ items, onChange, disabled, range = null }: {
       <AdminButton type="button" icon="plus" disabled={disabled} title="Agrega un servicio libre «Transporte» con su precio: se suma al total y lo ve el cliente" onClick={() => onChange([...items, { ...emptyBudgetItem(), name: TRANSPORT_ITEM_NAME }])}>Transporte</AdminButton>
       <strong className="admin-nowrap" aria-live="polite">Subtotal {formatMoney(budgetDraftSubtotal(items))}</strong>
     </div>
-  </div>;
+  </section>;
 }
