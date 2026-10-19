@@ -2198,7 +2198,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--trabajos { --trabajos-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--trabajos-cols); --admin-table-min: 64rem; }
 .admin-table--promotoras { --promotoras-cols: minmax(7rem, 1.3fr) 5.5rem minmax(6.5rem, 1.2fr) minmax(7rem, 1.3fr) 6rem 4.75rem 5rem 10rem; --admin-cols: var(--promotoras-cols); --admin-table-min: 55.5rem; }
 .admin-table--leads { --leads-cols: 4.75rem minmax(7rem, 1.3fr) minmax(7rem, 1.2fr) 5rem minmax(6.5rem, 1.2fr) minmax(5.5rem, 1fr) 5.75rem 5.5rem 10rem; --admin-cols: var(--leads-cols); --admin-table-min: 61.5rem; }
-.admin-table--leads-productos { --leads-productos-cols: minmax(11rem, 1.6fr) 5.5rem 7rem 8rem 8rem; --admin-cols: var(--leads-productos-cols); --admin-table-min: 39rem; }
+.admin-table--leads-productos { --leads-productos-cols: minmax(12rem, 1.7fr) 5rem 6.5rem 8rem 8rem; --admin-cols: var(--leads-productos-cols); --admin-table-min: 39.5rem; }
 .admin-table--usuarios { --usuarios-cols: minmax(10rem, 1.2fr) minmax(12rem, 1.4fr) 8.5rem 6.5rem 7.5rem 5.5rem; --admin-cols: var(--usuarios-cols); --admin-table-min: 53rem; }
 .admin-table--checklist { --checklist-cols: 7rem minmax(9rem, 1.6fr) minmax(6rem, 1fr) 5rem 7rem; --admin-cols: var(--checklist-cols); --admin-table-min: 36rem; }
 .admin-table--checklist-resumen { --checklist-resumen-cols: 4.75rem minmax(6.5rem, 1.5fr) minmax(5.5rem, 1fr) 5.75rem; --admin-cols: var(--checklist-resumen-cols); --admin-table-min: 24rem; }
@@ -2758,6 +2758,36 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-detail-quote-meta { color: var(--a-muted); font-size: 11px; }
 .admin-detail-form { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius-lg); background: var(--a-panel-2); }
 .admin-detail-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-lead-detail { gap: 10px; padding: 10px; }
+.admin-lead-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius-lg); background: var(--a-panel-2); }
+.admin-lead-summary > .admin-detail-item:first-child { grid-column: span 2; }
+.admin-lead-summary .admin-detail-value { line-height: 1.4; }
+.admin-lead-message { gap: 6px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--a-accent) 30%, var(--a-line)); border-radius: var(--a-radius-lg); background: color-mix(in srgb, var(--a-accent) 6%, var(--a-panel)); }
+.admin-lead-message .admin-detail-section-title { color: var(--a-accent); }
+.admin-lead-message .admin-detail-text { margin: 0; color: var(--a-text-strong); }
+.admin-lead-detail .admin-detail-quote { gap: 8px; padding: 10px; border: 1px solid var(--a-line); border-radius: var(--a-radius-lg); background: var(--a-panel-2); }
+.admin-lead-detail .admin-detail-quote-meta { margin: 0; }
+.admin-table--leads-productos > .admin-table-head > .admin-cell:nth-child(2),
+.admin-table--leads-productos > .admin-table-head > .admin-cell:nth-child(3),
+.admin-table--leads-productos .admin-lead-product-centered { text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.admin-table--leads-productos .admin-lead-product { display: flex; align-items: center; gap: 9px; min-width: 0; white-space: normal; }
+.admin-table--leads-productos .admin-lead-product-image { display: grid; flex: 0 0 42px; place-items: center; width: 42px; height: 42px; overflow: hidden; border: 1px solid var(--a-line); border-radius: calc(var(--a-radius) - 2px); background: var(--a-panel); color: var(--a-muted); object-fit: cover; }
+.admin-table--leads-productos .admin-lead-product-image--empty { border-style: dashed; }
+.admin-table--leads-productos .admin-lead-product-copy { display: grid; min-width: 0; gap: 2px; line-height: 1.25; }
+.admin-table--leads-productos .admin-lead-product-copy > :is(strong, s, span) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table--leads-productos .admin-lead-product-note { color: var(--a-muted-2); }
+.admin-lead-convert-help, .admin-lead-compose-help { flex: 1 1 100%; margin: 0; color: var(--a-muted); font-size: 11.5px; line-height: 1.45; }
+.admin-lead-compose-help { padding-left: 2px; }
+@media (max-width: 760px) {
+  .admin-lead-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .admin-lead-summary > .admin-detail-item:first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 480px) {
+  .admin-lead-detail { gap: 8px; padding: 8px; }
+  .admin-lead-summary { grid-template-columns: minmax(0, 1fr); padding: 9px 10px; }
+  .admin-lead-summary > .admin-detail-item:first-child { grid-column: auto; }
+  .admin-lead-detail .admin-detail-quote { padding: 8px; }
+}
 
 /* ── Demo pública (issue #14) ──
    Entrada a la demo: aviso fijo debajo del topbar (chip, aclaración de solo

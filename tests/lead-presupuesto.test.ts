@@ -112,9 +112,10 @@ test("lead-draft: budgets.write, empresa activa y 404", () => {
   assert.match(route, /404/);
 });
 
-test("UI: «Armar presupuesto» solo con permiso de presupuestos y sin datos personales en la URL", () => {
+test("UI: revisar y armar presupuesto solo con permiso y sin datos personales en la URL", () => {
   const leads = repoFile("components/admin/modules/LeadsModule.tsx");
-  assert.match(leads, /budgetWritable \? \([\s\S]{0,700}Armar presupuesto/);
+  assert.match(leads, /budgetWritable \? \([\s\S]{0,900}Revisar y armar presupuesto/);
+  assert.match(leads, /Abre un presupuesto nuevo con cliente, título y notas del lead precargados/);
   assert.match(leads, /\/presupuestos\?nuevo=1&lead=\$\{encodeURIComponent\(selected\.id\)\}/);
   const presupuestos = repoFile("components/admin/modules/PresupuestosModule.tsx");
   assert.match(presupuestos, /lead-draft\?leadId=/);

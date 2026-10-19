@@ -105,6 +105,14 @@ function leadItemCount(lead: AdminLeadRow): number {
   return lead.quoteRequests.reduce((sum, quote) => sum + quote.items.length, 0);
 }
 
+function LeadProductImage({ src, name }: { src: string | null | undefined; name: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return <span className="admin-lead-product-image admin-lead-product-image--empty" aria-hidden="true"><AdminIcon name="inventory" size={18} /></span>;
+  }
+  return <img className="admin-lead-product-image" src={src} alt={`Foto de ${name}`} loading="lazy" decoding="async" onError={() => setFailed(true)} />;
+}
+
 const QUOTE_TONE: Record<string, "neutral" | "accent" | "ok" | "warn" | "danger" | "info"> = {
   NEW: "accent",
   REVIEWING: "info",
@@ -653,14 +661,32 @@ export function LeadsModule() {
             </>
           }
         >
-          <div className="admin-detail">
-            <dl className="admin-detail-grid">
+          <div className="admin-detail admin-lead-detail">
+            <dl className="admin-detail-grid admin-lead-summary">
               <div className="admin-detail-item">
                 <dt className="admin-detail-label">Contacto</dt>
                 <dd className="admin-detail-value">
                   {selected.phone}
                   {selected.email ? <span className="admin-cell-sub"> · {selected.email}</span> : null}
                 </dd>
+              </div>
+              <div className="admin-detail-item">
+                <dt className="admin-detail-label">Fecha del evento</dt>
+                <dd className="admin-detail-value">
+                  {selected.eventDate ? formatDate(selected.eventDate) : "Sin fecha"}
+                  <AdminCountdown value={selected.eventDate} className="admin-countdown--inline" title={`Evento de ${selected.name}: cuánto falta`} />
+                </dd>
+              </div>
+              <div className="admin-detail-item">
+                <dt className="admin-detail-label">Estado</dt>
+                <dd className="admin-detail-value">
+                  <AdminBadge tone={statusTone(selected.status)}>{leadStatusLabel(selected.status)}</AdminBadge>
+                  <span className="admin-cell-sub"> · actualizado el {formatDateTime(selected.updatedAt)}</span>
+                </dd>
+              </div>
+              <div className="admin-detail-item">
+                <dt className="admin-detail-label">Ubicación</dt>
+                <dd className="admin-detail-value">{selected.location || "—"}</dd>
               </div>
               <div className="admin-detail-item">
                 <dt className="admin-detail-label">Empresa</dt>
@@ -675,42 +701,20 @@ export function LeadsModule() {
                 <dd className="admin-detail-value">{selected.reason || "—"}</dd>
               </div>
               <div className="admin-detail-item">
-                <dt className="admin-detail-label">Fecha del evento</dt>
-                <dd className="admin-detail-value">
-                  {selected.eventDate ? formatDate(selected.eventDate) : "Sin fecha"}
-                  <AdminCountdown
-                    value={selected.eventDate}
-                    className="admin-countdown--inline"
-                    title={`Evento de ${selected.name}: cuánto falta`}
-                  />
-                </dd>
-              </div>
-              <div className="admin-detail-item">
-                <dt className="admin-detail-label">Ubicación</dt>
-                <dd className="admin-detail-value">{selected.location || "—"}</dd>
-              </div>
-              <div className="admin-detail-item">
-                <dt className="admin-detail-label">Estado</dt>
-                <dd className="admin-detail-value">
-                  <AdminBadge tone={statusTone(selected.status)}>{leadStatusLabel(selected.status)}</AdminBadge>
-                  <span className="admin-cell-sub"> · actualizado el {formatDateTime(selected.updatedAt)}</span>
-                </dd>
-              </div>
-              <div className="admin-detail-item">
                 <dt className="admin-detail-label">Consentimiento</dt>
                 <dd className="admin-detail-value">{formatDateTime(selected.consentAt)}</dd>
               </div>
             </dl>
 
-            <div className="admin-detail-section">
+            {selected.message?.trim() ? <div className="admin-detail-section admin-lead-message">
               <p className="admin-detail-section-title">
                 <span className="admin-panel-icon admin-panel-icon--sm" aria-hidden="true">
                   <AdminIcon name="mail" size={11} />
                 </span>
-                Mensaje del lead
+                Mensaje del cliente
               </p>
-              {selected.message ? <p className="admin-detail-text">{selected.message}</p> : <p className="admin-muted">El lead no dejó un mensaje.</p>}
-            </div>
+              <p className="admin-detail-text">{selected.message}</p>
+            </div> : null}
 
             <div className="admin-detail-section">
               <p className="admin-detail-section-title">
@@ -786,9 +790,10 @@ export function LeadsModule() {
                             {holdWritable ? (
                               <CheckboxField checked={holdOnConvert} onChange={setHoldOnConvert} text="Retener el stock mientras se cotiza (según la vigencia de Ajustes > Alquileres)" />
                             ) : null}
-                            <AdminButton type="button" variant="primary" icon="budgets" busy={quoteBusy === quote.id} disabled={Boolean(quoteBusy)} onClick={() => void convertQuote(quote.id)}>
-                              Aceptar y convertir en presupuesto
+                            <AdminButton type="button" variant="primary" icon="budgets" busy={quoteBusy === quote.id} disabled={Boolean(quoteBusy)} onClick={() => void convertQuote(quote.id)} title="Crea un borrador con los productos pedidos; revisá stock y precios antes de enviarlo.">
+                              Convertir en borrador
                             </AdminButton>
+                            <p className="admin-lead-convert-help">Crea un borrador con todos los productos que pidió el cliente. Revisá stock y precios antes de enviarlo; esta acción no manda el presupuesto.</p>
                           </div>
                         ) : null}
                         {quote.budget && holdWritable ? (
@@ -808,7 +813,7 @@ export function LeadsModule() {
                         label={`Productos pedidos el ${formatDate(quote.createdAt)}`}
                         columns={[
                           { label: "Producto" },
-                          { label: "Cantidad", end: true },
+                          { label: "Cantidad" },
                           { label: "Duración" },
                           { label: "Precio unitario", end: true },
                           { label: "Subtotal", end: true },
@@ -819,15 +824,19 @@ export function LeadsModule() {
                           return (
                             <AdminRow key={item.id}>
                               <AdminCell title={`${item.productName} · ${item.productSlug}`}>
-                                {quoteItemActive(item.state) ? <strong>{item.productName}</strong> : <s>{item.originalName ?? item.productName}</s>}
-                                {item.state && item.state !== "KEEP" && isQuoteItemState(item.state) ? (
-                                  <span className="admin-cell-sub"> · {QUOTE_ITEM_STATE_LABEL[item.state]}{item.state === "SUBSTITUTED" && item.originalName ? ` (en lugar de ${item.originalName})` : ""}</span>
-                                ) : null}
+                                <span className="admin-lead-product">
+                                  <LeadProductImage src={item.productImageUrl} name={item.productName} />
+                                  <span className="admin-lead-product-copy">
+                                    {quoteItemActive(item.state) ? <strong>{item.productName}</strong> : <s>{item.originalName ?? item.productName}</s>}
+                                    <span className="admin-cell-sub">SKU {item.productSku || item.productSlug}{item.state && item.state !== "KEEP" && isQuoteItemState(item.state) ? ` · ${QUOTE_ITEM_STATE_LABEL[item.state]}${item.state === "SUBSTITUTED" && item.originalName ? ` (en lugar de ${item.originalName})` : ""}` : ""}</span>
+                                    {item.notes ? <span className="admin-cell-sub admin-lead-product-note">{item.notes}</span> : null}
+                                  </span>
+                                </span>
                               </AdminCell>
-                              <AdminCell end title={`${formatNumber(item.quantity)} unidades`}>
+                              <AdminCell className="admin-lead-product-centered" title={`${formatNumber(item.quantity)} unidades`}>
                                 {formatNumber(item.quantity)}
                               </AdminCell>
-                              <AdminCell title={item.duration ? `${item.duration} días · ${billingUnitLabel(item.billingUnit)}` : billingUnitLabel(item.billingUnit)}>
+                              <AdminCell className="admin-lead-product-centered" title={item.duration ? `${item.duration} días · ${billingUnitLabel(item.billingUnit)}` : billingUnitLabel(item.billingUnit)}>
                                 {item.duration ? `${formatNumber(item.duration)} días` : billingUnitLabel(item.billingUnit)}
                               </AdminCell>
                               <AdminCell end title={item.unitPrice === null ? "El sitio no cargó precio unitario" : formatMoney(item.unitPrice)}>
@@ -874,10 +883,11 @@ export function LeadsModule() {
                   variant="primary"
                   icon="budgets"
                   onClick={() => router.push(`/presupuestos?nuevo=1&lead=${encodeURIComponent(selected.id)}`)}
-                  title="Abre Presupuestos con el cliente, el título y las notas de este lead ya cargados"
+                  title="Abre un presupuesto nuevo con cliente, título y notas del lead precargados; agregá sus productos y revisalos antes de enviar."
                 >
-                  Armar presupuesto
+                  Revisar y armar presupuesto
                 </AdminButton>
+                <p className="admin-lead-compose-help">Abre un presupuesto nuevo con cliente, título y notas del lead. Agregá las líneas del pedido y revisalas antes de enviar.</p>
               </div>
             ) : null}
 

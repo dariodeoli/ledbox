@@ -12,6 +12,7 @@ import { jsonError, readJson } from "@/lib/server/http";
 import { auditChanges, recordAudit } from "@/lib/server/audit";
 import { live } from "@/lib/server/trash-filter";
 import { assertLive, trashErrorResponse } from "@/lib/server/trash";
+import { inventoryImageUrl } from "@/lib/server/inventory-images";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -120,7 +121,28 @@ export async function GET(request: Request) {
     take: 101,
     include: LEAD_INCLUDE,
   });
-  return Response.json({ leads: fetched.slice(0, 100), truncated: fetched.length > 100 });
+  // Enriquecimiento de lectura: solo expone SKU/foto de inventario de la
+  // empresa activa. Pedidos históricos o productos borrados conservan su
+  // snapshot y la UI muestra un placeholder.
+  const inventoryIds = [...new Set(fetched.flatMap((lead) => lead.quoteRequests.flatMap((quote) => quote.items.map((item) => item.inventoryId).filter((id): id is string => Boolean(id)))))];
+  const inventoryRows = inventoryIds.length
+    ? await db.inventoryItem.findMany({
+        where: { organizationId: auth.context.organizationId, id: { in: inventoryIds } },
+        select: { id: true, sku: true, imageUrl: true, imageMime: true, updatedAt: true },
+      })
+    : [];
+  const inventoryById = new Map(inventoryRows.map((item) => [item.id, item]));
+  const leads = fetched.slice(0, 100).map((lead) => ({
+    ...lead,
+    quoteRequests: lead.quoteRequests.map((quote) => ({
+      ...quote,
+      items: quote.items.map((item) => {
+        const inventory = item.inventoryId ? inventoryById.get(item.inventoryId) : null;
+        return { ...item, productSku: inventory?.sku ?? null, productImageUrl: inventory ? inventoryImageUrl(inventory) : null };
+      }),
+    })),
+  }));
+  return Response.json({ leads, truncated: fetched.length > 100 });
 }
 
 /**

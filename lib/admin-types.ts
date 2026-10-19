@@ -1482,6 +1482,9 @@ export type AdminLeadItem = {
   id: string;
   productSlug: string;
   productName: string;
+  /** Datos visuales del producto vinculado, solo cuando pertenece a la empresa activa. */
+  productSku?: string | null;
+  productImageUrl?: string | null;
   quantity: number;
   duration: number | null;
   billingUnit: string;
