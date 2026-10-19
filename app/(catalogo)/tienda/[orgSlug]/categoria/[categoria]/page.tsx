@@ -4,6 +4,8 @@ import { CategoryPage } from "@/components/catalog-public/CategoryPage";
 import { storeCategoryHref } from "@/lib/store-categories";
 import { loadPublicCategory } from "@/lib/server/store-categories";
 import { loadPublicCollections, loadPublicZones, loadStorefront, parsePublicRange } from "@/lib/server/catalog-public";
+import { loadStoreSocialImage } from "@/lib/server/store-seo";
+import { storefrontMetadata } from "@/lib/store-seo";
 
 export const dynamic = "force-dynamic";
 type PageProps = {
@@ -18,11 +20,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   if (!data) return { title: { absolute: "Categoría no encontrada" }, robots: { index: false, follow: false } };
   const title = `${data.category.name} · ${data.context.organization.name}`;
   const basePath = `/tienda/${encodeURIComponent(data.context.organization.slug)}`;
-  return {
-    title: { absolute: title }, description: `Productos de ${data.category.name} de ${data.context.organization.name}.`,
-    alternates: { canonical: storeCategoryHref(basePath, data.category, null) },
-    robots: data.context.demo ? { index: false, follow: false } : { index: true, follow: true },
-  };
+  const image = data.context.demo ? null : await loadStoreSocialImage(data.context.organization.id, data.context.organization.slug);
+  return storefrontMetadata({
+    organizationSlug: data.context.organization.slug,
+    organizationName: data.context.organization.name,
+    title,
+    description: `Productos de ${data.category.name} de ${data.context.organization.name}.`,
+    canonicalPath: storeCategoryHref(basePath, data.category, null),
+    socialImagePath: image,
+    indexable: !data.context.demo,
+  });
 }
 
 export default async function CategoryRoute({ params, searchParams }: PageProps) {

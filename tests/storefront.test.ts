@@ -159,8 +159,9 @@ test("la tienda: /catalogo redirige, el mayorista y el pedido van noindex y la t
   const store = read("app/(catalogo)/tienda/[orgSlug]/page.tsx");
   assert.match(store, /if \(!context\) notFound\(\)/);
   // La demo y la tienda con acceso restringido (con solicitud o privada) no se indexan.
-  assert.match(store, /robots: context\.demo \|\| context\.settings\.catalogAccessMode !== "OPEN" \? \{ index: false, follow: false \} : \{ index: true, follow: true \}/);
-  assert.match(store, /title: \{ absolute: `\$\{name\} · Tienda de alquiler` \}/);
+  assert.match(store, /const indexable = !context\.demo && context\.settings\.catalogAccessMode === "OPEN"/);
+  assert.match(store, /return storefrontMetadata\(/);
+  assert.match(store, /title: `\$\{name\} · Tienda de alquiler`/);
   assert.match(store, /description,/);
   const wholesale = read("app/(catalogo)/tienda/[orgSlug]/mayorista/[token]/page.tsx");
   assert.match(wholesale, /PRIVATE_ROBOTS = \{ index: false, follow: false/);
