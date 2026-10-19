@@ -1522,12 +1522,10 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-menu-item, .admin-company-menu-item, .admin-combobox-option, .admin-root .admin-field [role="option"] { min-height: 44px; border-radius: 8px; }
 .admin-menu-item:hover:not(:disabled), .admin-company-menu-item:hover:not(:disabled), .admin-combobox-option:hover, .admin-root .admin-field [role="option"]:is(:hover, [aria-selected="true"]) { background: var(--a-accent-soft); color: var(--a-accent); }
 .admin-company-menu-item:focus-visible { outline: 2px solid var(--a-accent); outline-offset: -2px; }
-/* Piel única del panel: línea inferior en los campos canónicos. Se conservan
-   prefijos, indicadores, validación y halo de foco de cada primitivo. No afecta
-   checks, interruptores, archivos ni botones segmentados o del calendario. */
-.admin-root .admin-field :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not(.sr-only), select, textarea) {
-  border-radius: 0; border-width: 0 0 1px; background-color: transparent;
-}
+/* Los campos canónicos conservan la caja rectangular redondeada de
+   owncoding-ui; el panel aporta solamente ancho y tokens de tema. El control
+   de la librería ya dibuja su propio anillo de foco, así evitamos un segundo. */
+.admin-root .admin-field [data-oc-control]:focus-visible { outline: none; }
 .admin-settings-content .admin-field:has(select) { max-width: none; }
 .admin-settings-content .admin-field :is([data-oc-control], input, select, textarea):focus-visible {
   outline: 2px solid var(--a-accent); outline-offset: 2px;
@@ -3554,15 +3552,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .portal-code-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .portal-field { display: grid; gap: 6px; }
 .portal-field-label { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: normal; }
-.portal-field input, .portal-field textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--line-control); border-radius: var(--p-radius); background: var(--surface-2); color: var(--text); font: 500 15px/1.4 var(--font-body); }
-.portal-field select { width: 100%; padding: 11px 12px; border: 1px solid var(--line-control); border-radius: var(--p-radius); background: var(--surface-2); color: var(--text); font: 500 15px/1.4 var(--font-body); }
-.portal-field input:focus, .portal-field textarea:focus { outline: none; border-color: var(--led); box-shadow: 0 0 0 3px var(--led-soft); }
-.portal-field select:focus { outline: none; border-color: var(--led); box-shadow: 0 0 0 3px var(--led-soft); }
+.portal-field input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), .portal-field textarea, .portal-field select { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line-control); border-radius: var(--p-radius); background: var(--surface-2); color: var(--text); font: 500 15px/1.4 var(--font-body); }
+.portal-field :is(input, textarea, select):focus { outline: none; border-color: var(--p-action); box-shadow: none; }
 .portal .portal-field :is(input, textarea, select):focus-visible { outline: 2px solid var(--p-action); outline-offset: 2px; }
-.portal-field input[aria-invalid="true"] { border-color: var(--p-danger); }
-.portal-field input:not([type="file"]):not([type="checkbox"]):not([type="radio"]), .portal-field textarea, .portal-field select { min-height: 44px; padding: 8px 2px; border: 0; border-bottom: 1px solid var(--line-control); border-radius: 0; background: transparent; }
-.portal-field input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):focus, .portal-field textarea:focus, .portal-field select:focus { border-bottom-color: var(--p-action); box-shadow: 0 1px 0 var(--p-action); }
-.portal-field input[aria-invalid="true"], .portal-field textarea[aria-invalid="true"], .portal-field select[aria-invalid="true"] { border-bottom-color: var(--p-danger); }
+.portal-field :is(input, textarea, select)[aria-invalid="true"] { border-color: var(--p-danger); box-shadow: none; }
+.portal-field :is(input, textarea, select):disabled { border-color: var(--line-control); background: var(--surface); color: var(--muted); cursor: not-allowed; opacity: 1; }
 .portal-help { color: var(--muted-2); font-size: 12px; line-height: 1.5; }
 .portal-error { color: var(--p-danger); font-size: 12.5px; line-height: 1.5; }
 .portal-btn { justify-self: start; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border: 1px solid var(--line-control); border-radius: 999px; background: transparent; color: var(--text); font: 700 11px var(--font-body); letter-spacing: .14em; text-transform: uppercase; text-decoration: none; white-space: nowrap; cursor: pointer; transition: border-color .15s, color .15s, background .15s, filter .15s; }

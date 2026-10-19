@@ -27,6 +27,13 @@ La biblioteca existente vive en `components/admin/AdminUI.tsx` y
 `components/admin/AdminFields.tsx`. `components/ui/index.ts` es el contrato
 estable para que los módulos no dependan de rutas internas.
 
+`TextField` usa `Input` de `owncoding-ui` y es el campo de texto canónico para
+el panel y formularios que adoptan `AdminFields`. La forma compartida es una
+caja con borde completo de 1 px y esquinas redondeadas; los estados de foco,
+error y deshabilitado se expresan sobre ese mismo contorno. Cada tema puede
+cambiar color, fondo, alto táctil y tipografía mediante tokens, pero no volver
+a imponer un subrayado como reemplazo del borde completo.
+
 La entrada pública también expone presentaciones de registros: `AdminBoard`
 (pipeline), `AdminCardGrid` (cuadrícula), `AdminViewSwitch` y
 `useAdminModuleView` para cambiar y recordar vistas. La lista/tabla existente
