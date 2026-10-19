@@ -21,6 +21,15 @@ test("cada atajo tiene fecha exacta y respeta min/max inclusivos sin alterar val
   assert.deepEqual(options.map(x => [x.label, x.dateLabel, x.allowed]), [["Hoy", "15/10/2026", false], ["Mañana", "16/10/2026", true], ["Pasado mañana", "17/10/2026", false]]);
   assert.ok(dateShortcuts({ now, min: "fecha inválida", max: "2026-02-30" }).every(x => x.allowed), "límites nativos inválidos no restringen el calendario");
 });
+test("atajos de fecha cumplen el mínimo WCAG y usan el token de 44px para puntero táctil", () => {
+  const css = readFileSync("app/globals.css", "utf8");
+  const start = css.indexOf(".admin-date-shortcuts {");
+  const end = css.indexOf("/* Editable quantity controls", start);
+  assert.ok(start >= 0 && end > start, "existe el bloque único del kit compartido de fechas");
+  const styles = css.slice(start, end);
+  assert.match(styles, /\.admin-date-shortcuts button\s*\{[^}]*min-inline-size:\s*24px;[^}]*min-height:\s*30px;/);
+  assert.match(styles, /@media\s*\(pointer:\s*coarse\)\s*\{\s*\.admin-date-shortcuts button\s*\{[^}]*min-inline-size:\s*var\(--tap,\s*44px\);[^}]*min-block-size:\s*var\(--tap,\s*44px\);/);
+});
 test("datetime conserva hora/segundos; vacío usa 00:00 y compara límites por precisión equivalente", () => {
   assert.equal(dateShortcuts({ now, kind: "datetime-local", value: "2020-01-01T23:40:05.123" })[1].value, "2026-10-16T23:40:05.123");
   assert.equal(dateShortcuts({ now, kind: "datetime-local" })[0].value, "2026-10-15T00:00");
