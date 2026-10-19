@@ -9,7 +9,7 @@ export const authConfig = {
   demoCookieName: "ledbox_demo",
   sessionDurationMs: 1000 * 60 * 60 * 24 * 7,
   passwordResetDurationMs: 1000 * 60 * 30,
-  resetSender: "LedBox <ledbox@weem.com.py>",
+  resetSender: "LedBox <eventoss@weem.com.py>",
 };
 
 export function normalizeEmail(email: string): string {

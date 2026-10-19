@@ -25,7 +25,7 @@ test("correos: identidad de la empresa, remitente «vía EventOS», reply-to y l
   const port = (provider.address() as { port: number }).port;
   process.env.RESEND_BASE_URL = `http://127.0.0.1:${port}`;
   process.env.RESEND_API_KEY = "re_test_local";
-  process.env.EMAIL_FROM = "LedBox <ledbox@weem.com.py>";
+  process.env.EMAIL_FROM = "LedBox <eventoss@weem.com.py>";
 
   const { db } = await import("../lib/server/db");
   const sharp = (await import("sharp")).default;
@@ -62,7 +62,7 @@ test("correos: identidad de la empresa, remitente «vía EventOS», reply-to y l
     await t.test("empresa con logo, color y contacto: marca completa, From «<Empresa> vía EventOS» y reply-to de la empresa", async () => {
       const org = await seed({ name: "La Vajilla", contactEmail: "Hola@LaVajilla.example", logo: "light", accent: "#0b5cd5" });
       const identity = await mailIdentityFor(org.id);
-      assert.equal(identity.from, "La Vajilla vía EventOS <ledbox@weem.com.py>");
+      assert.equal(identity.from, "La Vajilla vía EventOS <eventoss@weem.com.py>");
       assert.equal(identity.replyTo, "hola@lavajilla.example");
       assert.equal(identity.brand.name, "La Vajilla");
       assert.equal(identity.brand.color, "#0b5cd5");
@@ -76,7 +76,7 @@ test("correos: identidad de la empresa, remitente «vía EventOS», reply-to y l
       const result = await sendMail({ to: "ana@example.test", subject: content.subject, category: "invitation", html: content.html, text: content.text, organizationId: org.id });
       assert.equal(result.status, "sent", result.error);
       assert.equal(received.length, 1);
-      assert.equal(received[0].from, "La Vajilla vía EventOS <ledbox@weem.com.py>");
+      assert.equal(received[0].from, "La Vajilla vía EventOS <eventoss@weem.com.py>");
       assert.equal(received[0].reply_to, "hola@lavajilla.example");
       assert.ok(!/ledbox/i.test(String(received[0].html).replace(/<[^>]+>/g, " ").replace(/https?:\/\/\S+/g, " ")), "el correo de La Vajilla no dice LedBox");
     });
@@ -89,7 +89,7 @@ test("correos: identidad de la empresa, remitente «vía EventOS», reply-to y l
       assert.equal(identity.brand.color, null);
       received.length = 0;
       await sendMail({ to: "ana@example.test", subject: "Hola", category: "test", html: "<p>x</p>", text: "x", organizationId: org.id });
-      assert.equal(received[0].from, "Eventos Sur vía EventOS <ledbox@weem.com.py>");
+      assert.equal(received[0].from, "Eventos Sur vía EventOS <eventoss@weem.com.py>");
       assert.equal("reply_to" in received[0], false, "no se inventa un reply-to");
 
       const withLogo = await seed({ name: "Solo Oscuro", logo: "dark" });
@@ -114,11 +114,11 @@ test("correos: identidad de la empresa, remitente «vía EventOS», reply-to y l
 
     await t.test("correos de plataforma salen como «EventOS» y sin reply-to, aunque lleven empresa para el historial", async () => {
       const org = await seed({ name: "La Vajilla", contactEmail: "hola@lavajilla.example" });
-      assert.deepEqual(platformMailIdentity(), { brand: PLATFORM_BRAND, from: "EventOS <ledbox@weem.com.py>", replyTo: null });
+      assert.deepEqual(platformMailIdentity(), { brand: PLATFORM_BRAND, from: "EventOS <eventoss@weem.com.py>", replyTo: null });
       received.length = 0;
       const result = await sendMail({ to: "dueño@example.test", subject: "Alta", category: "invitation", html: "<p>x</p>", text: "x", organizationId: org.id, platform: true });
       assert.equal(result.status, "sent", result.error);
-      assert.equal(received[0].from, "EventOS <ledbox@weem.com.py>");
+      assert.equal(received[0].from, "EventOS <eventoss@weem.com.py>");
       assert.equal("reply_to" in received[0], false);
       const log = await db.mailLog.findUniqueOrThrow({ where: { id: result.logId! } });
       assert.equal(log.organizationId, org.id, "el historial sigue siendo de la empresa");
@@ -126,7 +126,7 @@ test("correos: identidad de la empresa, remitente «vía EventOS», reply-to y l
 
     await t.test("una empresa inexistente o una falla de lectura nunca rompe el envío: sale como EventOS", async () => {
       const identity = await mailIdentityFor(randomUUID());
-      assert.equal(identity.from, "EventOS <ledbox@weem.com.py>");
+      assert.equal(identity.from, "EventOS <eventoss@weem.com.py>");
       assert.equal(identity.brand.platform, true);
     });
   } finally {

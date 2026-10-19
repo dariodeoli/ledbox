@@ -124,14 +124,14 @@ test("ningún correo de empresa dice «LedBox» cuando la empresa no es LedBox",
 
 test("remitente: «<Empresa> vía EventOS» con el dominio configurado; plataforma como «EventOS»; nombres hostiles se limpian", () => {
   const previous = process.env.EMAIL_FROM;
-  process.env.EMAIL_FROM = "LedBox <ledbox@weem.com.py>";
+  process.env.EMAIL_FROM = "LedBox <eventoss@weem.com.py>";
   try {
-    assert.equal(formatSender("La Vajilla"), "La Vajilla vía EventOS <ledbox@weem.com.py>");
-    assert.equal(formatSender(null), "EventOS <ledbox@weem.com.py>");
-    assert.equal(formatSender("   "), "EventOS <ledbox@weem.com.py>");
-    assert.equal(formatSender('Eventos "Sur"'), "Eventos Sur vía EventOS <ledbox@weem.com.py>");
+    assert.equal(formatSender("La Vajilla"), "La Vajilla vía EventOS <eventoss@weem.com.py>");
+    assert.equal(formatSender(null), "EventOS <eventoss@weem.com.py>");
+    assert.equal(formatSender("   "), "EventOS <eventoss@weem.com.py>");
+    assert.equal(formatSender('Eventos "Sur"'), "Eventos Sur vía EventOS <eventoss@weem.com.py>");
     const hostile = formatSender('Mala\r\nBcc: robo@x.test');
-    assert.ok(!/[\r\n]/.test(hostile) && hostile.endsWith("<ledbox@weem.com.py>"), "sin saltos de línea en el encabezado");
+    assert.ok(!/[\r\n]/.test(hostile) && hostile.endsWith("<eventoss@weem.com.py>"), "sin saltos de línea en el encabezado");
     assert.ok(formatSender("Casa, Fiestas") .startsWith('"Casa, Fiestas vía EventOS"'), "comas entre comillas");
     process.env.EMAIL_FROM = "soporte@weem.com.py";
     assert.equal(formatSender("La Vajilla"), "La Vajilla vía EventOS <soporte@weem.com.py>");

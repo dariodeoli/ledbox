@@ -5,7 +5,7 @@ import { authConfig, requireEnv } from "../config";
  * Transporte de correo: Resend como único proveedor de la app.
  *
  * `EMAIL_FROM` manda si está definido; si no, el remitente de recuperación
- * (`authConfig.resetSender`, `LedBox <ledbox@weem.com.py>`) es el default de
+ * (`authConfig.resetSender`, `LedBox <eventoss@weem.com.py>`) es el default de
  * todos los correos. `RESEND_BASE_URL` (opcional) apunta el SDK a un mock local
  * al probar el circuito; en producción va sin definir y el SDK usa su API real.
  * Sin `RESEND_API_KEY` no se intenta ningún envío: el llamador lo verifica con
@@ -17,7 +17,7 @@ export function appEmailSender(): string {
   return process.env.EMAIL_FROM?.trim() || authConfig.resetSender;
 }
 
-/** Solo la dirección (`ledbox@weem.com.py`) del remitente configurado: el dominio de envío no cambia nunca. */
+/** Solo la dirección (`eventoss@weem.com.py`) del remitente configurado: el dominio de envío no cambia nunca. */
 export function senderAddress(): string {
   const configured = appEmailSender();
   return /<([^<>]+)>/.exec(configured)?.[1]?.trim() || configured.trim();
