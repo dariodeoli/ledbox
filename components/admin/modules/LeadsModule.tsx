@@ -883,11 +883,11 @@ export function LeadsModule() {
                   variant="primary"
                   icon="budgets"
                   onClick={() => router.push(`/presupuestos?nuevo=1&lead=${encodeURIComponent(selected.id)}`)}
-                  title="Abre un presupuesto nuevo con cliente, título y notas del lead precargados; agregá sus productos y revisalos antes de enviar."
+                  title="Abre un presupuesto nuevo con cliente, título, notas y líneas activas de la preorden más reciente. Revisá precios y disponibilidad; no reserva stock."
                 >
                   Revisar y armar presupuesto
                 </AdminButton>
-                <p className="admin-lead-compose-help">Abre un presupuesto nuevo con cliente, título y notas del lead. Agregá las líneas del pedido y revisalas antes de enviar.</p>
+                <p className="admin-lead-compose-help">Precarga cliente, título, notas y líneas activas de la preorden más reciente. Revisá precios y disponibilidad antes de guardar; no reserva stock.</p>
               </div>
             ) : null}
 
