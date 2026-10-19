@@ -82,6 +82,31 @@ export function readBulkSelection(value: unknown): string[] | null {
   return value;
 }
 
+/**
+ * Physical placement edits must follow the same safeguards as the dedicated
+ * warehouse move/relocation actions. Reservations are product-level, so a
+ * committed assignment blocks moving or re-locating any selected unit of that
+ * product. Kept pure so the transaction path can be covered with rule tests.
+ */
+export function bulkUnitPlacementError(
+  units: readonly { status: string; warehouseId: string | null; location: string | null }[],
+  changes: Record<string, unknown>,
+  hasCommittedAssignments: boolean,
+): string | null {
+  const targetLocation = changes.location === "" ? null : changes.location;
+  const placementChanges =
+    (changes.warehouseId !== undefined && units.some((unit) => unit.warehouseId !== changes.warehouseId)) ||
+    (changes.location !== undefined && units.some((unit) => unit.location !== targetLocation));
+  if (!placementChanges) return null;
+  if (units.some((unit) => unit.status !== "AVAILABLE")) {
+    return "Solo se pueden mover o reubicar unidades disponibles. No se aplicó ningún cambio.";
+  }
+  if (hasCommittedAssignments) {
+    return "El producto tiene reservas o asignaciones vigentes. Liberalas antes de cambiar la ubicación física. No se aplicó ningún cambio.";
+  }
+  return null;
+}
+
 /** Ausente = no cambiar, null = vaciar explícitamente, nunca convertir un vacío en una instrucción. */
 export function readBulkChanges(target: "items" | "units", value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
