@@ -49,7 +49,7 @@ export function AdminResetForm() {
       <h1 id="reset-title" className="admin-title">Elegí una<br /><span>nueva clave.</span></h1>
       {!token ? <AdminError message="Este enlace de recuperación no es válido." /> : success ? <div className="admin-success-block"><AdminSuccess>Contraseña actualizada correctamente.</AdminSuccess><p>Ya podés volver al panel e iniciar sesión con tu nueva contraseña.</p><AdminButtonLink variant="primary" href="/login">Ir a iniciar sesión →</AdminButtonLink></div> : <>
         <p className="admin-lede">Usá al menos 8 caracteres. El enlace vence en 30 minutos y solo puede usarse una vez.</p>
-        <form className="admin-form" onSubmit={handleSubmit} noValidate>
+        <form className="admin-form admin-form--uniform" onSubmit={handleSubmit} noValidate>
           {error && <AdminError message={error} />}
           <PasswordField label="Nueva contraseña" value={password} onChange={setPassword} autoComplete="new-password" required minLength={8} id="new-password" name="password" />
           <PasswordField label="Repetir contraseña" value={confirmation} onChange={setConfirmation} autoComplete="new-password" required minLength={8} id="confirm-password" name="confirmation" />

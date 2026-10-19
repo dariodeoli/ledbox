@@ -41,7 +41,7 @@ export function AdminRecoveryForm() {
       <span className="admin-card-index">02 / recuperación</span>
       <h1 id="recovery-title" className="admin-title">Recuperar<br /><span>acceso.</span></h1>
       <p className="admin-lede">Te enviaremos un enlace de un solo uso al email asociado a tu cuenta.</p>
-      <form className="admin-form" onSubmit={handleSubmit} noValidate>
+      <form className="admin-form admin-form--uniform" onSubmit={handleSubmit} noValidate>
         {error && <AdminError message={error} />}
         {message && <AdminSuccess>{message}</AdminSuccess>}
         <EmailField

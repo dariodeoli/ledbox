@@ -1503,6 +1503,15 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-field[data-size="md"] { max-width: 17rem; }
 .admin-field[data-size="lg"] { max-width: 24rem; }
 @media (max-width: 720px) { .admin-field[data-size] { max-width: none; } }
+/* Los formularios de acceso son de una sola columna: todos sus controles
+   comparten el ancho del contenedor, aunque el tamaño semántico del campo
+   (`md`, `lg`) sea distinto en otras grillas del panel. */
+.admin-form--uniform > .admin-field,
+.admin-form--uniform > .admin-field > .admin-password,
+.admin-form--uniform > .admin-field > :is(input, select, textarea, [data-oc-control]) {
+  width: 100%;
+  max-width: none;
+}
 
 /* ── Segmentado: una fila, opciones parejas (nunca parte en dos líneas) ── */
 .admin-field > [role="group"] { min-width: 0; }

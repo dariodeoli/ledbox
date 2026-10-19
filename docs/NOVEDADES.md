@@ -1,5 +1,10 @@
 # Novedades para el dueño
 
+# 2.1.147
+
+- Acceso: email, contraseña y campos equivalentes de recuperación/invitación usan el mismo ancho en formularios de una sola columna.
+- Tiendas públicas: los metadatos de autor, creador, keywords y nombre de aplicación usan la empresa de la tienda, evitando que La Vajilla aparezca como LedBox al compartir su enlace.
+
 Lo que cambia en cada ronda, en lenguaje de producto. Las rondas automáticas
 (`ht`/`hd`) agregan su bloque acá antes de publicar.
 

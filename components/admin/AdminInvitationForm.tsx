@@ -158,7 +158,7 @@ export function AdminInvitationForm({
             <div className="admin-divider" aria-hidden="true">
               <span>{newAccount ? "o creá tu acceso" : "o entrá con tu contraseña"}</span>
             </div>
-            <form className="admin-form" onSubmit={handleSubmit} noValidate>
+            <form className="admin-form admin-form--uniform" onSubmit={handleSubmit} noValidate>
               {error ? <AdminError message={error} /> : null}
               {newAccount ? (
                 <TextField

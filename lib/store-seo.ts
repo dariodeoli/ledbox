@@ -58,6 +58,14 @@ export function storefrontMetadata(input: StoreMetadataInput, origin = publicCon
   return {
     title: { absolute: input.title },
     description,
+    // Next combina la metadata del layout raíz con la de la tienda. Estos
+    // campos reemplazan la identidad global (LedBox/EventOS) por la del
+    // comercio dueño del catálogo cuando se comparte su URL.
+    applicationName: input.organizationName,
+    authors: [{ name: input.organizationName }],
+    creator: input.organizationName,
+    publisher: input.organizationName,
+    keywords: [input.organizationName, "tienda", "alquiler para eventos"],
     metadataBase: normalizedStoreOrigin(origin),
     alternates: { canonical },
     openGraph: {

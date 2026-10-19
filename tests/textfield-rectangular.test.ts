@@ -25,6 +25,13 @@ test("los campos del panel conservan caja completa redondeada sin reset a línea
   assert.match(css, /\.admin-root \[data-oc-control\]\[readonly\]\s*\{\s*border-style:\s*dashed/);
 });
 
+test("los formularios de acceso unifican el ancho de controles con tamaños semánticos distintos", () => {
+  assert.match(css, /\.admin-form--uniform > \.admin-field[\s\S]*?width:\s*100%[\s\S]*?max-width:\s*none/);
+  for (const file of ["AdminLoginForm.tsx", "AdminRecoveryForm.tsx", "AdminResetForm.tsx", "AdminInvitationForm.tsx"]) {
+    assert.match(read("components", "admin", file), /className="admin-form admin-form--uniform"/);
+  }
+});
+
 test("la tienda comparte forma rectangular con sus colores de tema", () => {
   const fields = storeCss.slice(storeCss.indexOf(".cp-theme .cp-fields {"), storeCss.indexOf(".cp-theme .cp-event {"));
   assert.match(fields, /\.cp-theme \.cp-fields\s*\{[^}]*--a-field-radius:\s*var\(--radius-sm\)/);

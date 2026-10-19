@@ -26,6 +26,11 @@ test("store metadata uses the explicitly configured store origin for canonical a
   assert.equal(metadata.alternates?.canonical, "https://tienda.eventoss.online/tienda/la-vajilla");
   assert.equal(metadata.openGraph?.url, "https://tienda.eventoss.online/tienda/la-vajilla");
   assert.equal(metadata.openGraph?.siteName, "La Vajilla");
+  assert.equal(metadata.applicationName, "La Vajilla");
+  assert.deepEqual(metadata.authors, [{ name: "La Vajilla" }]);
+  assert.equal(metadata.creator, "La Vajilla");
+  assert.equal(metadata.publisher, "La Vajilla");
+  assert.deepEqual(metadata.keywords, ["La Vajilla", "tienda", "alquiler para eventos"]);
   assert.deepEqual(metadata.openGraph?.images, [{ url: "https://tienda.eventoss.online/api/catalog/la-vajilla/cover/desktop?v=2026-10-19T03%3A00%3A00.000Z", alt: "La Vajilla" }]);
   assert.equal((metadata.twitter as unknown as Record<string, unknown>)?.card, "summary_large_image");
   assert.equal(metadata.robots && typeof metadata.robots === "object" && "index" in metadata.robots ? metadata.robots.index : null, true);

@@ -56,7 +56,7 @@ export function AdminLoginForm({ googleError = "" }: { googleError?: string }) {
       <p className="admin-lede">Gestioná consultas, leads y cotizaciones de LedBox desde un espacio privado.</p>
       <a className="admin-google-button" href="/api/auth/login/google"><span aria-hidden="true"><GoogleMark /></span> Continuar con Google</a>
       <div className="admin-divider" aria-hidden="true"><span>o ingresá con correo</span></div>
-      <form className="admin-form" onSubmit={handleSubmit} noValidate>
+      <form className="admin-form admin-form--uniform" onSubmit={handleSubmit} noValidate>
         {error && <AdminError message={error} />}
         <EmailField
           label="Email"
