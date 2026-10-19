@@ -43,7 +43,12 @@ test("cambiar categoría en catálogo conserva query, fechas y hash sin cambiar 
   assert.match(storefront, /clientSide: true/);
   const browser = read("components/catalog-public/CatalogBrowser.tsx");
   assert.match(browser, /storeCategoryStateHref\(window\.location\.href, nextCategory\)/);
-  assert.match(browser, /window\.history\.replaceState\(window\.history\.state, "", nextUrl\)/);
+  assert.match(browser, /window\.history\.pushState\(window\.history\.state, "", nextUrl\)/);
+  assert.match(browser, /window\.addEventListener\("popstate", restoreCategory\)/);
+  assert.match(browser, /items\.some\(\(item\) => item\.category === requested\) \? requested : null/);
+  assert.match(browser, /No encontramos productos con esos filtros/);
+  const filterHandler = browser.slice(browser.indexOf("<FilterBar categoryNavigation"), browser.indexOf("<div className=\"cp-catalog-layout\""));
+  assert.doesNotMatch(filterHandler, /fetch\(/, "los filtros locales no hacen peticiones que puedan devolver resultados obsoletos");
   const filterBar = read("components/catalog-public/FilterBar.tsx");
   assert.match(filterBar, /categoryNavigation\.clientSide[\s\S]*?<button/);
   assert.match(filterBar, /scroll=\{false\}/);

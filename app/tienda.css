@@ -799,7 +799,7 @@
 .cp-event > .cp-btn--block { width: auto; justify-self: start; min-height: var(--tap); font-size: var(--fs-14); }
 .cp-theme .cp-event-date .admin-day-control .admin-day-input[data-oc-control] { padding-inline: 2px 42px; }
 .cp-theme .cp-event-date .admin-date-shortcuts { gap: 4px; }
-.cp-theme .cp-event-date .admin-date-shortcuts button { padding-inline: 8px; font-size: 11px; }
+.cp-theme .cp-event-date .admin-date-shortcuts button { padding-inline: 8px; font-size: var(--fs-12); }
 .cp-theme .cp-event-fields { gap: var(--sp-3); align-items: start; }
 .cp-theme .cp-event-fields > .cp-btn { align-self: end; }
 .cp-theme .cp-stepper { border: 0; border-bottom: 1px solid var(--color-muted); border-radius: 0; background: transparent; gap: 0; }
