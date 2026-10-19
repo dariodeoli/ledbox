@@ -41,9 +41,11 @@ function common(mocks: Record<string, unknown>) {
 }
 const request = (path: string, body: Record<string, unknown>) => new Request(`https://example.invalid${path}`, { method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "198.51.100.10" }, body: JSON.stringify(body) });
 
-function resetFixture(options: { lookupError?: Error; transactionError?: Error; claimCount?: number; cookieError?: Error } = {}) {
+function resetFixture(options: { lookupError?: Error; transactionError?: Error; claimCount?: number; cookieError?: Error; token?: { id: string; userId: string; usedAt: Date | null; expiresAt: Date } | null } = {}) {
   const writes: string[] = [];
-  const token = { id: "reset-fixture", userId: "user-fixture", usedAt: null, expiresAt: new Date(Date.now() + 60_000) };
+  const token = options.token === undefined
+    ? { id: "reset-fixture", userId: "user-fixture", usedAt: null, expiresAt: new Date(Date.now() + 60_000) }
+    : options.token;
   const tx = {
     passwordResetToken: { updateMany: async () => { writes.push("claim-token"); return { count: options.claimCount ?? 1 }; } },
     adminUser: { update: async () => { writes.push("update-password"); if (options.transactionError) throw options.transactionError; return {}; } },
@@ -83,6 +85,20 @@ test("a token claimed concurrently remains a client error, not infrastructure 50
   const response = await post(request("/api/auth/reset-password", { token: "fixture-token", password: "fixture-password" }));
   assert.equal(response.status, 400);
   assert.deepEqual(writes, ["claim-token"]);
+});
+
+test("unknown, used, and expired reset tokens are rejected before changing credentials", async () => {
+  const states = [
+    null,
+    { id: "used-token", userId: "user-fixture", usedAt: new Date(), expiresAt: new Date(Date.now() + 60_000) },
+    { id: "expired-token", userId: "user-fixture", usedAt: null, expiresAt: new Date(Date.now() - 1) },
+  ];
+  for (const token of states) {
+    const { post, writes } = resetFixture({ token });
+    const response = await post(request("/api/auth/reset-password", { token: "fixture-token", password: "fixture-password" }));
+    assert.equal(response.status, 400);
+    assert.deepEqual(writes, []);
+  }
 });
 
 test("cookie cleanup failure after committed reset still returns success because all sessions were revoked", async () => {

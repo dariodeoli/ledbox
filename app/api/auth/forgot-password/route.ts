@@ -37,7 +37,7 @@ async function requestPasswordReset(request: Request): Promise<Response> {
     } catch (error) {
       // Keep the response indistinguishable for unknown and configured accounts.
       const name = error instanceof Error ? error.name : "Error";
-      console.error("LedBox password reset delivery failed", name);
+      console.error("EventOS password reset delivery failed", name);
     }
   }
   return Response.json({ ok: true, message: "If the account exists, recovery instructions were sent." });

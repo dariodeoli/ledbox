@@ -5,6 +5,7 @@ import { createSession, normalizeUserEmail } from "@/lib/server/auth";
 import { acceptInvitationWithGoogle } from "@/lib/server/invitations";
 import { resolveActiveOrganizationId } from "@/lib/server/tenancy";
 import { getPublicOrigin } from "@/lib/server/public-origin";
+import { isGoogleAuthOriginAllowed } from "@/lib/server/google-origin";
 import { PANEL_HOME } from "@/lib/admin-routes";
 export const runtime = "nodejs";
 
@@ -12,6 +13,7 @@ export const runtime = "nodejs";
 const INVITATION_COOKIE = "ledbox_google_invitation";
 
 export async function GET(request: Request) {
+  if (!isGoogleAuthOriginAllowed(request)) return new Response(null, { status: 404 });
   const url = new URL(request.url), code = url.searchParams.get("code"), state = url.searchParams.get("state");
   const cookieStore = await cookies();
   const savedState = cookieStore.get("ledbox_google_state")?.value;
