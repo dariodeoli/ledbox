@@ -1,0 +1,145 @@
+.previewBar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 6px clamp(14px, 3vw, 36px);
+  background: #0b1117;
+  color: #dce7eb;
+  font: 600 13px/1.35 Inter, Arial, sans-serif;
+}
+.previewBar nav, .header nav { position: static; inset: auto; z-index: auto; height: auto; padding: 0; border: 0; background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; transition: none; }
+.previewBar nav { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.previewBar a { display: inline-flex; align-items: center; min-height: 30px; padding: 5px 9px; color: inherit; text-decoration: none; border-radius: 3px; }
+.previewBar a:hover, .previewBar a[aria-current="page"] { background: #00d5e8; color: #061014; }
+.previewShortLabel { display: none; }
+.landing { min-height: 100vh; background: #f5f7f7; color: #101b20; font-family: Inter, Arial, sans-serif; }
+.header { position: sticky; top: 0; z-index: 10; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; min-height: 68px; padding: 10px clamp(20px, 5vw, 76px); background: #f5f7f7; color: #101b20; }
+.header nav { display: flex; gap: clamp(16px, 3vw, 40px); }
+.header nav a, .textAction { color: #3d555d; text-decoration: none; font-size: 15px; }
+.wordmark { color: #0d1b21; font-size: 20px; font-weight: 800; letter-spacing: -.04em; text-decoration: none; }
+.headerAction { justify-self: end; color: #0d1b21; font-size: 14px; font-weight: 700; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.activeContext { display: none; }
+.operations { --accent: #00b9cd; --paper: #f5f7f7; --ink: #101b20; --soft: #476169; }
+.catalog { --accent: #075c73; --paper: #f7f8f4; --ink: #132023; --soft: #485d5d; background: var(--paper); }
+.landing main { width: min(1360px, 100%); margin: 0 auto; padding: clamp(22px, 4vw, 56px) clamp(18px, 5vw, 74px) 80px; }
+.operationHero, .catalogHero { display: grid; grid-template-columns: minmax(0, .85fr) minmax(440px, 1.15fr); gap: clamp(28px, 5vw, 82px); align-items: center; min-height: 0; padding-block: clamp(26px, 4vw, 58px); }
+.heroCopy { max-width: 560px; }
+.heroCopy h1, .catalogHero h1 { max-width: 15ch; margin: 0 0 20px; font-size: clamp(42px, 5vw, 68px); line-height: .99; letter-spacing: -.06em; font-weight: 750; }
+.heroCopy p, .catalogHero p { max-width: 50ch; margin: 0; color: var(--soft); font-size: 18px; line-height: 1.58; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 30px; }
+.primaryAction { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 18px; background: #101b20; color: #fff; font-size: 14px; font-weight: 700; text-decoration: none; }
+.primaryAction:hover { background: #075c73; }
+.textAction { font-weight: 650; }
+.operationBoard { padding: clamp(16px, 2vw, 26px); background: #e7eff0; color: #101b20; }
+.boardHeading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.boardHeading div { display: grid; gap: 3px; }
+.boardHeading strong { font-size: 18px; }
+.boardHeading div span, .boardStamp { color: #526970; font-size: 13px; }
+.boardStamp { white-space: nowrap; }
+.workflow { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.workflow li { display: grid; grid-template-columns: minmax(100px, .55fr) 1.5fr auto; align-items: center; gap: 12px; min-height: 66px; padding: 10px 14px; background: #fff; }
+.workflow li:first-child { background: #101b20; color: white; }
+.workflow li span { font-size: 14px; font-weight: 750; }
+.workflow li b { font-size: 14px; font-weight: 600; }
+.workflow li em { color: #526970; font-size: 13px; font-style: normal; }
+.workflow li:first-child em { color: #80dfe8; }
+.operationSection { padding: 90px 0 100px; border-top: 1px solid #d3dfe1; }
+.sectionIntro { display: grid; grid-template-columns: 1fr .7fr; align-items: end; gap: 32px; margin-bottom: 38px; }
+.sectionIntro h2, .catalogTiles h2, .catalogClose h2, .finalSection h2 { max-width: 18ch; margin: 0; font-size: clamp(34px, 4.5vw, 56px); line-height: 1; letter-spacing: -.05em; }
+.sectionIntro p, .finalSection p, .catalogClose > p { margin: 0; color: var(--soft); font-size: 18px; line-height: 1.55; }
+.processLines { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 3px solid #101b20; }
+.processLines article { padding: 19px 20px 0 0; }
+.processLines article + article { padding-left: 20px; border-left: 1px solid #ccd8da; }
+.processLines span { font-size: 18px; font-weight: 750; }
+.processLines p { max-width: 34ch; margin: 9px 0 0; color: var(--soft); font-size: 15px; line-height: 1.55; }
+.roleSection { display: grid; grid-template-columns: .8fr 1fr; align-items: center; gap: 44px; padding: 72px 0; background: #d8f1f2; }
+.roleSection > p { max-width: 42ch; margin: 0; padding-left: 24px; font-size: clamp(20px, 2.4vw, 30px); line-height: 1.35; font-weight: 600; }
+.roleRail { display: flex; flex-wrap: wrap; gap: 8px; padding: 20px; }
+.roleRail span { padding: 9px 12px; background: #fff; color: #20353a; font-size: 14px; font-weight: 650; }
+.finalSection { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 28px; padding: 100px 0 38px; }
+.finalSection p { max-width: 38ch; }
+.catalogHero { min-height: min(680px, calc(100svh - 106px)); }
+.catalogHero > div:first-child { max-width: 550px; }
+.quotePreview { padding: clamp(18px, 3vw, 34px); background: #fff; color: #132023; }
+.quoteHeader { display: flex; justify-content: space-between; gap: 10px; color: #526970; font-size: 13px; }
+.quoteHeader span:first-child { color: #132023; font-size: 18px; font-weight: 750; }
+.quoteTabs { display: flex; gap: 7px; margin: 24px 0 14px; border-bottom: 1px solid #d6dfdc; }
+.quoteTabs span { padding: 9px 12px 11px; color: #526970; font-size: 14px; font-weight: 650; }
+.quoteTabs span[aria-current="page"] { border-bottom: 3px solid #075c73; color: #132023; }
+.quoteItem { display: grid; grid-template-columns: 58px 1fr auto; align-items: center; gap: 14px; padding: 16px 0; border-bottom: 1px solid #e4eae7; }
+.productGlyph { display: grid; place-items: center; width: 58px; aspect-ratio: 1; background: #e5eff0; color: #075c73; font-size: 13px; font-weight: 800; }
+.quoteItem div { display: grid; gap: 5px; }
+.quoteItem strong { font-size: 16px; }
+.quoteItem div span, .quoteItem > b { color: #526970; font-size: 13px; }
+.quoteDecision { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; padding: 14px; background: #e5eff0; font-size: 14px; }
+.quoteDecision b { white-space: nowrap; }
+.catalogTiles { padding: 42px 0 95px; }
+.catalogTiles h2 { margin-bottom: 28px; }
+.catalogGrid { display: grid; grid-template-columns: 1.1fr .9fr; grid-template-rows: auto auto; gap: 8px; }
+.catalogGrid article, .tileAction { min-width: 0; padding: clamp(20px, 3vw, 38px); }
+.catalogGrid article > span { font-size: 14px; font-weight: 750; }
+.catalogGrid article h3 { max-width: 15ch; margin: 28px 0 12px; font-size: clamp(24px, 3vw, 38px); line-height: 1.05; letter-spacing: -.035em; }
+.catalogGrid article p { max-width: 40ch; margin: 0; font-size: 16px; line-height: 1.55; }
+.tileLarge { grid-row: span 2; min-height: 390px; background: #d5e9e9; }
+.tileTall { background: #e8ebe5; }
+.tileWide { background: #132023; color: #f7f8f4; }
+.tileWide p { color: #c9d5d2; }
+.tileAction { display: flex; align-items: end; min-height: 110px; background: #075c73; }
+.tileAction a { color: #fff; font-size: 17px; font-weight: 750; text-decoration: none; }
+.catalogClose { padding: 58px 0 20px; background: #e4ece7; }
+.catalogClose > p { margin-top: 18px; }
+.catalogClose .roleRail { padding-inline: 0; }
+
+@media (max-width: 760px) {
+  .previewBar { align-items: flex-start; flex-direction: column; gap: 14px; padding: 12px 18px; }
+  .previewBar nav { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); justify-content: stretch; }
+  .previewBar a { justify-content: center; min-width: 0; padding-inline: 4px; font-size: 11px; white-space: nowrap; }
+  .previewLongLabel { display: none; }
+  .previewShortLabel { display: inline; }
+  .header { grid-template-columns: 1fr auto; min-height: 60px; padding-inline: 18px; }
+  .header nav { display: none; }
+  .headerAction { grid-column: 2; grid-row: 1; }
+  .operationHero, .catalogHero { grid-template-columns: minmax(0, 1fr); gap: 32px; min-height: 0; padding-block: 30px 48px; }
+  .heroCopy h1, .catalogHero h1 { max-width: 16ch; font-size: clamp(40px, 10vw, 58px); }
+  .heroCopy p, .catalogHero p { font-size: 16px; }
+  .operationBoard { padding: 14px; }
+  .workflow li { grid-template-columns: 1fr auto; gap: 4px 10px; min-height: 72px; }
+  .workflow li b { grid-column: 1; grid-row: 2; font-size: 13px; }
+  .workflow li em { grid-column: 2; grid-row: 1 / span 2; }
+  .boardHeading { align-items: flex-start; }
+  .operationSection { padding: 58px 0; }
+  .sectionIntro { grid-template-columns: 1fr; gap: 12px; }
+  .processLines { grid-template-columns: 1fr; }
+  .processLines article, .processLines article + article { padding: 16px 0; border-left: 0; border-bottom: 1px solid #ccd8da; }
+  .roleSection { grid-template-columns: 1fr; gap: 8px; padding: 34px 0; }
+  .roleSection > p { padding: 0 18px; }
+  .roleRail { padding: 14px 18px; }
+  .finalSection { align-items: flex-start; flex-direction: column; padding: 66px 0 28px; }
+  .quotePreview { padding: 16px; }
+  .quoteHeader { align-items: flex-start; flex-direction: column; }
+  .quoteHeader span:first-child { font-size: 16px; }
+  .quoteTabs { gap: 0; }
+  .quoteTabs span { flex: 1; padding-inline: 5px; text-align: center; font-size: 12px; }
+  .quoteItem { grid-template-columns: 46px 1fr; gap: 10px; }
+  .productGlyph { width: 46px; }
+  .quoteItem > b { grid-column: 2; }
+  .quoteDecision { align-items: flex-start; flex-direction: column; }
+  .catalogTiles { padding: 26px 0 56px; }
+  .catalogGrid { grid-template-columns: minmax(0, 1fr); }
+  .tileLarge { grid-row: auto; min-height: 240px; }
+  .catalogGrid article h3 { margin-top: 22px; }
+  .tileAction { min-height: 80px; }
+  .catalogClose { padding: 38px 16px 20px; }
+  .catalogClose .roleRail { padding-inline: 0; }
+}
+@media (min-width: 761px) and (max-width: 980px) {
+  .operationHero, .catalogHero { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .heroCopy { max-width: 680px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .previewBar a, .primaryAction { scroll-behavior: auto; transition: none; }
+}
