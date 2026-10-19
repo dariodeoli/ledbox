@@ -13,6 +13,10 @@ import {
   AdminButton,
   AdminDialog,
   AdminDialogSection,
+  AdminBoard,
+  AdminCardGrid,
+  AdminViewSwitch,
+  Combobox,
   TextField,
   DateField,
   CityField,
@@ -22,6 +26,12 @@ import {
 La biblioteca existente vive en `components/admin/AdminUI.tsx` y
 `components/admin/AdminFields.tsx`. `components/ui/index.ts` es el contrato
 estable para que los módulos no dependan de rutas internas.
+
+La entrada pública también expone presentaciones de registros: `AdminBoard`
+(pipeline), `AdminCardGrid` (cuadrícula), `AdminViewSwitch` y
+`useAdminModuleView` para cambiar y recordar vistas. La lista/tabla existente
+usa `AdminTable`. El módulo define filas, tarjetas, columnas y callbacks; las
+piezas visuales no consultan APIs ni cambian datos por cuenta propia.
 
 ## Catálogo canónico
 
@@ -77,6 +87,19 @@ Reglas:
   `<input>` libre distinto en cada módulo.
 - Fechas usan `DateField`, `DateTimeField` o `DayField`; los atajos de fecha
   se mantienen en una sola implementación.
+- `SelectField` sirve para listas cortas y cerradas. `Combobox` sirve cuando
+  hay que buscar/escribir para filtrar opciones (por ejemplo categorías o
+  clientes); la selección guardada sigue siendo el `value` de una opción.
+  `allowCustomValue` queda reservado para campos cuyo contrato acepta texto
+  nuevo. Para categorías, IDs y estados cerrados, dejalo en `false` y no
+  guardes el texto de búsqueda como una opción inventada.
+- El dueño del dato prepara `options` para cada pantalla y empresa activa; el
+  combobox no usa un catálogo global, no comparte opciones entre empresas y no
+  determina permisos. En un filtro de muestra/catálogo se pasan sólo las
+  categorías de esa empresa que tienen resultados visibles. En formularios
+  de creación/edición se pasa la taxonomía completa permitida para esa empresa,
+  aunque una categoría todavía no tenga productos. No reutilices el conjunto
+  reducido del filtro en el formulario de alta.
 - Montos usan `MoneyField`; no se formatean manualmente en cada formulario.
 - Las API vuelven a validar todo: la biblioteca mejora la experiencia, no
   reemplaza la validación del servidor.
@@ -84,19 +107,42 @@ Reglas:
 ### Estados, avisos y notificaciones
 
 - `AdminDataState`: loading, vacío, error y contenido en un mismo contrato.
-- `AdminNote`: avisos `info`, `success`, `warn` y `error`.
+- `AdminNote`: aviso inline neutral (sin `tone`), `ok`, `warn` o `error`.
 - `AdminSuccess` / `AdminError`: feedback corto de una acción.
 - `AdminBadge`: estado compacto en tablas y tarjetas.
 
-Regla: el mensaje dice qué pasó y cuál es el siguiente paso. No se muestran
-toasts duplicados si el formulario ya tiene un estado visible.
+Regla: el mensaje dice qué pasó y cuál es el siguiente paso. El estado de
+validación persistente se queda junto al campo/formulario; la operación que
+requiere atención usa `AdminNote`/`AdminError`; el estado del contenido usa
+`AdminDataState`. No dupliques el mismo resultado en varias superficies. La
+tienda pública tiene `useStoreToast` para avisos efímeros del carrito; no es el
+toast genérico del panel y no debe importarse para acciones administrativas.
 
 ### Tablas y paneles
 
 Usar `AdminPanel`, `AdminToolbar`, `AdminTable`, `AdminRow`, `AdminCell`,
 `AdminKpis` y `AdminKpi` antes de crear contenedores nuevos. Los filtros van en
 la barra de herramientas; las acciones masivas aparecen sólo cuando hay
-selección.
+selección. Para otras presentaciones, reutilizar `AdminCardGrid` o
+`AdminBoard`; un módulo declara qué vistas ofrece con `AdminViewSwitch` y
+`useAdminModuleView`. No mantener una cuadrícula o pipeline local paralelo.
+
+### Familias, variantes y selección sin efectos laterales (#317)
+
+Cuando se presenta una familia con variantes, conservar la familia como
+identidad visual y describir cada opción mediante sus ejes estructurados
+(por ejemplo tamaño/color) y un identificador estable de variante. Usar
+`Combobox` si hace falta búsqueda o `SelectField` si la lista es breve; la
+vista previa puede usar la presentación rica de `ComboboxOption` o contenido
+normal de la ficha. No crear un segundo selector ad hoc.
+
+La vista previa es sólo lectura: refleja la variante elegida y sus atributos
+cotizados/configurados, sin persistirla, reservarla ni alterar disponibilidad.
+Una acción «Elegir» o su confirmación devuelve la selección al formulario de
+presupuesto; por sí sola no crea productos, unidades, combos, stock, reserva,
+venta ni presupuesto emitido. Crear o vincular inventario requiere una acción
+separada del módulo dueño, con su propia validación y autorización. El
+componente visual no calcula precios ni define política comercial.
 
 ### Correo y mensajes
 
@@ -134,17 +180,26 @@ tabla, panel o editor de correo:
 4. Para acciones usá `AdminButton`, `AdminButtonLink`, `AdminIconButton` y
    `AdminActionsMenu`. Una sola acción principal por vista; las destructivas
    siempre requieren confirmación.
-5. Para estados usá `AdminDataState`, `AdminNote`, `AdminBadge`,
-   `AdminSuccess` o `AdminError`; no inventes otro toast o alerta.
-6. Para fechas, ciudades, bancos, montos, RUC, correo y teléfono usá los
+5. Para filtros buscables usá `Combobox` con opciones preparadas por el módulo
+   para la empresa activa. Los filtros muestran categorías con resultados;
+   los formularios ofrecen todas las categorías permitidas. No permitas texto
+   libre cuando el dato debe corresponder a un ID.
+6. Para pipeline, cuadrícula y tabla usá `AdminBoard`, `AdminCardGrid` y
+   `AdminTable` mediante `AdminViewSwitch`; no dupliques la estructura.
+7. Para familias/variantes separá selección y preview de cualquier efecto de
+   inventario. La confirmación sólo devuelve IDs; nunca crea unidades ni
+   reservas desde un selector.
+8. Para estados usá `AdminDataState`, `AdminNote`, `AdminBadge`,
+   `AdminSuccess` o `AdminError`. El toast de la tienda se limita al carrito.
+9. Para fechas, ciudades, bancos, montos, RUC, correo y teléfono usá los
    campos compartidos. Conservá sus anchos, labels, hints, errores,
    accesibilidad y atajos.
-7. Si realmente falta una variante, agregala primero a la biblioteca,
+10. Si realmente falta una variante, agregala primero a la biblioteca,
    exportala desde `components/ui/index.ts`, documentá su contrato y migrá un
    caso real. No dupliques CSS.
-8. Validá desktop, mobile, teclado, foco, Escape, estados loading/empty/error,
+11. Validá desktop, mobile, teclado, foco, Escape, estados loading/empty/error,
    permisos y respuesta de API. Ejecutá typecheck y las pruebas relevantes.
-9. Informá: qué componente reutilizaste o agregaste, archivos, pruebas,
+12. Informá: qué componente reutilizaste o agregaste, archivos, pruebas,
    riesgos y qué queda pendiente. No declares terminada toda la app por una
    sola pantalla.
 ```

@@ -78,3 +78,16 @@ export type {
 } from "@/components/admin/AdminUI";
 
 export type { FieldSize, TextFieldProps, TextAreaFieldProps, ComboboxOption } from "@/components/admin/AdminFields";
+
+// Presentaciones canónicas de registros. Los módulos aportan los datos y las
+// acciones; estas piezas mantienen una sola estructura para lista, cuadrícula
+// y pipeline/tablero.
+export { AdminViewSwitch, AdminBoard, useAdminModuleView, useAdminNarrowViewport, useAdminBoardMove } from "@/components/admin/AdminBoard";
+export { AdminCardGrid } from "@/components/admin/AdminCards";
+export type {
+  AdminModuleView,
+  AdminBoardColumn,
+  AdminBoardCardData,
+  AdminBoardMoveOutcome,
+} from "@/components/admin/AdminBoard";
+export type { AdminCardField, AdminCardData } from "@/components/admin/AdminCards";
