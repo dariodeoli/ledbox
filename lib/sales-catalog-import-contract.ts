@@ -94,6 +94,7 @@ export const salesCatalogImportV1Schema = z.object({
       const parts = product.foto.split("/");
       const validPath = !product.foto.startsWith("/")
         && !product.foto.includes("\\")
+        && !/^[a-z][a-z0-9+.-]*:/i.test(product.foto)
         && parts.every((part) => part.length > 0 && part !== "." && part !== "..");
       const validExtension = /\.(jpe?g|png|webp)$/i.test(product.foto);
       if (!validPath || !validExtension) {

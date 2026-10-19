@@ -57,7 +57,7 @@ test("exige familia cuando hay opciones y opciones cuando hay familia", () => {
 });
 
 test("rechaza rutas de foto absolutas o con traversal", () => {
-  for (const foto of ["/etc/foto.jpg", "../foto.png", "fotos\\foto.webp", "fotos/foto.svg"]) {
+  for (const foto of ["/etc/foto.jpg", "../foto.png", "fotos\\foto.webp", "fotos/foto.svg", "https://example.com/foto.webp", "file:fotos/foto.webp"]) {
     const result = parseSalesCatalogImportV1(catalog([{ ...product, foto }]));
     assert.equal(result.success, false, `foto inesperadamente aceptada: ${foto}`);
   }
