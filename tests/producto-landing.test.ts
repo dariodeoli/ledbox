@@ -10,7 +10,10 @@ import { test } from "node:test";
  * y SEO intactos.
  */
 const root = process.cwd();
-const page = readFileSync(join(root, "app", "(product)", "producto", "page.tsx"), "utf8");
+const pageEntry = readFileSync(join(root, "app", "(product)", "producto", "page.tsx"), "utf8");
+// La ruta es un entrypoint fino; la landing vive en el componente para que la
+// misma implementación pueda reutilizarse en previews sin duplicar JSX.
+const page = `${pageEntry}\n${readFileSync(join(root, "components", "product", "ProductoPageContent.tsx"), "utf8")}`;
 const css = readFileSync(join(root, "app", "globals.css"), "utf8");
 const theme = readFileSync(join(root, "lib", "site-theme.ts"), "utf8");
 const footer = readFileSync(join(root, "components", "app-footer.tsx"), "utf8");
