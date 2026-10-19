@@ -6,6 +6,7 @@ import { loadPublicCategory } from "@/lib/server/store-categories";
 import { loadPublicCollections, loadPublicZones, loadStorefront, parsePublicRange } from "@/lib/server/catalog-public";
 import { loadStoreSocialImage } from "@/lib/server/store-seo";
 import { storefrontMetadata } from "@/lib/store-seo";
+import { storeListStateFromQuery } from "@/lib/storefront-list-state";
 
 export const dynamic = "force-dynamic";
 type PageProps = {
@@ -44,5 +45,5 @@ export default async function CategoryRoute({ params, searchParams }: PageProps)
   const [store, zones, collections] = await Promise.all([
     loadStorefront(context), loadPublicZones(context), loadPublicCollections(context.organization.id, new Set(items.map((item) => item.id))),
   ]);
-  return <CategoryPage store={store} category={category} categories={categories} items={items} collections={collections} zones={zones} range={range} basePath={basePath} showPrices={context.settings.publicShowPrices} demo={context.demo} />;
+  return <CategoryPage store={store} category={category} categories={categories} items={items} collections={collections} zones={zones} range={range} basePath={basePath} showPrices={context.settings.publicShowPrices} demo={context.demo} initialListState={storeListStateFromQuery(query)} />;
 }

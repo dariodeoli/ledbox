@@ -205,5 +205,5 @@ test("la portada de la tienda tiene sus secciones y no copia la marca de LedBox"
   assert.match(read("components/catalog-public/OrderBar.tsx"), /className="cp-bar"/);
   assert.match(browser, /<FilterBar/);
   assert.match(read("components/catalog-public/FilterBar.tsx"), /cp-filter-chips/);
-  assert.match(read("components/catalog-public/FilterBar.tsx"), /type="search"/);
+  assert.match(read("components/catalog-public/StoreFilters.tsx"), /type="search"/);
 });

@@ -33,7 +33,7 @@ test("navegación de categoría conserva solo el período y escapa el nombre de 
   assert.equal(storeCategoryHref("/tienda/empresa", category, null), "/tienda/empresa/categoria/totems");
 });
 
-test("cambiar categoría en catálogo conserva query, fechas y hash sin cambiar de ruta", () => {
+test("cambiar categoría en catálogo conserva query, fechas y hash con historia de cliente", () => {
   assert.equal(storeCategoryStateHref("/tienda/empresa?desde=2026-10-30&hasta=2026-11-02&q=sofa&p=demo#catalogo", "Sofás y sillones"), "/tienda/empresa?desde=2026-10-30&hasta=2026-11-02&q=sofa&p=demo&categoria=Sof%C3%A1s+y+sillones#catalogo");
   assert.equal(storeCategoryStateHref("/tienda/empresa?desde=2026-10-30&hasta=2026-11-02&q=sofa&categoria=Sof%C3%A1s#catalogo", null), "/tienda/empresa?desde=2026-10-30&hasta=2026-11-02&q=sofa#catalogo");
   const page = read("app/(catalogo)/tienda/[orgSlug]/page.tsx");
@@ -42,8 +42,8 @@ test("cambiar categoría en catálogo conserva query, fechas y hash sin cambiar 
   const storefront = read("components/catalog-public/StoreFront.tsx");
   assert.match(storefront, /clientSide: true/);
   const browser = read("components/catalog-public/CatalogBrowser.tsx");
-  assert.match(browser, /storeCategoryStateHref\(window\.location\.href, nextCategory\)/);
-  assert.match(browser, /window\.history\.pushState\(window\.history\.state, "", nextUrl\)/);
+  assert.match(browser, /storeCategoryStateHref\(window\.location\.href, value\)/);
+  assert.match(browser, /window\.history\.pushState\(window\.history\.state, "", target\)/);
   assert.match(browser, /window\.addEventListener\("popstate", restoreCategory\)/);
   assert.match(browser, /items\.some\(\(item\) => item\.category === requested\) \? requested : null/);
   assert.match(browser, /No encontramos productos con esos filtros/);
@@ -54,15 +54,16 @@ test("cambiar categoría en catálogo conserva query, fechas y hash sin cambiar 
   assert.match(filterBar, /scroll=\{false\}/);
 });
 
-test("página propia reutiliza el catálogo y carrito de toda la tienda; limpiar filtros conserva la categoría", () => {
+test("página propia reutiliza el catálogo y carrito sin encabezado de categoría duplicado", () => {
   const page = read("components/catalog-public/CategoryPage.tsx");
-  assert.match(page, /<h1 className="cp-h3">\{category.name\}/);
-  assert.ok(!/<StoreFront|cp-hero/.test(page));
-  assert.match(page, /items=\{items\} range=\{range\} initialCategory=\{category.name\} categoryName=\{category.name\}/);
+  assert.match(page, /initialCategory=\{category\.name\}/);
+  assert.ok(!/<StoreFront|cp-hero|cp-category-head/.test(page));
+  assert.match(read("components/catalog-public/CatalogBrowser.tsx"), /<h2 id="catalogo-titulo" className="cp-h2">\{category \?\? "Elegí tus productos"\}/);
+  assert.match(page, /items=\{items\} range=\{range\} initialCategory=\{category\.name\}/);
   assert.match(page, /cartScope="public" fichaBase=\{basePath\}/);
   const browser = read("components/catalog-public/CatalogBrowser.tsx");
-  assert.match(browser, /currentCategory = categoryName \?\? category/);
-  assert.match(browser, /setCategory\(categoryName \?\? null\)/);
+  assert.match(browser, /const currentCategory = category/);
+  assert.match(browser, /setCategory\(requested && items\.some/);
   assert.match(browser, /storeCartKey\(slug, cartScope === "visitor" \? "public" : cartScope\)/);
   const route = read("app/(catalogo)/tienda/[orgSlug]/page.tsx");
   assert.ok(route.indexOf('catalogAccessMode !== "OPEN"') < route.indexOf("const range"));

@@ -4,6 +4,7 @@ import { PREORDER_COPY } from "@/lib/storefront-ui";
 import { useEffect, useRef, useState } from "react";
 import type { StoreNavLink } from "./StoreHeader";
 import { storedCartCount, type CartScope } from "./cart-add";
+import { XIcon } from "./StoreIcons";
 
 /**
  * Parte interactiva del encabezado: navegación (escritorio), búsqueda, píldora «Pedido (N)» con contador animado, menú
@@ -61,14 +62,9 @@ export function StoreHeaderControls({ nav, cart, slug, cartScope, searchHref }: 
   }, [menu]);
 
   const label = count > 0 ? `Ver tu preorden: ${count} ${count === 1 ? "unidad" : "unidades"}` : "Tu preorden: todavía no elegiste productos";
-  const bag = (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-      <path d="M6 8h12l1 12H5zM9 8V6a3 3 0 0 1 6 0v2" />
-    </svg>
-  );
   const pill = (
     <>
-      {bag}
+      <XIcon name="cart" size={20} />
       <span className="cp-hd-cart-label">{PREORDER_COPY.name}</span>
       <span className="cp-hd-count" data-bump={bump} aria-hidden="true">{count > 0 ? `(${count > 99 ? "99+" : count})` : ""}</span>
     </>

@@ -17,6 +17,7 @@ import { readLocalStoreCart, sanitizeStoreCart, storeCartContext, storeCartKey, 
 import type { CartView } from "@/lib/server/store-cart";
 import { MAX_QUANTITY, formatGs, priceUnitLabel, PREORDER_COPY, preorderEstimate, quantityStep, sortCatalog, todayKeyPY, type SortKey } from "@/lib/storefront-ui";
 import { storeCategoryStateHref, withStoreDates } from "@/lib/store-categories";
+import { EMPTY_STORE_LIST_STATE, mergeStoreListState, readStoreListState, storeListStateHref, type StoreListState } from "@/lib/storefront-list-state";
 import { cardSpecs } from "@/lib/catalog-card";
 import { CartDrawer, type Done } from "./CartDrawer";
 import { FiltersDrawer, FiltersPanel } from "./StoreFilters";
@@ -90,8 +91,7 @@ type Props = {
   /** Colecciones para el filtro (solo las visibles con productos) y la que viene elegida desde un link. */
   collections?: Array<{ slug: string; name: string }>;
   initialCollection?: string | null;
-  /** En una página propia, limpiar filtros nunca abandona esta categoría. Los items siguen completos para el carrito. */
-  categoryName?: string;
+  initialListState?: StoreListState;
   /** La portada puede ofrecer el mismo selector; evita repetirlo en el catálogo de esa página. */
   showEventPicker?: boolean;
   /** Sólo metadatos en el acordeón: este catálogo mantiene el único motor y sus callbacks. */
@@ -127,7 +127,7 @@ const piecesText = (parts: NonNullable<CatalogItemView["package"]>) => parts.map
 
 type CartSnapshot = { items: Array<{ id: string; quantity: number }>; from: string | null; to: string | null; zone: string };
 
-export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory, zones = [], priceMode = "day", slug, cartScope = "public", savedCart = false, cartPath: cartPathProp, fichaBase, storeName, collections = [], initialCollection = null, categoryName, categoryNavigation, showEventPicker = true, categoryPreviewKey }: Props) {
+export function CatalogBrowser({ organizationName, showPrices, preorderPath, wholesale, clientName, demo, items, range, initialCategory, zones = [], priceMode = "day", slug, cartScope = "public", savedCart = false, cartPath: cartPathProp, fichaBase, storeName, collections = [], initialCollection = null, initialListState = EMPTY_STORE_LIST_STATE, categoryNavigation, showEventPicker = true, categoryPreviewKey }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   // Visitante identificado: su carrito vive en el servidor bajo su enlace mágico (el token se guarda solo en este navegador).
@@ -166,10 +166,22 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     observer.observe(categoryPreview.host.closest(".cp-theme") ?? document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [categoryPreview]);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialListState.query);
   const [category, setCategory] = useState<string | null>(initialCategory && items.some((item) => item.category === initialCategory) ? initialCategory : null);
-  const [sort, setSort] = useState<SortKey>("destacados");
-  const [filters, setFilters] = useState<StoreFilters>(() => ({ ...EMPTY_FILTERS, collection: initialCollection && collections.some((entry) => entry.slug === initialCollection) ? initialCollection : null }));
+  const [sort, setSort] = useState<SortKey>(initialListState.sort);
+  const [filters, setFilters] = useState<StoreFilters>(() => {
+    const initial = initialListState.filters;
+    const capacities = new Set(capacityOptions(items).map((option) => option.key));
+    const tags = new Set(collectTags(items.map((item) => item.tags ?? [])));
+    const collection = initial.collection ?? initialCollection;
+    return {
+      ...EMPTY_FILTERS,
+      ...initial,
+      capacity: initial.capacity && capacities.has(initial.capacity) ? initial.capacity : null,
+      tags: initial.tags.filter((tag) => tags.has(tag)),
+      collection: collection && collections.some((entry) => entry.slug === collection) ? collection : null,
+    };
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [shown, setShown] = useState(PAGE_SIZE);
   const [revalidateFailed, setRevalidateFailed] = useState(false);
@@ -185,6 +197,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const [ready, setReady] = useState(false);
   const [pricedView, setPricedView] = useState<{ context: string; cart: CartView } | null>(null);
   const [cartNotice, setCartNotice] = useState("");
+  const listState: StoreListState = { query, sort, filters };
   const seenTotal = useRef<number | null>(null);
   const seenContext = useRef<string | null>(null);
 
@@ -197,13 +210,26 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   // que existen en el catálogo público ya cargado para esta empresa.
   useEffect(() => {
     const restoreCategory = () => {
-      const requested = new URLSearchParams(window.location.search).get("categoria");
+      const params = new URLSearchParams(window.location.search);
+      const categoryPath = categoryNavigation?.links.find((entry) => new URL(entry.href, window.location.origin).pathname === window.location.pathname)?.name ?? null;
+      const requested = params.get("categoria") ?? categoryPath;
+      const state = readStoreListState(params);
       setCategory(requested && items.some((item) => item.category === requested) ? requested : null);
+      setQuery(state.query);
+      setSort(state.sort);
+      const availableTags = new Set(collectTags(items.map((item) => item.tags ?? [])));
+      const availableCapacities = new Set(capacityOptions(items).map((option) => option.key));
+      setFilters({
+        ...state.filters,
+        capacity: state.filters.capacity && availableCapacities.has(state.filters.capacity) ? state.filters.capacity : null,
+        tags: state.filters.tags.filter((tag) => availableTags.has(tag)),
+        collection: state.filters.collection && collections.some((entry) => entry.slug === state.filters.collection) ? state.filters.collection : null,
+      });
       setShown(PAGE_SIZE);
     };
     window.addEventListener("popstate", restoreCategory);
     return () => window.removeEventListener("popstate", restoreCategory);
-  }, [items]);
+  }, [items, collections, categoryNavigation]);
 
   // Carrito persistente: al abrir la tienda se retoma el del navegador (con try/catch) y, si el cliente
   // tiene acceso aprobado, el del servidor (para seguir desde otro dispositivo). Nada se confía: los
@@ -252,9 +278,10 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
       seenContext.current = storeCartContext(state);
       if (kept.length > 0 && !range && state.from && state.to) {
         if (state.to >= todayKeyPY()) {
-          const shared = new URLSearchParams(window.location.search).get("p");
-          const extra = `${initialCategory && !categoryName ? `&categoria=${encodeURIComponent(initialCategory)}` : ""}${shared ? `&p=${encodeURIComponent(shared)}` : ""}`;
-          router.replace(`${pathname}?desde=${encodeURIComponent(state.from)}&hasta=${encodeURIComponent(state.to)}${extra}${window.location.hash || "#catalogo"}`, { scroll: false });
+          const params = new URLSearchParams(window.location.search);
+          params.set("desde", state.from);
+          params.set("hasta", state.to);
+          router.replace(`${pathname}?${params.toString()}${window.location.hash || "#catalogo"}`, { scroll: false });
         } else {
           notices.push("Las fechas que habías elegido ya pasaron: elegí fechas nuevas para ver la disponibilidad.");
         }
@@ -274,14 +301,28 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
   const visible = useMemo(() => {
     const needle = norm(query.trim());
     return items.filter((item) => {
-      const currentCategory = categoryName ?? category;
+      const currentCategory = category;
       if (currentCategory && item.category !== currentCategory) return false;
       if (needle && !norm(`${item.name} ${item.sku ?? ""} ${item.category} ${item.description ?? ""} ${(item.tags ?? []).join(" ")}`).includes(needle)) return false;
       return matchesFilters(item, filters, { unit: item.price ? catalogLine(item.price, days).unitPrice : 0, capacities });
     });
-  }, [items, query, category, categoryName, filters, capacities, days]);
-  const changeFilters = useCallback((next: StoreFilters) => { setFilters(next); setShown(PAGE_SIZE); }, []);
-  const filterProps = { filters, onChange: changeFilters, capacities, tags: allTags, collections, showPrices, hasRange: Boolean(range), resultCount: visible.length };
+  }, [items, query, category, filters, capacities, days]);
+  const changeFilters = useCallback((next: StoreFilters) => {
+    const nextState = { query, sort, filters: next };
+    window.history.pushState(window.history.state, "", storeListStateHref(window.location.href, nextState));
+    setFilters(next); setShown(PAGE_SIZE);
+  }, [query, sort]);
+  const changeQuery = useCallback((value: string) => {
+    const nextState = { query: value, sort, filters };
+    window.history.replaceState(window.history.state, "", storeListStateHref(window.location.href, nextState));
+    setQuery(value); setShown(PAGE_SIZE);
+  }, [sort, filters]);
+  const changeSort = useCallback((value: SortKey) => {
+    const nextState = { query, sort: value, filters };
+    window.history.pushState(window.history.state, "", storeListStateHref(window.location.href, nextState));
+    setSort(value); setShown(PAGE_SIZE);
+  }, [query, filters]);
+  const filterProps = { filters, onChange: changeFilters, capacities, tags: allTags, collections, showPrices, hasRange: Boolean(range), resultCount: visible.length, query, onQuery: changeQuery, sort, onSort: changeSort };
   const chosen = items.filter((item) => (selection[item.id] ?? 0) > 0);
   const cartContext = storeCartContext({ items: chosen.map((item) => ({ id: item.id, quantity: selection[item.id] })), from: range?.fromKey ?? null, to: range?.toKey ?? null, zone: zoneChoice });
   const view = pricedView?.context === cartContext ? pricedView.cart : null;
@@ -457,7 +498,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     setSelection((current) => ({ ...current, [id]: Math.min(MAX_QUANTITY, (current[id] ?? 0) + quantity) }));
     const name = items.find((item) => item.id === id)?.name ?? "Producto";
     if (addedTimer.current) clearTimeout(addedTimer.current);
-    setAdded({ key: ++addedSequence.current, text: `Agregaste ${quantity} × ${name}` });
+    setAdded({ key: ++addedSequence.current, text: `Agregado · ${quantity} × ${name}` });
     addedTimer.current = setTimeout(() => setAdded(null), 2500);
   }, [items]);
   // Enlace compartido (`?p=<id>`) y botón «atrás» del navegador.
@@ -543,27 +584,34 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
     : null;
 
   return (
-    <section id="catalogo" className="cp-section cp-catalog" aria-labelledby={categoryName ? undefined : "catalogo-titulo"} aria-label={categoryName ? `Productos de ${categoryName}` : undefined}>
+    <section id="catalogo" className="cp-section cp-catalog" aria-labelledby="catalogo-titulo" aria-label={category ? `Productos de ${category}` : undefined}>
       {categoryPreview?.host.isConnected ? createPortal(<ul className="cp-grid" aria-label={`Productos de ${categoryPreview.category}`}>{categoryPreviewItems(items, categoryPreview.category).map(renderItem)}</ul>, categoryPreview.host) : null}
-      {!categoryName ? <div className="cp-section-head">
+      <div className="cp-section-head">
         <p className="cp-eyebrow">{wholesale ? "Catálogo mayorista" : "Catálogo de alquiler"}</p>
-        <h2 id="catalogo-titulo" className="cp-h2">Elegí tus productos</h2>
+        <h2 id="catalogo-titulo" className="cp-h2">{category ?? "Elegí tus productos"}</h2>
         {wholesale ? <p className="cp-lead">Precios mayoristas, solo para vos{clientName ? ` (${clientName})` : ""}. No compartas este link.</p> : null}
-      </div> : null}
+      </div>
 
-      {showEventPicker ? <EventPicker slug={slug} range={range} variant="bar" /> : null}
+      {showEventPicker ? <EventPicker slug={slug} range={range} variant="bar" restore /> : null}
 
-      <FilterBar categoryNavigation={categoryNavigation} categories={categories} category={categoryName ?? category} onCategory={(value) => {
-        const nextCategory = categoryName ?? value;
-        setCategory(nextCategory);
+      <FilterBar categoryNavigation={categoryNavigation} categories={categories} category={category} onCategory={(value) => {
+        setCategory(value);
         setShown(PAGE_SIZE);
         if (categoryNavigation?.clientSide) {
-          // Native history state is patched by Next.js: URL and useSearchParams stay
-          // in sync without a document request, route reset, or scroll jump.
-          const nextUrl = storeCategoryStateHref(window.location.href, nextCategory);
-          window.history.pushState(window.history.state, "", nextUrl);
+          // Change the URL to the canonical category while keeping the existing RSC tree,
+          // catalog data and scroll position; a reload/bookmark still resolves that route.
+          const href = value ? categoryNavigation.links.find((entry) => entry.name === value)?.href : categoryNavigation.allHref;
+          if (href) {
+            const url = new URL(mergeStoreListState(href, listState), window.location.origin);
+            if (!url.hash) url.hash = "#catalogo";
+            const target = `${url.pathname}${url.search}${url.hash}`;
+            const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+            if (target !== current) window.history.pushState(window.history.state, "", target);
+          } else {
+            window.history.pushState(window.history.state, "", storeCategoryStateHref(window.location.href, value));
+          }
         }
-      }} sort={sort} onSort={setSort} query={query} onQuery={(value) => { setQuery(value); setShown(PAGE_SIZE); }} showPrices={showPrices} activeFilters={activeFilterCount(filters)} onOpenFilters={() => setFiltersOpen(true)} />
+      }} listState={listState} activeFilters={activeFilterCount(filters)} onOpenFilters={() => setFiltersOpen(true)} />
       <div className="cp-catalog-layout">
         {items.length > 0 ? (
           <aside className="cp-filters" aria-label="Filtros del catálogo">
@@ -584,7 +632,7 @@ export function CatalogBrowser({ organizationName, showPrices, preorderPath, who
 
         {items.length === 0 ? <EmptyState icon="box" title="Todavía no hay productos publicados" text="Cuando la empresa publique su catálogo lo vas a ver acá." /> : null}
         {items.length > 0 && visible.length === 0 ? (
-          <EmptyState icon="search" title="No encontramos productos con esos filtros" text="Probá con otra palabra o quitá los filtros." action={{ label: "Limpiar filtros", onClick: () => { setQuery(""); setCategory(categoryName ?? null); setFilters(EMPTY_FILTERS); setShown(PAGE_SIZE); } }} />
+          <EmptyState icon="search" title="No encontramos productos con esos filtros" text="Probá con otra palabra o quitá los filtros." action={{ label: "Limpiar filtros", onClick: () => { setQuery(""); setCategory(null); setFilters(EMPTY_FILTERS); setShown(PAGE_SIZE); } }} />
         ) : null}
         {flat
           ? page.length > 0 ? <ul className="cp-grid" aria-label="Productos">{page.map(renderItem)}</ul> : null

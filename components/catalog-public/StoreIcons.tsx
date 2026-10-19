@@ -1,5 +1,5 @@
 /** Iconos de línea (SVG) de la tienda. Decorativos: el dato siempre va escrito al lado. */
-export type XIconName = "users" | "ruler" | "puzzle" | "tag" | "cart" | "close" | "box" | "search" | "check" | "plus" | "minus" | "bag" | "alert" | "prev" | "next" | "filter";
+export type XIconName = "users" | "ruler" | "puzzle" | "tag" | "cart" | "close" | "box" | "search" | "check" | "plus" | "minus" | "bag" | "alert" | "prev" | "next" | "filter" | "sort" | "calendar";
 
 const PATHS: Record<XIconName, string> = {
   users: "M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19M10 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19v-1.5a3.5 3.5 0 0 0-2.5-3.3M15.5 5.2a3 3 0 0 1 0 5.6",
@@ -17,6 +17,8 @@ const PATHS: Record<XIconName, string> = {
   prev: "M15 5l-7 7 7 7",
   next: "M9 5l7 7-7 7",
   filter: "M4 6h16M7 12h10M10 18h4",
+  sort: "M8 6h12M8 12h8M8 18h4M3 6h.01M3 12h.01M3 18h.01",
+  calendar: "M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13H4V6a1 1 0 0 1 1-1zM8 13h3M13 13h3M8 17h3",
   alert: "M12 8v5M12 16.5h.01M10.3 4.2 2.9 17a2 2 0 0 0 1.7 3h14.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z",
 };
 

@@ -5,13 +5,14 @@ import { CatalogBrowser, type CatalogZoneView } from "./CatalogBrowser";
 import { StoreChrome } from "./StoreChrome";
 import { StoreFooter, StoreWhatsappFloat, storeFooterLinks } from "./StoreFooter";
 import { StoreHeader, storeNavLinks } from "./StoreHeader";
+import type { StoreListState } from "@/lib/storefront-list-state";
 
 /**
  * Landing de una colección (`/tienda/<slug>/c/<coleccion>`): encabezado con la foto de ambientación, el nombre y la
  * descripción, y debajo el mismo catálogo con carrito, filtros y vista rápida, limitado a los productos de la colección
  * en el orden que decidió la empresa. Componente de servidor.
  */
-export function CollectionPage({ store, collection, items, otherCollections, showPrices, demo, range, zones, basePath }: {
+export function CollectionPage({ store, collection, items, otherCollections, showPrices, demo, range, zones, basePath, initialListState }: {
   store: PublicStorefront;
   collection: PublicCollection;
   /** Solo los productos de la colección, ya en su orden. */
@@ -22,6 +23,7 @@ export function CollectionPage({ store, collection, items, otherCollections, sho
   range: { fromKey: string; toKey: string; days: number } | null;
   zones: CatalogZoneView[];
   basePath: string;
+  initialListState?: StoreListState;
 }) {
   const priceMode = store.appearance.priceMode;
   const prices = showPrices && priceMode !== "quote";
@@ -70,6 +72,9 @@ export function CollectionPage({ store, collection, items, otherCollections, sho
             cartScope="public"
             fichaBase={basePath}
             storeName={store.name}
+            collections={otherCollections.concat(collection).map((entry) => ({ slug: entry.slug, name: entry.name }))}
+            initialCollection={collection.slug}
+            initialListState={initialListState}
           />
           {otherCollections.length > 0 ? (
             <section className="cp-section" aria-labelledby="otras-colecciones">
