@@ -415,9 +415,12 @@ export async function GET(request: Request) {
       const gridEnd = parseDate(url.searchParams.get("endsAt"));
       const query = (url.searchParams.get("q") ?? "").trim();
       if (query.length > 200) return jsonError("La búsqueda admite hasta 200 caracteres.", 400);
+      const saleCatalog = url.searchParams.get("saleCatalog");
+      if (saleCatalog !== null && saleCatalog !== "1") return jsonError("El filtro del catálogo de venta no es válido.", 400);
       const page = await listInventoryGrid({
         query,
         organizationId,
+        saleCatalogOnly: saleCatalog === "1",
         cursor: bulk?.after ?? (bulk ? null : url.searchParams.get("cursor")),
         createdBefore: bulk?.at,
         limit: bulk?.limit ?? readGridLimit(url.searchParams.get("limit")),

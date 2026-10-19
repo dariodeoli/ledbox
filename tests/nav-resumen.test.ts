@@ -32,6 +32,7 @@ test("menú por rol: Ajustes está fijo y Estado vive dentro, con permisos propi
     "/leads",
     "/presupuestos",
     "/eventos",
+    "/ventas/catalogo",
     "/clientes",
     "/inventario",
     "/proveedores",

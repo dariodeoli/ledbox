@@ -14,7 +14,7 @@ const MAX_PAGES = 300;
  * completarla, sin el tope de 300 de la lista vieja, y la va mostrando a medida que llega. Con
  * rango (`startsAt`/`endsAt`) cada fila trae además la disponibilidad de ese rango.
  */
-export function useInventoryGrid(range: { from: string; to: string }) {
+export function useInventoryGrid(range: { from: string; to: string }, options: { saleCatalogOnly?: boolean } = {}) {
   const [rows, setRows] = useState<AdminInventoryGridRow[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -22,11 +22,11 @@ export function useInventoryGrid(range: { from: string; to: string }) {
   const [truncated, setTruncated] = useState(false);
   const runId = useRef(0);
 
-  const rangeKey = `${range.from}|${range.to}`;
+  const rangeKey = `${range.from}|${range.to}|${options.saleCatalogOnly ? "sales" : "all"}`;
   const load = useCallback(
     async (fresh: boolean) => {
       const run = ++runId.current;
-      const [from, to] = rangeKey.split("|");
+      const [from, to, scope] = rangeKey.split("|");
       setLoading(true);
       setError("");
       const collected: AdminInventoryGridRow[] = [];
@@ -34,6 +34,7 @@ export function useInventoryGrid(range: { from: string; to: string }) {
       let cursor: string | null = null;
       for (let page = 0; page < MAX_PAGES; page += 1) {
         const params = new URLSearchParams({ fields: "grid", limit: String(PAGE_SIZE) });
+        if (scope === "sales") params.set("saleCatalog", "1");
         if (cursor) params.set("cursor", cursor);
         if (from && to) {
           params.set("startsAt", `${from}T00:00`);

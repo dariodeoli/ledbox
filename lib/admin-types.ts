@@ -1742,6 +1742,8 @@ export type AdminInventoryRow = {
   visibleOnWeb: boolean;
   /** Alcance en la tienda web: HIDDEN, RETAIL, WHOLESALE o BOTH (`visibleOnWeb` sigue sincronizado). */
   catalogAudience: "HIDDEN" | "RETAIL" | "WHOLESALE" | "BOTH";
+  /** Catálogo interno de productos para venta; independiente de la publicación de alquiler. */
+  saleCatalogEnabled: boolean;
   /** Descripción que muestra el catálogo público (opcional, hasta 600 caracteres). */
   publicDescription?: string | null;
   /** Capacidad en personas y medidas (tienda web). */

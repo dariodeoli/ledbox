@@ -217,6 +217,7 @@ export async function POST(request: Request) {
     // El nombre sigue la regla del kit (issue #131): mismo mensaje que el front.
     const itemName = normalizePersonName(typeof body.name === "string" ? body.name : "");
     if (!personNameValid(itemName)) return jsonError(FIELD_MESSAGES.name, 400);
+    if (body.saleCatalogEnabled !== undefined && typeof body.saleCatalogEnabled !== "boolean") return jsonError("La inclusión en el catálogo de venta debe ser verdadera o falsa.", 400);
     // SKU opcional (issue #131): vacío no es error, inválido sí.
     const skuRaw = typeof body.sku === "string" ? normalizeInventorySku(body.sku) : "";
     if (skuRaw && !inventorySkuValid(skuRaw)) return jsonError(FIELD_MESSAGES.sku, 400);
@@ -264,6 +265,7 @@ export async function POST(request: Request) {
             kind: body.inventoryKind === "CONSUMABLE" ? "CONSUMABLE" : body.inventoryKind === "DISPOSABLE" ? "DISPOSABLE" : "REUSABLE",
             quantity,
             ...newItemAudience(body),
+            saleCatalogEnabled: body.saleCatalogEnabled === true,
             listPrice: prices.values.listPrice ?? 0,
             wholesalePrice: prices.values.wholesalePrice ?? 0,
             minimumPrice: prices.values.minimumPrice ?? 0,
@@ -305,6 +307,7 @@ export async function POST(request: Request) {
           "status",
           "visibleOnWeb",
           "catalogAudience",
+          "saleCatalogEnabled",
           "sku",
           "imageUrl",
           "listPrice",

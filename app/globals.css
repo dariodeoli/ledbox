@@ -2160,6 +2160,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-table--cobros-plazo { --cobros-plazo-cols: minmax(8.5rem, 1.5fr) minmax(6.5rem, 1.1fr) 6.5rem 5.5rem 5rem minmax(6.25rem, 1fr) 4.5rem 10.5rem; --admin-cols: var(--cobros-plazo-cols); --admin-table-min: 57rem; }
 .admin-table--pagar { --pagar-cols: minmax(7rem, 1.1fr) minmax(8.5rem, 1.3fr) minmax(6.5rem, 1fr) 6rem minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) minmax(6.25rem, 1fr) 6.5rem 6.5rem; --admin-cols: var(--pagar-cols); --admin-table-min: 64rem; }
 .admin-table--inventario { --inventario-cols: 2.25rem minmax(11rem, 3fr) minmax(5rem, .7fr) minmax(5.25rem, .7fr) minmax(6.5rem, 1fr) 16rem minmax(5.5rem, .8fr) minmax(5.5rem, .8fr) 6rem 3.25rem; --admin-cols: var(--inventario-cols); --admin-table-min: 70rem; }
+.admin-table--catalogo-venta { --catalogo-venta-cols: 3.5rem minmax(11rem, 1.7fr) minmax(9rem, 1.2fr) minmax(10rem, 1.2fr) 8rem; --admin-cols: var(--catalogo-venta-cols); --admin-table-min: 44rem; }
 .admin-table--conteos-fisicos { --conteos-fisicos-cols: minmax(12rem, 1.7fr) minmax(11rem, 1.3fr) 7rem 7rem 7rem; --admin-cols: var(--conteos-fisicos-cols); --admin-table-min: 48rem; }
 /* Mismo ancho útil que la fila (su borde de 1px); una sola plantilla. */
 .admin-table--inventario .admin-table-row { min-height: 40px; margin-top: 4px; }

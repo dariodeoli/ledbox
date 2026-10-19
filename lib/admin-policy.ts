@@ -100,6 +100,10 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
     ],
   },
   {
+    label: "Catálogo",
+    items: [{ href: "/ventas/catalogo", label: "Catálogo de venta", icon: "inventory" }],
+  },
+  {
     label: "Clientes",
     bare: true,
     items: [{ href: "/clientes", label: "Clientes", icon: "clients", also: ["/plantillas"] }],

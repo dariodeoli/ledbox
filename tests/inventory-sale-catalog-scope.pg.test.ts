@@ -22,6 +22,8 @@ test("catálogo de venta: inclusión tenant-scoped separada del alquiler y sin m
       cookies.push(`ledbox_session=${(await createSession(user, organizationId)).jwt}`);
     }
     const item = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: organizationIds[0], name: "Producto dual QA", category: "QA", quantity: 3, visibleOnWeb: true, catalogAudience: "RETAIL" } });
+    const rentalOnly = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: organizationIds[0], name: "Solo alquiler QA", category: "QA", quantity: 1, visibleOnWeb: true, catalogAudience: "RETAIL" } });
+    const foreignSale = await db.inventoryItem.create({ data: { id: randomUUID(), organizationId: organizationIds[1], name: "Venta de otra empresa QA", category: "QA", quantity: 1, saleCatalogEnabled: true } });
     const call = (cookie: string, saleCatalogEnabled: unknown) => fetch(new URL("/api/admin/inventory", base), {
       method: "POST",
       headers: { Cookie: cookie, "Content-Type": "application/json" },
@@ -49,6 +51,12 @@ test("catálogo de venta: inclusión tenant-scoped separada del alquiler y sin m
     const audit = await db.auditLog.findFirstOrThrow({ where: { organizationId: organizationIds[0], entity: "InventoryItem", entityId: item.id }, orderBy: { createdAt: "desc" } });
     assert.match(JSON.stringify(audit.detail), /saleCatalogEnabled/);
     assert.equal(await db.auditLog.count({ where: { organizationId: organizationIds[1], entity: "InventoryItem", entityId: item.id } }), 0);
+    const catalog = await fetch(new URL("/api/admin/inventory?fields=grid&saleCatalog=1", base), { headers: { Cookie: cookies[0] } });
+    assert.equal(catalog.status, 200, await catalog.clone().text());
+    const catalogIds = ((await catalog.json()).inventory as Array<{ id: string }>).map((row) => row.id);
+    assert.deepEqual(catalogIds, [item.id], "el catálogo interno filtra venta y sigue scopeado a la empresa");
+    assert.ok(!catalogIds.includes(rentalOnly.id));
+    assert.ok(!catalogIds.includes(foreignSale.id));
   } finally {
     await db.organization.deleteMany({ where: { id: { in: organizationIds } } });
     await db.adminUser.deleteMany({ where: { id: { in: userIds } } });

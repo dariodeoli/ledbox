@@ -207,6 +207,20 @@ export const MODULE_HELP: Record<string, AdminModuleHelp> = {
       { href: "/presupuestos", label: "Ítems vinculados a stock" },
     ],
   },
+  "/ventas/catalogo": {
+    title: "Catálogo de venta",
+    summary: "Una lista interna para separar los artículos que se preparan para cotizar como venta.",
+    bullets: [
+      "La lista incluye solo productos marcados para venta en su ficha de inventario.",
+      "La marca no publica el producto ni cambia sus precios, unidades o disponibilidad de alquiler.",
+      "El precio de venta queda pendiente hasta que exista un campo específico; los precios de alquiler no se reutilizan.",
+      "La tienda pública, el carrito y el inventario comercial todavía no forman parte de esta pantalla.",
+    ],
+    links: [
+      { href: "/inventario", label: "Editar fichas de producto" },
+      { href: "/presupuestos", label: "Preparar un presupuesto" },
+    ],
+  },
   "/proveedores": {
     title: "Proveedores",
     summary: "El directorio de proveedores y el seguimiento de cada trabajo contratado.",

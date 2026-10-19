@@ -24,7 +24,7 @@ import { adminApiUpload, adminSend } from "@/lib/admin-api";
 import { CATALOG_AUDIENCE_OPTIONS, effectiveAudience, type CatalogAudience } from "@/lib/catalog-audience";
 import { BILLING_UNIT_OPTIONS, INVENTORY_FIELD_HELP } from "@/lib/inventory-bulk";
 import { AdminButton, AdminDialog, AdminDialogSection, AdminDisclosure, AdminNote } from "../AdminUI";
-import { AttachmentInput, Combobox, MoneyField, NumberField, SegmentedField, SelectField, TextAreaField, TextField } from "../AdminFields";
+import { AttachmentInput, Combobox, MoneyField, NumberField, SegmentedField, SelectField, SwitchField, TextAreaField, TextField } from "../AdminFields";
 import { InventoryThumb, KIND_PICK_OPTIONS, STATUS_PICK_OPTIONS } from "./InventoryParts";
 import { PriceTiersEditor, readTierRows, tierRowsFrom, type TierRow } from "./PriceTiersEditor";
 import { tiersForAudience } from "@/lib/price-tiers";
@@ -63,6 +63,8 @@ const EMPTY_FORM = {
   defaultSourceSupplierId: "",
   /** Alcance en la tienda web: arranca oculto, nada se publica solo. */
   catalogAudience: "HIDDEN" as CatalogAudience,
+  /** Catálogo interno para venta; opt-in y separado del catálogo de alquiler. */
+  saleCatalogEnabled: false,
   imageUrl: "",
   /** «Se cobra»: por día (default) o por evento. */
   billingUnit: "DAILY",
@@ -100,6 +102,7 @@ const EMPTY_EDIT = {
   capacity: "",
   dimensions: "",
   catalogAudience: "HIDDEN" as CatalogAudience,
+  saleCatalogEnabled: false,
   imageUrl: "",
   /** Tiempo antes/después del evento en horas; vacío hereda el de la empresa. */
   bufferBeforeHours: "",
@@ -136,6 +139,7 @@ function editFormFromItem(item: InventoryEditable): InventoryEditForm {
     capacity: item.capacity ? String(item.capacity) : "",
     dimensions: item.dimensions ?? "",
     catalogAudience: effectiveAudience(item),
+    saleCatalogEnabled: item.saleCatalogEnabled === true,
     bufferBeforeHours: bufferHoursText(item.bufferBeforeMin),
     bufferAfterHours: bufferHoursText(item.bufferAfterMin),
     billingUnit: item.billingUnit === "EVENT" ? "EVENT" : "DAILY",
@@ -348,6 +352,7 @@ export function InventoryCreateDialog({
       defaultSourceSupplierId: form.defaultSourceSupplierId || null,
       quantity: form.defaultStockOrigin === "EXTERNAL_RENTAL" ? 0 : form.quantity.trim() === "" ? 1 : Number(form.quantity),
       catalogAudience: form.catalogAudience,
+      saleCatalogEnabled: form.saleCatalogEnabled,
       imageUrl: image,
       billingUnit: form.billingUnit,
       listPrice: prices.values.listPrice ?? 0,
@@ -538,6 +543,12 @@ export function InventoryCreateDialog({
             options={[...CATALOG_AUDIENCE_OPTIONS]}
             hint="Oculto no se publica. Mayorista solo se ve con el link privado de cada cliente."
           />
+          <SwitchField
+            label="Incluir en el catálogo de venta"
+            checked={form.saleCatalogEnabled}
+            onChange={(saleCatalogEnabled) => setForm({ ...form, saleCatalogEnabled })}
+            hint="Es una marca interna separada: no publica el producto ni cambia la visibilidad o los precios de alquiler."
+          />
         </AdminDialogSection>
 
         {/* SKU opcional (issue #131): lo avanzado va plegado en «Más opciones». */}
@@ -688,6 +699,7 @@ export function InventoryEditDialog({
       capacity: editForm.capacity.trim() ? Number(editForm.capacity) : null,
       dimensions: editForm.dimensions,
       catalogAudience: editForm.catalogAudience,
+      saleCatalogEnabled: editForm.saleCatalogEnabled,
       imageUrl: image,
       billingUnit: editForm.billingUnit,
       // Solo se mandan los tiempos que la persona cambió (no se pisa un valor en minutos no enteros).
@@ -942,6 +954,13 @@ export function InventoryEditDialog({
             onChange={(value) => setEditForm({ ...editForm, catalogAudience: value as CatalogAudience })}
             options={[...CATALOG_AUDIENCE_OPTIONS]}
             hint="Oculto no se publica. Mayorista solo se ve con el link privado de cada cliente."
+          />
+          <SwitchField
+            label="Incluir en el catálogo de venta"
+            checked={editForm.saleCatalogEnabled}
+            onChange={(saleCatalogEnabled) => setEditForm({ ...editForm, saleCatalogEnabled })}
+            hint="Marca interna independiente del alquiler. No publica el producto ni cambia stock o precios de alquiler."
+            disabled={editBusy}
           />
           <TextAreaField
             label="Descripción para el catálogo"

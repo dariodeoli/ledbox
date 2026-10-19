@@ -27,6 +27,7 @@ test("la navegación respeta los grupos y el orden de la guía (§6)", () => {
       { label: "Inicio", hrefs: ["/dashboard"] },
       // Ventas es el flujo del negocio: lead → presupuesto → evento.
       { label: "Ventas", hrefs: ["/leads", "/presupuestos", "/eventos"] },
+      { label: "Catálogo", hrefs: ["/ventas/catalogo"] },
       { label: "Clientes", hrefs: ["/clientes"] },
       { label: "Operación", hrefs: ["/inventario", "/proveedores", "/promotoras"] },
       { label: "Plata", hrefs: ["/finanzas", "/facturacion"] },
@@ -35,7 +36,7 @@ test("la navegación respeta los grupos y el orden de la guía (§6)", () => {
   );
   // Firmas vive dentro de Presupuestos y Plantillas dentro de Clientes: ya no son ítems del menú.
   const items = ADMIN_NAV.flatMap((group) => group.items);
-  assert.equal(items.length, 11);
+  assert.equal(items.length, 12);
   assert.equal(items.some((item) => item.href === "/firmas" || item.href === "/plantillas"), false);
   // El calendario ya no es un destino: es una vista dentro de Eventos.
   assert.equal(items.some((item) => item.href === "/calendario"), false);
