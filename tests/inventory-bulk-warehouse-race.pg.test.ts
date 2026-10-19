@@ -13,7 +13,8 @@ test("bulk-units no asigna a un depósito si el archivo gana la carrera", { skip
   const { createSession } = await import("../lib/server/auth");
   const organizationId = randomUUID();
   const userId = randomUUID();
-  const warehouseId = randomUUID();
+  const sourceWarehouseId = randomUUID();
+  const targetWarehouseId = randomUUID();
   const itemId = randomUUID();
   const unitId = randomUUID();
   let unlock!: () => void;
@@ -25,16 +26,19 @@ test("bulk-units no asigna a un depósito si el archivo gana la carrera", { skip
 
   try {
     await db.organization.create({ data: { id: organizationId, name: "QA depósito", slug: `qa-bulk-warehouse-${organizationId}` } });
-    await db.warehouse.create({ data: { id: warehouseId, organizationId, name: "Depósito QA", code: `Q${organizationId.slice(0, 6)}`, isDefault: true } });
+    await db.warehouse.createMany({ data: [
+      { id: sourceWarehouseId, organizationId, name: "Origen QA", code: `Q${organizationId.slice(0, 6)}`, isDefault: true },
+      { id: targetWarehouseId, organizationId, name: "Destino QA", code: `R${organizationId.slice(0, 6)}` },
+    ] });
     await db.inventoryItem.create({ data: { id: itemId, organizationId, name: "Unidad QA", category: "QA", quantity: 1 } });
-    await db.inventoryUnit.create({ data: { id: unitId, organizationId, inventoryId: itemId, warehouseId, code: `U${organizationId.slice(0, 8)}`, status: "AVAILABLE" } });
+    await db.inventoryUnit.create({ data: { id: unitId, organizationId, inventoryId: itemId, warehouseId: sourceWarehouseId, code: `U${organizationId.slice(0, 8)}`, status: "AVAILABLE" } });
     const user = await db.adminUser.create({ data: { id: userId, email: `${userId}@example.invalid`, name: "QA", role: "OWNER", passwordHash: "not-a-login", autoLockEnabled: false } });
     await db.adminMembership.create({ data: { id: randomUUID(), adminUserId: userId, organizationId, role: "OWNER" } });
     const cookie = `ledbox_session=${(await createSession(user, organizationId)).jwt}`;
 
     archivePromise = db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "Warehouse" WHERE "id" = ${warehouseId} FOR UPDATE`;
-      await tx.warehouse.update({ where: { id: warehouseId }, data: { archivedAt: new Date() } });
+      await tx.$queryRaw`SELECT "id" FROM "Warehouse" WHERE "id" = ${targetWarehouseId} FOR UPDATE`;
+      await tx.warehouse.update({ where: { id: targetWarehouseId }, data: { archivedAt: new Date() } });
       locked();
       await release;
     }, { timeout: 20_000 });
@@ -43,7 +47,7 @@ test("bulk-units no asigna a un depósito si el archivo gana la carrera", { skip
     responsePromise = fetch(`${base}/api/admin/inventory`, {
       method: "POST",
       headers: { Cookie: cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "bulk-units", ids: [unitId], changes: { warehouseId } }),
+      body: JSON.stringify({ kind: "bulk-units", ids: [unitId], changes: { warehouseId: targetWarehouseId } }),
     });
 
     const deadline = Date.now() + 5_000;
@@ -64,7 +68,7 @@ test("bulk-units no asigna a un depósito si el archivo gana la carrera", { skip
     const response = await responsePromise;
     assert.equal(response.status, 404);
     assert.match((await response.json()).error, /depósito de destino ya no está activo/i);
-    assert.equal((await db.inventoryUnit.findUniqueOrThrow({ where: { id: unitId } })).warehouseId, warehouseId);
+    assert.equal((await db.inventoryUnit.findUniqueOrThrow({ where: { id: unitId } })).warehouseId, sourceWarehouseId);
   } finally {
     unlock();
     await archivePromise?.catch(() => {});
@@ -74,7 +78,7 @@ test("bulk-units no asigna a un depósito si el archivo gana la carrera", { skip
     await db.inventoryItem.deleteMany({ where: { organizationId } });
     await db.adminMembership.deleteMany({ where: { organizationId } });
     await db.adminUser.deleteMany({ where: { id: userId } });
-    await db.warehouse.deleteMany({ where: { id: warehouseId } });
+    await db.warehouse.deleteMany({ where: { id: { in: [sourceWarehouseId, targetWarehouseId] } } });
     await db.organization.deleteMany({ where: { id: organizationId } });
     await db.$disconnect();
   }
