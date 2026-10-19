@@ -9,7 +9,7 @@ import {
   locationLine,
   rangesLabel,
 } from "@/lib/org-profile";
-import { portalBrandVars, type PortalCompany } from "@/lib/portal-company";
+import { portalBrandVars, type PortalBrandIdentity, type PortalCompany } from "@/lib/portal-company";
 
 /**
  * Marca y perfil de la empresa en el portal del cliente. `PortalBrandScope` viste el portal con el
@@ -17,7 +17,7 @@ import { portalBrandVars, type PortalCompany } from "@/lib/portal-company";
  * `PortalCompanyInfo` muestra contacto, ubicación con «Cómo llegar», horarios, medios de pago y
  * condiciones. Solo lo que la empresa cargó. Componentes de servidor, sin estado.
  */
-export function PortalBrandScope({ company, children }: { company: PortalCompany | null | undefined; children: ReactNode }) {
+export function PortalBrandScope({ company, children }: { company: PortalBrandIdentity | null | undefined; children: ReactNode }) {
   const vars = portalBrandVars(company ?? null);
   return (
     <div className="portal-brandscope" style={vars as CSSProperties} data-branded={company?.brand ? "true" : undefined}>
