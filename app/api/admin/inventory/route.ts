@@ -68,6 +68,7 @@ import { readInventoryTrace } from "@/lib/server/inventory-details";
 import { stripInventoryCosts } from "@/lib/server/inventory-costs";
 import { GridCursorError, listInventoryGrid, loadGridExtras, matchInventoryByUnitCode, readGridLimit } from "@/lib/server/inventory-grid";
 import { resolveUnitPlacement } from "@/lib/server/inventory-units";
+import { lockUsableWarehouse } from "@/lib/server/inventory-warehouses";
 import { markOwnPrice } from "@/lib/server/inventory-families";
 import { comboCapacitiesForRange, loadComboDefinitions, releaseComboAssignment, withComboAvailability } from "@/lib/server/inventory-combos";
 
@@ -658,6 +659,12 @@ export async function POST(request: Request) {
           hasCommittedAssignments,
         );
         if (placementError) return "unit-placement" as const;
+        // readInventoryTrace validates before the transaction for a fast error,
+        // but the warehouse may be archived before this write starts. Lock and
+        // revalidate the destination inside the same transaction as the update.
+        if (data.warehouseId !== undefined && !await lockUsableWarehouse(tx, organizationId, data.warehouseId as string)) {
+          return "unit-placement-warehouse" as const;
+        }
       }
       if (taxonomy) {
         const resolved = await resolveInventoryCategory(tx, organizationId, taxonomy);
@@ -679,7 +686,7 @@ export async function POST(request: Request) {
       if (error instanceof InventoryUnitIncidentConflict) return "open-incidents" as const;
       throw error;
     });
-    if (result === "family-category" || result === "open-incidents" || result === "unit-placement" || !result) {
+    if (result === "family-category" || result === "open-incidents" || result === "unit-placement" || result === "unit-placement-warehouse" || !result) {
       const status = result === "family-category" || result === "open-incidents" || result === "unit-placement" ? 409 : 404;
       const error = result === "family-category"
         ? "La selección incluye variantes. Cambiá la categoría desde Variantes. No se aplicó ningún cambio."
@@ -687,6 +694,8 @@ export async function POST(request: Request) {
           ? new InventoryUnitIncidentConflict().message
           : result === "unit-placement"
             ? "Solo se pueden mover o reubicar unidades disponibles sin reservas vigentes del producto. No se aplicó ningún cambio."
+            : result === "unit-placement-warehouse"
+              ? "El depósito de destino ya no está activo en esta empresa. No se aplicó ningún cambio."
           : "La selección contiene registros que no existen en esta empresa. No se aplicó ningún cambio.";
       if (bulkRunId) {
         const outcomes: BulkRowOutcome[] = ids.map(id => ({ id, status: "failed", message: error }));

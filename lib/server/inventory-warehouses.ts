@@ -38,6 +38,18 @@ export async function findUsableWarehouse(tx: Tx, organizationId: string, id: st
   return tx.warehouse.findFirst({ where: { id, organizationId, archivedAt: null }, select: { id: true, code: true, name: true } });
 }
 
+/**
+ * Rechecks and locks a destination warehouse for a physical move. The lock
+ * serializes a bulk assignment with archiving: if the move wins, archiving waits;
+ * if archiving wins, the move sees no usable row and must fail.
+ */
+export async function lockUsableWarehouse(tx: Tx, organizationId: string, id: string): Promise<boolean> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>(
+    Prisma.sql`SELECT "id" FROM "Warehouse" WHERE "id" = ${id} AND "organizationId" = ${organizationId} AND "archivedAt" IS NULL FOR SHARE`,
+  );
+  return rows.length > 0;
+}
+
 /** Depósito activo por código (para la importación). */
 export async function findWarehouseByCode(tx: Tx, organizationId: string, rawCode: string) {
   const code = normalizeWarehouseCode(rawCode);
