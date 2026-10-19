@@ -35,6 +35,26 @@
   color-scheme: light;
 }
 .cp-theme[data-store-scheme="dark"] { color-scheme: dark; }
+.cp-theme[data-store-theme="ledbox"] {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(70rem 34rem at 12% -12%, color-mix(in srgb, var(--color-primary) 15%, transparent), transparent 65%),
+    radial-gradient(58rem 32rem at 98% 18%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 64%),
+    var(--color-bg);
+}
+.cp-theme[data-store-theme="ledbox"]::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .24;
+  background-image: linear-gradient(color-mix(in srgb, var(--color-primary) 10%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--color-primary) 10%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px; mask-image: linear-gradient(to bottom, black, transparent 76%);
+}
+.cp-theme[data-store-theme="ledbox"] .cp-h1, .cp-theme[data-store-theme="ledbox"] .cp-h2 { letter-spacing: -.035em; }
+.cp-theme[data-store-theme="ledbox"] .cp-eyebrow { color: var(--color-accent-text); }
+.cp-theme[data-store-theme="ledbox"] .cp-hero-copy { animation: cp-ledbox-rise 700ms var(--ease) both; }
+.cp-theme[data-store-theme="ledbox"] .cp-hero::after { content: ""; display: block; height: 1px; background: linear-gradient(90deg, transparent, var(--color-primary), transparent); opacity: .7; }
+.cp-theme[data-store-theme="ledbox"] .cp-catcard:hover, .cp-theme[data-store-theme="ledbox"] .cp-tile:hover { border-color: var(--color-primary); box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 45%, transparent), var(--shadow-card); transform: translateY(-2px); }
+@keyframes cp-ledbox-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .cp-theme[data-store-theme="ledbox"] .cp-hero-copy { animation: none; } }
 .cp-theme *, .cp-theme *::before, .cp-theme *::after { box-sizing: border-box; }
 .cp-theme a { text-underline-offset: 3px; }
 /* El sitio público estila `nav` y `footer` globalmente (nav fijo de 68 px, pie con relleno): acá se neutraliza. */
