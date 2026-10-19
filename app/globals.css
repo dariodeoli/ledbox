@@ -5668,12 +5668,12 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .admin-day-calendar:focus-visible { outline: 2px solid var(--a-accent, var(--color-primary)); outline-offset: 1px; }
 .admin-day-calendar:disabled { cursor: not-allowed; opacity: .55; }
 .admin-date-shortcuts { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-width: 0; }
-.admin-date-shortcuts button { padding: 0 10px; min-height: 30px; border: 1px solid var(--a-border, var(--color-border, #cbd5e1)); border-radius: 999px; background: var(--a-surface, transparent); color: var(--a-accent, var(--color-primary)); font: inherit; font-size: 11px; cursor: pointer; }
+.admin-date-shortcuts button { padding: 0 10px; min-inline-size: 24px; min-height: 30px; border: 1px solid var(--a-border, var(--color-border, #cbd5e1)); border-radius: 999px; background: var(--a-surface, transparent); color: var(--a-accent, var(--color-primary)); font: inherit; font-size: 11px; cursor: pointer; }
 .admin-date-shortcuts button[aria-pressed="true"] { border-color: var(--a-accent, var(--color-primary)); background: var(--a-accent, var(--color-primary)); color: var(--a-on-accent, #fff); font-weight: 700; }
 .admin-date-shortcuts button:disabled { color: var(--a-muted, var(--color-muted)); cursor: default; }
 .admin-date-shortcuts button:focus-visible { outline: 2px solid var(--a-accent, var(--color-primary)); outline-offset: 2px; }
 .admin-date-shortcuts small { flex-basis: 100%; color: var(--a-muted, var(--color-muted)); font-size: 10px; }
-@media (pointer: coarse) { .admin-date-shortcuts button, .admin-day-calendar { min-height: 44px; } .admin-day-calendar { width: 44px; } .admin-day-control .admin-day-input { padding-inline-end: 50px; } }
+@media (pointer: coarse) { .admin-date-shortcuts button { min-inline-size: var(--tap, 44px); min-block-size: var(--tap, 44px); } .admin-day-calendar { min-height: 44px; width: 44px; } .admin-day-control .admin-day-input { padding-inline-end: 50px; } }
 
 /* Editable quantity controls reuse NumberField; layout belongs to the shared
    stepper instead of a separate number-input skin in each cart. */
