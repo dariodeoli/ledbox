@@ -5,6 +5,7 @@ const DEFAULT_ADMIN_URL = "https://app.ledbox.online";
 const DEFAULT_CLIENT_URL = "https://clientes.ledbox.online";
 const DEFAULT_DEMO_URL = "https://demo.ledbox.online";
 const DEFAULT_PRODUCT_URL = "https://eventos.ledbox.online";
+const CONFIGURED_PRODUCT_URL = (process.env.NEXT_PUBLIC_PRODUCT_URL || DEFAULT_PRODUCT_URL).replace(/\/$/, "");
 const DEFAULT_WHATSAPP_NUMBER = "595982029217";
 
 export type SiteProfile = {
@@ -25,7 +26,7 @@ const LEDBOX_PROFILE: SiteProfile = {
 
 const EVENTOS_PROFILE: SiteProfile = {
   kind: "eventos",
-  siteUrl: process.env.NEXT_PUBLIC_EVENTOS_URL || "https://eventos.ledbox.online",
+  siteUrl: CONFIGURED_PRODUCT_URL,
   title: "EventOS — Gestión profesional de eventos",
   description: "Planificá eventos, presupuestos, equipos, proveedores, pagos y rentabilidad desde un solo lugar.",
   indexable: true,
@@ -41,7 +42,7 @@ const APP_PROFILE: SiteProfile = {
 
 export function siteProfileForHost(hostname?: string): SiteProfile {
   const host = (hostname || "").split(":")[0].toLowerCase();
-  if (host === "eventos.ledbox.online" || host.endsWith(".eventos.com.py")) return EVENTOS_PROFILE;
+  if (host === hostnameOf(CONFIGURED_PRODUCT_URL) || host === "eventos.ledbox.online" || host.endsWith(".eventos.com.py")) return EVENTOS_PROFILE;
   if (host === "app.ledbox.online") return APP_PROFILE;
   if (host === "admin.ledbox.online") return { ...APP_PROFILE, kind: "admin", siteUrl: "https://admin.ledbox.online" };
   if (host === "clientes.ledbox.online" || host === "demo.ledbox.online") return { ...APP_PROFILE, siteUrl: `https://${host}`, indexable: false };
@@ -57,7 +58,7 @@ export const publicConfig = {
   /** Demo pública (issue #15): host de la demo con datos simulados. */
   demoUrl: (process.env.NEXT_PUBLIC_DEMO_URL || DEFAULT_DEMO_URL).replace(/\/$/, ""),
   /** Landing de ventas de EventOS (issue #39); al comprar el dominio propio se cambia esta variable. */
-  productUrl: (process.env.NEXT_PUBLIC_PRODUCT_URL || DEFAULT_PRODUCT_URL).replace(/\/$/, ""),
+  productUrl: CONFIGURED_PRODUCT_URL,
   /** Host viejo del panel: queda solo para redirigir a `adminUrl` (transición). */
   legacyAdminUrl: "https://admin.ledbox.online",
   whatsappNumber: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || DEFAULT_WHATSAPP_NUMBER,

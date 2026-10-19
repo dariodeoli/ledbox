@@ -123,6 +123,14 @@ export function middleware(request: NextRequest) {
   const demoRootPath = requestHeaders.get("x-demo-original-path");
   requestHeaders.set("x-pathname", demoRootPath || `${pathname}${search}`);
   const pass = () => NextResponse.next({ request: { headers: requestHeaders } });
+  // Las variantes de landing son previews para revisión: no quedan indexadas
+  // ni cacheadas por el CDN aunque se abran desde otro dominio.
+  if (/^\/preview\/landing\/[abc](?:\/.*)?$/i.test(pathname)) {
+    const response = pass();
+    response.headers.set("Cache-Control", "no-store, max-age=0, must-revalidate");
+    response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+    return response;
+  }
   const legacyAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
   const onAdminHost = requestHost(request) === adminHost();
   const onClientHost = requestHost(request) === clientHost();

@@ -49,7 +49,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const pathname = (requestHeaders.get("x-pathname") || "/").split("?")[0];
   const profile = siteProfileForHost(host);
   const portal = host === new URL(publicConfig.clientUrl).hostname || /^\/(p|firma|comparar)\//.test(pathname) || pathname === "/portal";
-  const product = profile.kind === "eventos" || pathname === "/producto" || pathname.startsWith("/producto/");
+  const product = profile.kind === "eventos" || pathname === "/producto" || pathname.startsWith("/producto/") || pathname.startsWith("/preview/landing/");
   const app = profile.kind === "app" || profile.kind === "admin" || host === new URL(publicConfig.demoUrl).hostname || isAdminRoute(pathname) || pathname === "/superadmin" || pathname.startsWith("/superadmin/");
   // Catálogo y seguimiento de pedido (alquileres fase 3): pertenecen a la empresa dueña, sin el pie de LedBox.
   const companyPublic = /^\/(catalogo|tienda|pedido)\//.test(pathname);
