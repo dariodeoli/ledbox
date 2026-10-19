@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { AccessPage } from "@/components/catalog-public/AccessPage";
 import { StoreFront } from "@/components/catalog-public/StoreFront";
 import { loadCategoryImages, loadPublicCollections, loadPublicCatalogItems, loadPublicZones, loadStorefront, parsePublicRange, resolvePublicCatalog } from "@/lib/server/catalog-public";
+import { loadStoreSocialImage } from "@/lib/server/store-seo";
+import { storefrontMetadata } from "@/lib/store-seo";
 
 export const dynamic = "force-dynamic";
 
@@ -18,14 +20,18 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const context = await resolvePublicCatalog(orgSlug);
   if (!context) return { title: { absolute: "Tienda no encontrada" }, robots: { index: false, follow: false } };
   const name = context.organization.name;
-  const description = context.settings.storefrontTagline || `Alquiler de equipos con ${name}. Elegí lo que necesitás y te respondemos con una cotización.`;
-  return {
-    title: { absolute: `${name} · Tienda de alquiler` },
+  const description = context.settings.storefrontTagline || `Catálogo de alquiler de ${name}. Consultá productos y disponibilidad directamente con la empresa.`;
+  const indexable = !context.demo && context.settings.catalogAccessMode === "OPEN";
+  const image = indexable ? await loadStoreSocialImage(context.organization.id, context.organization.slug) : null;
+  return storefrontMetadata({
+    organizationSlug: context.organization.slug,
+    organizationName: name,
+    title: `${name} · Tienda de alquiler`,
     description,
-    openGraph: { title: `${name} · Tienda de alquiler`, description, type: "website", siteName: name, locale: "es_PY" },
-    // Una tienda con acceso restringido no se indexa (la puerta de acceso no es el catálogo).
-    robots: context.demo || context.settings.catalogAccessMode !== "OPEN" ? { index: false, follow: false } : { index: true, follow: true },
-  };
+    canonicalPath: `/tienda/${encodeURIComponent(context.organization.slug)}`,
+    socialImagePath: image,
+    indexable,
+  });
 }
 
 /**

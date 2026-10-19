@@ -50,6 +50,8 @@ export function siteProfileForHost(hostname?: string): SiteProfile {
 
 export const publicConfig = {
   siteUrl: (process.env.NEXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL).replace(/\/$/, ""),
+  /** Origen canónico de las tiendas públicas. No se deriva del Host recibido para evitar hosts falsificados. */
+  storeUrl: (process.env.NEXT_PUBLIC_STORE_URL || process.env.NEXT_PUBLIC_EVENTOS_URL || process.env.NEXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL).replace(/\/$/, ""),
   /** App de EventOS (instancia de la empresa): el panel vive acá (issue #39). */
   adminUrl: (process.env.NEXT_PUBLIC_ADMIN_URL || DEFAULT_ADMIN_URL).replace(/\/$/, ""),
   /** Portal del cliente (issue #12): host público de los presupuestos aprobables. */

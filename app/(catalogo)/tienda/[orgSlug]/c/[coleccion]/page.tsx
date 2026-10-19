@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CollectionPage } from "@/components/catalog-public/CollectionPage";
 import { loadCollectionMeta, loadPublicCatalogItems, loadPublicCollections, loadPublicZones, loadStorefront, parsePublicRange, resolvePublicCatalog } from "@/lib/server/catalog-public";
+import { loadStoreSocialImage } from "@/lib/server/store-seo";
+import { storefrontMetadata } from "@/lib/store-seo";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +20,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const collection = await loadCollectionMeta(context.organization.id, coleccion);
   if (!collection) return { title: { absolute: "Colección no encontrada" }, robots: { index: false, follow: false } };
   const title = `${collection.name} · ${context.organization.name}`;
-  return {
-    title: { absolute: title },
+  const image = context.demo ? null : await loadStoreSocialImage(context.organization.id, context.organization.slug);
+  return storefrontMetadata({
+    organizationSlug: context.organization.slug,
+    organizationName: context.organization.name,
+    title,
     description: collection.description ?? `Colección ${collection.name} de ${context.organization.name}.`,
-    openGraph: { title, type: "website", siteName: context.organization.name, locale: "es_PY" },
-    robots: context.demo ? { index: false, follow: false } : { index: true, follow: true },
-  };
+    canonicalPath: `/tienda/${encodeURIComponent(context.organization.slug)}/c/${encodeURIComponent(coleccion)}`,
+    socialImagePath: image,
+    indexable: !context.demo,
+  });
 }
 
 /**

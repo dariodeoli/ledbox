@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { publicConfig } from "@/lib/public-config";
 import { resolvePublicCatalog } from "@/lib/server/catalog-public";
-import { loadOrganizationLogos } from "@/lib/server/branding";
-import { storeFavicon } from "@/lib/store-branding";
+import { loadStoreFavicon } from "@/lib/server/store-seo";
+import { storeMetadataBase } from "@/lib/store-seo";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +13,11 @@ type LayoutProps = { params: Promise<{ orgSlug: string }>; children: ReactNode }
 export async function generateMetadata({ params }: LayoutProps): Promise<Metadata> {
   const { orgSlug } = await params;
   const context = await resolvePublicCatalog(orgSlug);
-  if (!context || context.settings.catalogAccessMode !== "OPEN") return {};
+  const metadataBase = storeMetadataBase(publicConfig.storeUrl);
+  if (!context || context.settings.catalogAccessMode !== "OPEN") return { metadataBase };
 
-  const logos = await loadOrganizationLogos(context.organization.id);
-  const icon = storeFavicon(context.organization.slug, logos);
-  return icon ? { icons: { icon: { url: icon.url, type: icon.type } } } : {};
+  const icon = await loadStoreFavicon(context.organization.id, context.organization.slug);
+  return { metadataBase, ...(icon ? { icons: { icon: { url: icon.url, type: icon.type } } } : {}) };
 }
 
 export default function StoreOrganizationLayout({ children }: LayoutProps) {
