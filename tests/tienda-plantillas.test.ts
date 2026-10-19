@@ -43,7 +43,7 @@ const SPEC_TOKENS = [
 
 // ── Registro ─────────────────────────────────────────────────────────────────
 
-test("registro: solo Boutique y las seis plantillas por rubro, cada una con id, nombre, descripción, rubro ideal y miniatura", () => {
+test("registro: solo Boutique y las plantillas por rubro, cada una con id, nombre, descripción, rubro ideal y miniatura", () => {
   assert.deepEqual([...STORE_THEMES], ["boutique", "escenario", "ledbox", "corporativo", "fiesta", "gourmet", "kids", "industrial"]);
   assert.deepEqual([...TEMPLATES], [...STORE_THEMES]);
   assert.equal(new Set(THEME_REGISTRY.map((theme) => theme.id)).size, THEME_REGISTRY.length, "ids únicos");
@@ -163,7 +163,7 @@ test("prohibido el rosa en las paletas por defecto", () => {
 
 // ── Migración de plantillas ──────────────────────────────────────────────────
 
-test("compatibilidad: IDs históricos se resuelven a las siete plantillas vigentes sin volver al selector", () => {
+test("compatibilidad: IDs históricos se resuelven a las plantillas vigentes sin volver al selector", () => {
   for (const [legacy, current] of Object.entries(LEGACY_TEMPLATE_MAP)) {
     assert.ok(isStoreTheme(current));
     assert.equal(resolveStoredTheme(legacy), current);
@@ -267,7 +267,7 @@ test("fuentes del portal: lista cerrada sin cambios", () => {
 
 // ── Plantillas premium (v2.1.128) ────────────────────────────────────────────
 
-test("las seis plantillas por rubro usan tipografías cerradas y botón sólido de color", () => {
+test("las plantillas por rubro usan tipografías cerradas y botón sólido de color", () => {
   for (const id of ["escenario", "corporativo", "fiesta", "gourmet", "kids", "industrial"]) {
     const t = THEMES[id];
     assert.ok(t.rubro && t.forWho);
@@ -382,7 +382,7 @@ test("guardar carrito es un popup acotado que solo abre por una acción intencio
   assert.ok(!browser.includes("showToast("), "el agregado se confirma una sola vez en el resumen del pedido");
 });
 
-test("selector compacto: solo siete tarjetas con muestras, sin miniaturas que recorten precios", () => {
+test("selector compacto: solo ocho tarjetas con muestras, sin miniaturas que recorten precios", () => {
   const settings = read("components/admin/modules/AparienciaSettings.tsx");
   assert.match(settings, /themesByRubro\(\)\.map/);
   assert.match(settings, /theme\.swatch\.map/);

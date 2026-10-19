@@ -204,7 +204,7 @@ test("apariencia: plantilla, tipografías, anuncio y precio de listas cerradas; 
   const ok = parseAppearance({ template: "boutique", font: "playfair-display", displayFont: "fraunces", announcement: { on: true, text: "  Envíos   a todo Asunción " }, priceMode: "unit" });
   assert.deepEqual(ok, { ok: true, appearance: { template: "boutique", font: "playfair-display", displayFont: "fraunces", announcement: { on: true, text: "Envíos a todo Asunción" }, priceMode: "unit", home: DEFAULT_APPEARANCE.home } });
   assert.equal(parseAppearance({ template: "neon" }).ok, false);
-  assert.equal(parseAppearance({ template: "clasica" }).ok, true, "los nombres anteriores se normalizan a una de las siete vigentes");
+  assert.equal(parseAppearance({ template: "clasica" }).ok, true, "los nombres anteriores se normalizan a una de las plantillas vigentes");
   assert.equal(parseAppearance({ font: "Comic Sans" }).ok, false);
   assert.equal(parseAppearance({ displayFont: "Comic Sans" }).ok, false);
   assert.equal(parseAppearance({ priceMode: "gratis" }).ok, false);

@@ -14,6 +14,6 @@ Referencia: La Vajilla Alquileres. El dueño reemplazó la dirección editorial 
 - Pedido persistente con productos, unidades e importe desde el primer agregado, confirmación animada y respeto de movimiento reducido. Guardar carrito es voluntario.
 - Pie compacto de tres columnas, claro en Boutique.
 - El negro intencional está autorizado como botón principal; los grises medios siguen rechazados y todo color efectivo conserva contraste AA.
-- Las otras seis plantillas por rubro permanecen disponibles. Los colores y tipografías configurados explícitamente por cada empresa siguen respetándose.
+- Las otras siete plantillas por rubro permanecen disponibles. Los colores y tipografías configurados explícitamente por cada empresa siguen respetándose.
 
 El cambio es visual y de navegación: no altera precios, reservas, permisos, condiciones ni datos de la empresa.
