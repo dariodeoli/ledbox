@@ -5,6 +5,7 @@ const DEFAULT_ADMIN_URL = "https://app.ledbox.online";
 const DEFAULT_CLIENT_URL = "https://clientes.ledbox.online";
 const DEFAULT_DEMO_URL = "https://demo.ledbox.online";
 const DEFAULT_PRODUCT_URL = "https://eventos.ledbox.online";
+const DEFAULT_EVENTOS_DOMAINS = ["eventoss.online", "eventos.ledbox.online", "eventos.com.py"];
 const DEFAULT_WHATSAPP_NUMBER = "595982029217";
 
 export type SiteProfile = {
@@ -25,7 +26,7 @@ const LEDBOX_PROFILE: SiteProfile = {
 
 const EVENTOS_PROFILE: SiteProfile = {
   kind: "eventos",
-  siteUrl: process.env.NEXT_PUBLIC_EVENTOS_URL || "https://eventos.ledbox.online",
+  siteUrl: process.env.NEXT_PUBLIC_EVENTOS_URL || process.env.NEXT_PUBLIC_PRODUCT_URL || DEFAULT_PRODUCT_URL,
   title: "EventOS — Gestión profesional de eventos",
   description: "Planificá eventos, presupuestos, equipos, proveedores, pagos y rentabilidad desde un solo lugar.",
   indexable: true,
@@ -41,11 +42,32 @@ const APP_PROFILE: SiteProfile = {
 
 export function siteProfileForHost(hostname?: string): SiteProfile {
   const host = (hostname || "").split(":")[0].toLowerCase();
-  if (host === "eventos.ledbox.online" || host.endsWith(".eventos.com.py")) return EVENTOS_PROFILE;
-  if (host === "app.ledbox.online") return APP_PROFILE;
-  if (host === "admin.ledbox.online") return { ...APP_PROFILE, kind: "admin", siteUrl: "https://admin.ledbox.online" };
-  if (host === "clientes.ledbox.online" || host === "demo.ledbox.online") return { ...APP_PROFILE, siteUrl: `https://${host}`, indexable: false };
+  const appHost = hostnameOf(process.env.NEXT_PUBLIC_APP_URL || DEFAULT_ADMIN_URL);
+  const adminHost = hostnameOf(process.env.NEXT_PUBLIC_ADMIN_URL || DEFAULT_ADMIN_URL);
+  const clientHost = hostnameOf(process.env.NEXT_PUBLIC_CLIENT_URL || DEFAULT_CLIENT_URL);
+  const demoHost = hostnameOf(process.env.NEXT_PUBLIC_DEMO_URL || DEFAULT_DEMO_URL);
+  if (host === appHost || host === "app.ledbox.online") return APP_PROFILE;
+  if (host === adminHost || host === "admin.ledbox.online") {
+    return { ...APP_PROFILE, kind: "admin", siteUrl: process.env.NEXT_PUBLIC_ADMIN_URL || "https://admin.ledbox.online" };
+  }
+  if (host === clientHost || host === demoHost || host === "clientes.ledbox.online" || host === "demo.ledbox.online") {
+    return { ...APP_PROFILE, siteUrl: `https://${host}`, indexable: false };
+  }
+  if (isEventOSHost(host)) return EVENTOS_PROFILE;
   return LEDBOX_PROFILE;
+}
+
+/**
+ * EventOS custom domains are supplied as comma-separated hostnames (no paths).
+ * Each entry matches its apex and subdomains, while the dot boundary prevents
+ * lookalike suffixes such as `eventoss.online.evil.example` from matching.
+ */
+function isEventOSHost(host: string): boolean {
+  const configured = process.env.NEXT_PUBLIC_EVENTOS_DOMAINS;
+  const domains = (configured ? configured.split(",") : DEFAULT_EVENTOS_DOMAINS)
+    .map((domain) => domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^\./, "").replace(/\/$/, ""))
+    .filter(Boolean);
+  return domains.some((domain) => host === domain || host.endsWith(`.${domain}`));
 }
 
 export const publicConfig = {
