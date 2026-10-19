@@ -46,6 +46,25 @@ test("sin contacto cargado, el menú no ofrece «Contacto»", () => {
   assert.deepEqual(storeNavLinks("", { contact: false }).map((link) => link.label), ["Catálogo", "Cómo funciona"]);
 });
 
+test("búsqueda y orden quedan plegados en una barra accesible y conservan sus controles", async () => {
+  const { FilterBar } = await import("../components/catalog-public/FilterBar");
+  const html = renderToStaticMarkup(createElement(FilterBar, {
+    categories: ["Living", "Mesas"], category: "Living", onCategory: () => {}, sort: "destacados", onSort: () => {},
+    query: "Sofá", onQuery: () => {}, showPrices: true,
+  }));
+  const controlsId = html.match(/aria-controls="([^"]+)"/)?.[1];
+  assert.ok(controlsId, "el botón declara su panel de controles");
+  assert.match(html, /aria-expanded="false"/, "el panel inicia plegado");
+  assert.match(html, new RegExp(`id="${controlsId}"[^>]*hidden`));
+  assert.ok(html.includes("Buscar y ordenar"));
+  assert.ok(html.includes(">Buscar productos</label>"));
+  assert.ok(html.includes(">Ordenar</label>"));
+  assert.ok(html.includes("type=\"search\""));
+  assert.ok(html.includes("«Sofá»"), "el resumen mantiene visible la búsqueda activa");
+  const source = readFileSync("components/catalog-public/FilterBar.tsx", "utf8");
+  assert.match(source, /window\.scrollY > 140 && !toolsRef\.current\?\.contains\(document\.activeElement\)/, "no oculta un control con foco");
+});
+
 test("todas las páginas de la tienda usan el mismo pie y encabezado", () => {
   for (const file of [
     "components/catalog-public/StoreFront.tsx",
