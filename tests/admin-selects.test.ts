@@ -7,7 +7,7 @@ import { test } from "node:test";
  * Selectores de listas largas (issue #108): los `SelectField` que listan
  * **entidades que crecen** (clientes, proveedores, cuentas, presupuestos,
  * eventos, proyectos) pasan a `Combobox` con búsqueda; los **filtros estáticos**
- * (estados, métodos, categorías, plazos) siguen como `SelectField`. Estas
+ * (estados, métodos, plazos) siguen como `SelectField`. Estas
  * guardas verifican, en la fuente, qué componente dibuja cada campo: si alguien
  * vuelve a un select nativo en una lista larga, el test lo frena.
  */
@@ -50,7 +50,6 @@ test("las entidades que crecen se eligen con búsqueda (Combobox)", () => {
 test("los filtros estáticos siguen siendo SelectField", () => {
   const estaticos: Array<[string, string]> = [
     ["FinanzasModule.tsx", "Método"],
-    ["FinanzasModule.tsx", "Categoría"],
     ["FinanzasModule.tsx", "Días de plazo"],
     ["FinanzasModule.tsx", "Movimiento"],
     ["FinanzasModule.tsx", "Tipo"],
@@ -61,6 +60,13 @@ test("los filtros estáticos siguen siendo SelectField", () => {
   for (const [file, label] of estaticos) {
     assert.equal(fieldComponent(file, label), "select", `${file} · «${label}»: es un catálogo cerrado, no necesita búsqueda`);
   }
+});
+
+test("el filtro de categoría de inventario es escribible y recibe opciones acotadas al catálogo visible", () => {
+  const text = source("InventarioModule.tsx");
+  assert.match(text, /categoryFilterOptionsForRows\(taxonomy\.tree, categorySourceRows/, "categorías por productos filtrables de la empresa activa");
+  assert.match(text, /<Combobox[\s\S]*?ariaLabel="Filtrar por categoría"[\s\S]*?options=\{categoryOptions\}/, "búsqueda dentro del selector sin persistir texto libre");
+  assert.match(text, /categoryId: "", focus: "all"/, "el selector calcula opciones sin autoexcluir la categoría ya seleccionada");
 });
 
 test("los módulos con listas largas usan el Combobox del kit", () => {

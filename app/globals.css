@@ -2924,9 +2924,11 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-item-data { grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); }
 
 /* ── Inventario rediseñado: acciones, indicadores que filtran, lista con foto, tarjetas y ficha ── */
-.admin-inv-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.admin-inv-actions .admin-btn { min-height: 38px; }
-.admin-inv-actions-end { margin-left: auto; }
+.admin-inv-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.admin-inv-actions .admin-btn { min-height: 36px; }
+.admin-inv-actions-end { display: flex; align-items: center; margin-left: auto; }
+.admin-inv-export-menu { gap: 5px; padding-left: 8px; border-left: 1px solid var(--a-line-2); color: var(--a-muted); font-size: 11px; font-weight: 650; }
+.admin-inv-export-menu .admin-iconbtn { width: 36px; height: 36px; border: 1px solid var(--a-line-2); border-radius: var(--a-radius); background: var(--a-panel); }
 /* Cinco indicadores en UNA fila compacta (escritorio): etiqueta arriba (recorta, el texto completo
    va en el aria-label), valor con su nota en la misma línea. En celular, dos por fila. */
 .admin-kpis.admin-kpis--inventario { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
@@ -3048,15 +3050,18 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-inv-bar .admin-toolbar { gap: 6px; }
 .admin-inv-bar .admin-toolbar > .admin-search { flex: 1.4 1 10rem; min-width: 0; max-width: 15rem; }
 .admin-inv-bar .admin-toolbar > select.admin-filter { flex: 1 1 8rem; min-width: 7rem; max-width: 12rem; }
+.admin-inv-bar .admin-toolbar > .admin-combobox { flex: 1 1 8rem; min-width: 7rem; max-width: 12rem; }
 .admin-inv-bar .admin-toolbar > .admin-viewswitch { margin-left: auto; }
 /* Pestañas y rango «Disponible desde/hasta» comparten una fila baja, pegada a la barra de búsqueda. */
 .admin-inv-subbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
 .admin-inv-range { display: flex; flex: 0 1 auto; align-items: center; gap: 6px; min-width: 0; margin-left: auto; color: var(--a-muted); font-size: 12px; }
 /* Barra fija de búsqueda y filtros (en celular fluye con la página para no comerse la pantalla). */
-.admin-inv-bar { position: sticky; top: var(--a-topbar); z-index: 12; padding: 4px 0; background: color-mix(in srgb, var(--a-bg) 92%, transparent); backdrop-filter: var(--a-blur); -webkit-backdrop-filter: var(--a-blur); }
+.admin-inv-bar { position: sticky; top: var(--a-topbar); z-index: 12; padding: 4px 0; border-bottom: 1px solid var(--a-line-2); background: var(--a-panel); }
 /* Cuadrícula compacta: foto de 64 px, nombre en 2 líneas, código, chip y «libres/total». */
 .admin-inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--admin-inv-card-min, 11rem), 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
 .admin-inv-tile { position: relative; min-width: 0; border: var(--a-panel-line); border-radius: var(--a-radius); background: var(--a-panel); box-shadow: var(--a-panel-shadow); }
+.admin-inv-family-picker { display: grid; gap: 3px; min-width: 0; padding: 7px 36px 0 8px; color: var(--a-muted); font-size: 10px; font-weight: 650; }
+.admin-inv-family-picker .admin-inv-variant-select { width: 100%; min-width: 0; max-width: 100%; min-height: 34px; padding: 4px 28px 4px 8px; font-size: 11px; }
 .admin-inv-tile[data-selected="true"] { border-color: var(--a-accent); box-shadow: 0 0 0 1px var(--a-accent); }
 .admin-inv-tile-open { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; height: 100%; min-height: 44px; padding: 8px; border: 0; border-radius: inherit; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .admin-inv-tile-head { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
@@ -3075,7 +3080,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-inv-tile-unit { margin-left: 2px; }
 /* Por categoría: encabezado pegajoso debajo de la barra fija, plegable. */
 .admin-inv-sections { display: grid; gap: 14px; min-width: 0; }
-.admin-inv-section-head { position: sticky; top: calc(var(--a-topbar) + var(--admin-inv-bar-h, 0px)); z-index: 6; margin: 0 0 6px; font: inherit; background: color-mix(in srgb, var(--a-bg) 94%, transparent); backdrop-filter: var(--a-blur); -webkit-backdrop-filter: var(--a-blur); }
+.admin-inv-section-head { position: sticky; top: calc(var(--a-topbar) + var(--admin-inv-bar-h, 0px)); z-index: 6; margin: 0 0 6px; font: inherit; background: var(--a-panel); }
 .admin-inv-section-head > button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 6px 4px; border: 0; border-bottom: 1px solid var(--a-line-2); background: transparent; color: var(--a-text-strong); font: inherit; text-align: left; cursor: pointer; }
 .admin-inv-section-head > button:hover .admin-inv-section-name { color: var(--a-accent); }
 .admin-inv-section-head > button:focus-visible { outline: 2px solid var(--a-accent); outline-offset: -2px; }
@@ -3085,21 +3090,21 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 .admin-inv-section-count { margin-left: auto; color: var(--a-muted-2); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 @media (max-width: 720px) {
   /* Celular: controles de 44 px de alto. */
-  .admin-inv-bar .admin-toolbar > select.admin-filter, .admin-inv-bar .admin-toolbar > .admin-search input { min-height: 44px; }
+  .admin-inv-bar .admin-toolbar > select.admin-filter, .admin-inv-bar .admin-toolbar > .admin-search input, .admin-inv-bar .admin-toolbar > .admin-combobox input { min-height: 44px; }
   .admin-inv-bar .admin-toolbar > .admin-viewswitch { height: auto; }
   .admin-inv-bar .admin-viewswitch-btn { width: 44px; height: 44px; }
-  .admin-inv-bar { position: static; padding: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .admin-inv-bar { position: static; padding: 0; border-bottom: 0; background: transparent; }
   .admin-inv-section-head > button { flex-wrap: wrap; }
   .admin-inv-grid { --admin-inv-card-min: 9.5rem; gap: 6px; }
   .admin-inv-tile-check .admin-rowcheck { width: 44px; height: 44px; top: -6px; right: -6px; }
+  .admin-inv-family-picker .admin-inv-variant-select { min-height: 44px; }
   .admin-inv-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; margin-left: 0; gap: 4px 8px; }
   .admin-inv-range > span:first-child { grid-column: 1 / -1; }
   .admin-inv-range > span:nth-child(3) { display: none; }
   .admin-inv-range .admin-field--filter, .admin-inv-range .admin-field--filter > * { width: 100%; min-width: 0; max-width: 100%; }
   .admin-inv-range input[type="date"] { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
-  .admin-inv-actions .admin-inv-scan { order: 9; flex-basis: 100%; }
-  .admin-inv-actions-end { flex: 1 1 calc(50% - 8px); }
-  .admin-inv-actions-end .admin-btn { width: 100%; }
+  .admin-inv-actions-end { flex: 0 0 auto; }
+  .admin-inv-export-menu { flex: 1 0 100%; justify-content: flex-end; margin-left: 0; padding: 4px 0 0; border-top: 1px solid var(--a-line-2); border-left: 0; }
   .admin-inv-subbar .admin-inv-tabs { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-bottom: 2px; scrollbar-width: thin; }
   .admin-inv-subbar .admin-inv-tabs > * { flex: none; }
   .admin-inv-section-count { margin-left: 22px; }
@@ -3111,6 +3116,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
   .admin-bulkbar { bottom: calc(var(--a-bottomnav, 72px) + 8px); }
   .admin-inv-actions .admin-btn { flex: 1 1 calc(50% - 8px); justify-content: center; min-height: 44px; }
   .admin-inv-actions-end { margin-left: 0; }
+  .admin-inv-export-menu { margin-left: 0; }
   .admin-cards .admin-btn, .admin-cards .admin-iconbtn, .admin-bulkbar .admin-btn { min-height: 44px; }
   .admin-cards .admin-iconbtn { min-width: 44px; }
   .admin-cards .admin-rowcheck { width: 44px; height: 44px; }

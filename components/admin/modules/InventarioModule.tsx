@@ -10,13 +10,12 @@ import { canImportCatalog, canSeeInventoryCosts, canWriteOperations } from "@/li
 import { csvBool, csvFilename, downloadCsv, type CsvBlock } from "@/lib/admin-export";
 import type { AdminInventoryGridRow, AdminInventoryIncident, AdminInventoryItemRow, AdminInventoryOccupancy, AdminInventoryRow } from "@/lib/admin-types";
 import { INVENTORY_FOCUS_LABEL, INVENTORY_TABS, isPublished, itemInFocus, tabCounts, unitProblemCounts, type InventoryFocus } from "@/lib/inventory-view";
-import { EMPTY_GRID_FILTERS, activeFilterCount, applyInventoryFilters, categoryFilterOptions, familyFilterOptions, type InventoryGridFilters } from "@/lib/inventory-grid-view";
+import { EMPTY_GRID_FILTERS, activeFilterCount, applyInventoryFilters, categoryFilterOptionsForRows, familyFilterOptions, type InventoryGridFilters } from "@/lib/inventory-grid-view";
 import { INVENTORY_STATE_FILTER_OPTIONS } from "@/lib/inventory-visual-state";
 import { useAdminSession } from "../AdminShell";
 import {
   AdminActionsMenu,
   AdminButton,
-  AdminButtonLink,
   AdminDataState,
   AdminDialog,
   AdminDisclosure,
@@ -28,7 +27,7 @@ import {
   AdminToolbar,
   AdminTabs,
 } from "../AdminUI";
-import { DateField, SearchField } from "../AdminFields";
+import { Combobox, DateField, SearchField } from "../AdminFields";
 import { kpiState } from "@/components/admin/kpi-state";
 import { adminSend, useAdminResource } from "@/lib/admin-api";
 import { useInventoryGrid, useUnitCodeMatches } from "./InventoryGridData";
@@ -190,6 +189,7 @@ export function InventarioModule() {
   // Filtros combinados con «Y». Las pestañas cuentan sobre lo filtrado sin el foco.
   const showingArchived = filters.state === "archived";
   const baseRows = useMemo(() => applyInventoryFilters(inventory, { ...filters, focus: "all" }, filterContext, { archived: showingArchived }), [inventory, filters, filterContext, showingArchived]);
+  const categorySourceRows = useMemo(() => applyInventoryFilters(inventory, { ...filters, categoryId: "", focus: "all" }, filterContext, { archived: showingArchived }), [inventory, filters, filterContext, showingArchived]);
   const rows = useMemo(() => baseRows.filter((item) => itemInFocus(item, filters.focus, filterContext)), [baseRows, filters.focus, filterContext]);
   const toBulkRow = (item: Pick<AdminInventoryGridRow, "id" | "name" | "archivedAt">): BulkTrashRow => ({ id: item.id, name: item.name, archivedAt: item.archivedAt ?? null });
   const bulk = useBulkTrash({ type: "InventoryItem", organizationId: organization?.id ?? "", scopeKey: JSON.stringify({ filters, from, to }), enabled: writable,
@@ -211,7 +211,7 @@ export function InventarioModule() {
   const archivedRows = useMemo(() => applyInventoryFilters(inventory, { ...filters, focus: "all", state: "ALL" }, filterContext, { archived: true }), [inventory, filters, filterContext]);
   const counts = useMemo(() => tabCounts(baseRows, filterContext), [baseRows, filterContext]);
   const filtersActive = activeFilterCount(filters, rangeActive);
-  const categoryOptions = useMemo(() => categoryFilterOptions(taxonomy.tree), [taxonomy.tree]);
+  const categoryOptions = useMemo(() => categoryFilterOptionsForRows(taxonomy.tree, categorySourceRows, { warehouseId: filters.warehouseId }), [taxonomy.tree, categorySourceRows, filters.warehouseId]);
   const stateOptions = useMemo(() => [{ value: "ALL", label: "Todos los estados" }, ...INVENTORY_STATE_FILTER_OPTIONS], []);
   const familyChoices = useMemo(() => familyFilterOptions(inventory), [inventory]);
   const warehouseChoices = useMemo(() => warehouseOptions(taxonomy.warehouses, { includeEmpty: "Todos los depósitos" }), [taxonomy.warehouses]);
@@ -356,9 +356,6 @@ export function InventarioModule() {
             Nuevo combo
           </AdminButton>
         ) : null}
-        <AdminButton className="admin-inv-scan" icon="search" disabled title="Escanear el código de un producto o unidad: próximamente" aria-label="Escanear: próximamente">
-          Escanear · próximamente
-        </AdminButton>
         {canImport ? (
           <AdminButton icon="upload" onClick={() => setImportOpen(true)} aria-haspopup="dialog" title="Cargar productos, juegos y fotos desde una planilla, ChatGPT o la IA de LedBox">
             Importar
@@ -373,13 +370,15 @@ export function InventarioModule() {
           Incidentes{incidentCount == null ? "" : ` (${formatNumber(incidentCount)})`}
         </AdminButton>
         <InventoryCountHistory writable={writable} />
-        <span className="admin-inv-actions-end admin-export">
-          <AdminButtonLink icon="download" href="/api/admin/inventory/export" download title="Todas las unidades físicas de la empresa, una fila por unidad con su depósito y ubicación; incluye retiradas y productos archivados">
-            Unidades por depósito
-          </AdminButtonLink>
-          <AdminButton icon="download" onClick={exportInventory} title="Exportar el inventario filtrado a CSV" aria-label="Exportar el inventario filtrado a CSV">
-            Exportar CSV
-          </AdminButton>
+        <span className="admin-inv-actions-end admin-inv-export-menu">
+          <span>Exportar</span>
+          <AdminActionsMenu
+            label="Exportar inventario"
+            items={[
+              { label: "Unidades por depósito", icon: "download", href: "/api/admin/inventory/export", title: "Todas las unidades físicas de la empresa, una fila por unidad con su depósito y ubicación; incluye retiradas y productos archivados" },
+              { label: "Exportar inventario filtrado a CSV", icon: "download", onClick: exportInventory, title: "Descargar las filas que coinciden con los filtros actuales" },
+            ]}
+          />
         </span>
       </div>
 
@@ -496,7 +495,15 @@ export function InventarioModule() {
         <AdminToolbar>
           <SearchField value={filters.query} onChange={(value) => setFilter("query", value)} label="Buscar inventario" placeholder="Nombre, SKU o código de unidad…" />
           <AdminSelect value={filters.kind} onChange={(value) => setFilter("kind", value)} label="Filtrar por tipo" options={KIND_OPTIONS} />
-          <AdminSelect value={filters.categoryId} onChange={(value) => setFilter("categoryId", value)} label="Filtrar por categoría" options={categoryOptions} />
+          <Combobox
+            value={filters.categoryId}
+            onChange={(value) => setFilter("categoryId", value)}
+            ariaLabel="Filtrar por categoría"
+            placeholder="Todas las categorías"
+            options={categoryOptions}
+            maxVisible={12}
+            emptyLabel="No hay categorías que coincidan."
+          />
           {familyChoices.length > 1 ? <AdminSelect value={filters.familyId} onChange={(value) => setFilter("familyId", value)} label="Filtrar por familia" options={familyChoices} /> : null}
           <AdminSelect value={filters.defaultWarehouseId} onChange={(value) => setFilter("defaultWarehouseId", value)} label="Depósito por defecto del catálogo" options={catalogWarehouseChoices} />
           <AdminSelect value={filters.warehouseId} onChange={(value) => setFilter("warehouseId", value)} label="Depósito físico de unidades" options={stockWarehouseChoices} />

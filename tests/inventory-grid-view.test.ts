@@ -8,7 +8,9 @@ import {
   activeFilterCount,
   applyInventoryFilters,
   categoryFilterOptions,
+  categoryFilterOptionsForRows,
   categoryScope,
+  groupInventoryCards,
   groupByCategory,
   locationSummary,
   type InventoryFilterContext,
@@ -88,6 +90,22 @@ test("los filtros se combinan con «Y»", () => {
   assert.deepEqual(run({ state: "damaged", focus: "incidents" }), ["mesa"], "daño en unidades cuenta como incidente");
 });
 
+test("una tarjeta por familia conserva el SKU exacto al buscar una variante", () => {
+  const variants = [
+    row("tv-32", { familyId: "tv", familyName: "Televisores", name: "Televisor · 32 pulgadas", sku: "TV-32", variantOptions: { pulgadas: "32" }, variantSortOrder: 1 }),
+    row("tv-43", { familyId: "tv", familyName: "Televisores", name: "Televisor · 43 pulgadas", sku: "TV-43", variantOptions: { pulgadas: "43" }, variantSortOrder: 2 }),
+    row("chair", { familyId: null, name: "Silla", sku: "CH-1" }),
+  ];
+  const cards = groupInventoryCards(variants);
+  assert.deepEqual(cards.map((group) => [group.key, group.rows.map((item) => item.id)]), [
+    ["family:tv", ["tv-32", "tv-43"]],
+    ["item:chair", ["chair"]],
+  ]);
+  const exactSearch = applyInventoryFilters(variants, filters({ query: "TV-43" }), context());
+  assert.deepEqual(exactSearch.map((item) => item.id), ["tv-43"]);
+  assert.deepEqual(groupInventoryCards(exactSearch)[0].rows.map((item) => item.id), ["tv-43"], "el selector conserva solo la variante que coincide con el SKU consultado");
+});
+
 test("el estado «Archivado» muestra las archivadas y el resto de los filtros sigue valiendo", () => {
   assert.deepEqual(ids(applyInventoryFilters(catalog, filters({ state: "archived" }), context(), { archived: true })), ["vieja"]);
   assert.deepEqual(ids(applyInventoryFilters(catalog, filters({ categoryId: "c-sillas" }), context(), { archived: true })), []);
@@ -108,6 +126,23 @@ test("el árbol de categorías da las opciones y el alcance del filtro", () => {
   assert.deepEqual([...categoryScope(tree, "c-vajilla")].sort(), ["c-copas", "c-vajilla"]);
   assert.deepEqual([...categoryScope(tree, "c-copas")], ["c-copas"]);
   assert.equal(categoryScope(tree, "").size, 0);
+});
+
+test("los filtros de categoría solo ofrecen categorías asociadas al inventario de esta empresa y al depósito visible", () => {
+  const companyTree = buildCategoryTree([
+    { id: "own-seating", name: "Sillas", parentId: null, key: "own-seating", sortOrder: 1, color: null, icon: null, archivedAt: null, itemCount: 1 },
+    { id: "own-cups", name: "Copas", parentId: "own-seating", key: "own-seating/cups", sortOrder: 1, color: null, icon: null, archivedAt: null, itemCount: 1 },
+    { id: "empty-manteles", name: "Manteles", parentId: null, key: "empty-manteles", sortOrder: 2, color: null, icon: null, archivedAt: null, itemCount: 0 },
+    { id: "empty-revestimientos", name: "Revestimientos", parentId: null, key: "empty-revestimientos", sortOrder: 3, color: null, icon: null, archivedAt: null, itemCount: 0 },
+  ]);
+  const rows = [
+    row("glass", { categoryId: "own-cups", stock: { unitCount: 2, locations: [{ warehouseId: "d2", location: null, units: 2 }], supplierIds: [] } }),
+    row("chair", { categoryId: "own-seating", stock: { unitCount: 1, locations: [{ warehouseId: "d1", location: null, units: 1 }], supplierIds: [] } }),
+  ];
+  assert.deepEqual(categoryFilterOptionsForRows(companyTree, rows).map((option) => option.value), ["", "own-seating", "own-cups"]);
+  assert.deepEqual(categoryFilterOptionsForRows(companyTree, rows, { warehouseId: "d1" }).map((option) => option.value), ["", "own-seating"]);
+  assert.deepEqual(categoryFilterOptionsForRows(companyTree, [], { warehouseId: "d1" }).map((option) => option.value), [""], "sin productos visibles solo queda la opción de limpiar el filtro");
+  assert.deepEqual(categoryFilterOptions(companyTree).map((option) => option.value), ["", "own-seating", "own-cups", "empty-manteles", "empty-revestimientos"], "los selectores de alta pueden seguir usando el árbol completo");
 });
 
 test("por categoría: secciones por sortOrder, sin categoría al final y libres sumados", () => {

@@ -26,7 +26,8 @@ test("la tarjeta de la cuadrícula abre la ficha con un botón (Enter) y Ctrl/Cm
   const tiles = read("components/admin/modules/InventoryTiles.tsx");
   assert.match(tiles, /<button type="button" className="admin-inv-tile-open"/);
   assert.match(tiles, /event\.ctrlKey \|\| event\.metaKey \|\| event\.shiftKey/);
-  assert.match(tiles, /onOpen\(item\.id\)/);
+  assert.match(tiles, /onOpen\(selectedItem\.id\)/);
+  assert.match(tiles, /variants=\{variants\}/, "la cuadrícula agrupa y permite abrir la variante seleccionada");
 });
 
 test("el inventario arranca en cuadrícula, recuerda la vista con try/catch y conserva ?producto=", () => {

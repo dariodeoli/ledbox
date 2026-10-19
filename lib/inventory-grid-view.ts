@@ -109,6 +109,28 @@ export function categoryFilterOptions(tree: readonly CategoryNode[], allLabel = 
   return options;
 }
 
+/** Opciones del filtro para los productos realmente visibles en esta empresa y alcance. */
+export function categoryFilterOptionsForRows(
+  tree: readonly CategoryNode[],
+  rows: ReadonlyArray<Pick<AdminInventoryGridRow, "categoryId" | "stock">>,
+  options: { allLabel?: string; warehouseId?: string } = {},
+): CategoryFilterOption[] {
+  const visibleCategories = new Set<string>();
+  for (const row of rows) {
+    if (!row.categoryId) continue;
+    if (options.warehouseId && !row.stock.locations.some((location) => location.warehouseId === options.warehouseId)) continue;
+    visibleCategories.add(row.categoryId);
+  }
+
+  const filteredTree = tree.flatMap((root) => {
+    if (root.archivedAt) return [];
+    const children = root.children.filter((child) => !child.archivedAt && visibleCategories.has(child.id));
+    if (!visibleCategories.has(root.id) && children.length === 0) return [];
+    return [{ ...root, children }];
+  });
+  return categoryFilterOptions(filteredTree, options.allLabel);
+}
+
 /** Opciones del filtro «Familia»: las familias que tienen al menos una variante en la lista, por nombre. */
 export function familyFilterOptions(rows: ReadonlyArray<Pick<AdminInventoryGridRow, "familyId" | "familyName">>, allLabel = "Todas las familias"): CategoryFilterOption[] {
   const families = new Map<string, string>();
@@ -125,6 +147,18 @@ export type CategorySection = {
   /** Productos con unidades libres hoy: suma de libres de los productos con stock propio. */
   free: number;
 };
+
+/** Grupos de tarjetas: una ficha por familia, pero los productos sueltos conservan su tarjeta. */
+export function groupInventoryCards(rows: ReadonlyArray<AdminInventoryGridRow>): Array<{ key: string; rows: AdminInventoryGridRow[] }> {
+  const groups = new Map<string, AdminInventoryGridRow[]>();
+  for (const row of rows) {
+    const key = row.familyId ? `family:${row.familyId}` : `item:${row.id}`;
+    const group = groups.get(key) ?? [];
+    group.push(row);
+    groups.set(key, group);
+  }
+  return [...groups].map(([key, groupRows]) => ({ key, rows: groupRows }));
+}
 
 /** Sección para los productos sin categoría del árbol. */
 export const UNCATEGORIZED_ID = "__sin-categoria__";
