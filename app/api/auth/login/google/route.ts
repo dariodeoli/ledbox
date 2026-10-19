@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { getPublicOrigin } from "@/lib/server/public-origin";
+import { isGoogleAuthOriginAllowed } from "@/lib/server/google-origin";
 export const runtime = "nodejs";
 /**
  * Inicio del flujo de Google del panel. Con `?invitation=<token>` (issue #31)
@@ -7,6 +8,7 @@ export const runtime = "nodejs";
  * invitación con la identidad verificada de Google.
  */
 export async function GET(request: Request) {
+  if (!isGoogleAuthOriginAllowed(request)) return new Response(null, { status: 404 });
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const siteUrl = getPublicOrigin(request);
   if (!clientId) return new Response("Google login is not configured.", { status: 503 });

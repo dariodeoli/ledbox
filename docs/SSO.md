@@ -58,31 +58,26 @@ ruido al configurar):
 
 ```
 https://app.eventoss.online
-https://admin.ledbox.online
 http://localhost:3000
 ```
 
 URIs de redireccionamiento autorizados — **exactos**, sin barra final, con el
-path completo. Estado al 21-09-2026: registrados en Google Cloud el de la app y
-el viejo del panel (transición) y el de desarrollo:
+path completo. Para la configuración actual de EventOS:
 
 ```
 https://app.eventoss.online/api/auth/callback/google
-https://admin.ledbox.online/api/auth/callback/google
 http://localhost:3000/api/auth/callback/google
 ```
 
-> Cliente OAuth real: **`EventOS Admin`**, proyecto **`weem-db`**
-> (ID público `500595134387-k1g1s92q5pr26efbt6fehs8ksn4qeloq`). Verificado en
-> producción: `/api/auth/login/google` redirige a Google con ese `client_id` y
-> con `redirect_uri=https://app.eventoss.online/api/auth/callback/google`, tanto
-> en el login como en la aceptación de invitaciones.
+El dominio autorizado de la pantalla de consentimiento es `eventoss.online`.
+Esta guía documenta los valores requeridos; el repositorio no puede confirmar
+el estado actual de Google Cloud. Verificá allí el cliente web, el origen y el
+callback antes de habilitar el acceso en producción.
 >
 > El panel vive en `app.eventoss.online`; el `NEXT_PUBLIC_ADMIN_URL` define cuál se usa.
-> El callback arma el `redirect_uri` con el origen real de la request
-> (`getPublicOrigin`), así que el mismo deploy funciona en los dos hosts
-> mientras ambos estén registrados en Google. Al comprar el dominio propio de
-> EventOS hay que registrar también su callback.
+> El inicio y el callback aceptan únicamente el origen administrativo
+> configurado (`NEXT_PUBLIC_ADMIN_URL`). El host legado `admin.ledbox.online`
+> redirige al host vigente y no necesita callback para iniciar sesiones nuevas.
 >
 > El panel **no** puede configurar `https://admin.ledbox.online/admin/api/...`:
 > las rutas del panel van sin `/admin`.
@@ -199,8 +194,10 @@ detalle técnico.
 1. Completar en Owncoding Hub: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
    `AUTH_SECRET`, `NEXT_PUBLIC_ADMIN_URL` con el host real del panel
    (`https://app.eventoss.online` como host vigente del panel).
-2. En Google Cloud, registrar los *redirect URIs* exactos de §2.2 (el host actual
-   del panel y el nuevo, más el de desarrollo).
+2. En Google Cloud, configurar el dominio `eventoss.online`, el origen
+   `https://app.eventoss.online` y los *redirect URIs* exactos de §2.2. El
+   callback de `localhost` se usa solo para desarrollo. Esta guía no puede
+   comprobar ni cambiar la consola de Google Cloud.
 3. Desplegar (Coolify reconstruye al integrar a la rama viva).
 4. Probar:
    - `/login` → Google → entra a `/dashboard`;
@@ -214,7 +211,7 @@ detalle técnico.
 
 | Síntoma | Qué revisar |
 | --- | --- |
-| `Error 400: redirect_uri_mismatch` | El `redirect_uri` enviado debe coincidir **carácter por carácter** con uno registrado: `https://app.eventoss.online/api/auth/callback/google` (el callback legado de `admin.ledbox.online` se conserva durante la transición), sin `/admin`, sin barra final. |
+| `Error 400: redirect_uri_mismatch` | El `redirect_uri` enviado debe coincidir **carácter por carácter** con el registrado: `https://app.eventoss.online/api/auth/callback/google`, sin `/admin` ni barra final. |
 | `invalid_client` | `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` mal cargados o de otro proyecto. |
 | `access_denied` | La app está en Testing y la cuenta no es *test user*; o la persona canceló. |
 | `403 org_internal` | La pantalla de consentimiento está restringida al dominio de la organización y la cuenta es externa. |
