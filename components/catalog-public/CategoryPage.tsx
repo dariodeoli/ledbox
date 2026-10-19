@@ -1,4 +1,5 @@
 import type { PublicCatalogItem, PublicCollection, PublicStorefront } from "@/lib/server/catalog-public";
+import Link from "next/link";
 import { storeCategoryHref, withStoreDates, type StoreCategory } from "@/lib/store-categories";
 import { locationLine } from "@/lib/org-profile";
 import { preorderWhatsappUrl } from "@/lib/catalog-public";
@@ -23,16 +24,12 @@ export function CategoryPage({ store, category, categories, items, collections, 
       <StoreHeader name={store.name} slug={store.slug} logos={store.logos} homeHref={home} nav={nav} cart="button" cartScope="public" searchHref="#catalogo" />
       <main className="cp-page" data-testid="category-page">
         <div className="cp-container cp-main-pad">
-          <nav className="cp-crumbs" aria-label="Ruta">
-            <a href={home}>Inicio</a><span aria-hidden="true">/</span><a href={`${home}#catalogo`}>Catálogo</a><span aria-hidden="true">/</span><span aria-current="page">{category.name}</span>
-          </nav>
-          <header className="cp-section-head cp-category-head">
-            <div>
-            <p className="cp-eyebrow">Categoría</p>
-            <h1 className="cp-h3">{category.name}</h1>
-            <p className="cp-hint">{count} {count === 1 ? "producto" : "productos"}</p>
+          <header className="cp-category-head">
+            <Link className="cp-link cp-category-back" href={`${home}#catalogo`} scroll={false}>← Catálogo</Link>
+            <div className="cp-category-title">
+              <h1 className="cp-h3">{category.name}</h1>
+              <span className="cp-hint">{count} {count === 1 ? "producto" : "productos"}</span>
             </div>
-            <a className="cp-link" href={`${home}#catalogo`}>Volver al catálogo completo</a>
           </header>
           <CatalogBrowser organizationName={store.name} showPrices={showPrices && store.appearance.priceMode !== "quote"} preorderPath={`/api/catalog/${encodeURIComponent(store.slug)}/preorder`} wholesale={false} clientName={null} demo={demo} items={items} range={range} initialCategory={category.name} categoryName={category.name} categoryNavigation={{ allHref: `${home}#catalogo`, links }} zones={zones} priceMode={store.appearance.priceMode} slug={store.slug} cartScope="public" fichaBase={basePath} storeName={store.name} collections={collections.map((entry) => ({ slug: entry.slug, name: entry.name }))} />
         </div>

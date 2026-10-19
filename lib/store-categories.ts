@@ -43,3 +43,11 @@ export function withStoreDates(path: string, range: StoreDateRange): string {
 export function storeCategoryHref(basePath: string, category: StoreCategory, range: StoreDateRange): string {
   return withStoreDates(`${basePath}/categoria/${encodeURIComponent(category.slug)}`, range);
 }
+
+/** Actualiza el filtro de categoría en la URL actual sin navegación ni pérdida de filtros/fecha/scroll. */
+export function storeCategoryStateHref(currentHref: string, category: string | null): string {
+  const url = new URL(currentHref, "https://ledbox.invalid");
+  if (category) url.searchParams.set("categoria", category);
+  else url.searchParams.delete("categoria");
+  return `${url.pathname}${url.search}${url.hash}`;
+}
