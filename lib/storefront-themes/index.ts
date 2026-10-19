@@ -5,6 +5,9 @@ import { FIESTA_THEME } from "./fiesta";
 import { GOURMET_THEME } from "./gourmet";
 import { INDUSTRIAL_THEME } from "./industrial";
 import { LEDBOX_THEME } from "./ledbox";
+import { MINIMAL_PRO_THEME } from "./minimal-pro";
+import { EDITORIAL_PRO_THEME } from "./editorial-pro";
+import { IMPACTO_THEME } from "./impacto";
 import { KIDS_THEME } from "./kids";
 import type { ThemeDef } from "./types";
 
@@ -14,7 +17,7 @@ import type { ThemeDef } from "./types";
  * El orden de este arreglo es el orden dentro de cada rubro en el selector de Apariencia. Los tests de contraste y de
  * ausencia de hardcodes recorren TODO el registro.
  */
-export const THEME_REGISTRY = [BOUTIQUE_THEME, ESCENARIO_THEME, LEDBOX_THEME, CORPORATIVO_THEME, FIESTA_THEME, GOURMET_THEME, KIDS_THEME, INDUSTRIAL_THEME] as const;
+export const THEME_REGISTRY = [BOUTIQUE_THEME, ESCENARIO_THEME, LEDBOX_THEME, MINIMAL_PRO_THEME, EDITORIAL_PRO_THEME, IMPACTO_THEME, CORPORATIVO_THEME, FIESTA_THEME, GOURMET_THEME, KIDS_THEME, INDUSTRIAL_THEME] as const;
 
 export type StoreThemeId = (typeof THEME_REGISTRY)[number]["id"];
 export const STORE_THEMES = THEME_REGISTRY.map((theme) => theme.id) as readonly StoreThemeId[];

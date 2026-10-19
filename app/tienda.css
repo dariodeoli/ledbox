@@ -55,6 +55,23 @@
 .cp-theme[data-store-theme="ledbox"] .cp-catcard:hover, .cp-theme[data-store-theme="ledbox"] .cp-tile:hover { border-color: var(--color-primary); box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 45%, transparent), var(--shadow-card); transform: translateY(-2px); }
 @keyframes cp-ledbox-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .cp-theme[data-store-theme="ledbox"] .cp-hero-copy { animation: none; } }
+.cp-theme[data-store-theme="minimal-pro"] .cp-hero { border-bottom: 1px solid var(--color-border); }
+.cp-theme[data-store-theme="minimal-pro"] .cp-section { border-bottom: 1px solid var(--color-border-soft); padding-bottom: var(--space-section); }
+.cp-theme[data-store-theme="minimal-pro"] .cp-catcard, .cp-theme[data-store-theme="minimal-pro"] .cp-tile { box-shadow: none; }
+.cp-theme[data-store-theme="minimal-pro"] .cp-btn--primary { box-shadow: 0 8px 22px color-mix(in srgb, var(--color-primary) 18%, transparent); }
+.cp-theme[data-store-theme="minimal-pro"] .cp-hero-inner { animation: cp-minimal-in 500ms var(--ease) both; }
+.cp-theme[data-store-theme="editorial-pro"] .cp-hero { overflow: hidden; }
+.cp-theme[data-store-theme="editorial-pro"] .cp-hero-media { filter: saturate(.86) contrast(.98); }
+.cp-theme[data-store-theme="editorial-pro"] .cp-catcard, .cp-theme[data-store-theme="editorial-pro"] .cp-tile { transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.cp-theme[data-store-theme="editorial-pro"] .cp-catcard:hover, .cp-theme[data-store-theme="editorial-pro"] .cp-tile:hover { transform: translateY(-4px); box-shadow: var(--shadow-float); }
+.cp-theme[data-store-theme="editorial-pro"] .cp-section-head::after { content: ""; width: 4rem; height: 1px; margin-top: var(--sp-2); background: var(--color-primary); }
+.cp-theme[data-store-theme="impacto"] { background-image: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 32%), linear-gradient(var(--color-bg), var(--color-bg)); }
+.cp-theme[data-store-theme="impacto"] .cp-hero-inner { position: relative; }
+.cp-theme[data-store-theme="impacto"] .cp-hero-inner::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--color-primary); box-shadow: 0 0 2rem color-mix(in srgb, var(--color-primary) 45%, transparent); }
+.cp-theme[data-store-theme="impacto"] .cp-catcard:hover, .cp-theme[data-store-theme="impacto"] .cp-tile:hover { transform: translateY(-3px) scale(1.01); }
+.cp-theme[data-store-theme="impacto"] .cp-btn--primary { box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 55%, transparent), 0 0 28px color-mix(in srgb, var(--color-primary) 18%, transparent); }
+@keyframes cp-minimal-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .cp-theme[data-store-theme="minimal-pro"] .cp-hero-inner { animation: none; } }
 .cp-theme *, .cp-theme *::before, .cp-theme *::after { box-sizing: border-box; }
 .cp-theme a { text-underline-offset: 3px; }
 /* El sitio público estila `nav` y `footer` globalmente (nav fijo de 68 px, pie con relleno): acá se neutraliza. */

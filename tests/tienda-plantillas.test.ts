@@ -44,7 +44,7 @@ const SPEC_TOKENS = [
 // ── Registro ─────────────────────────────────────────────────────────────────
 
 test("registro: solo Boutique y las plantillas por rubro, cada una con id, nombre, descripción, rubro ideal y miniatura", () => {
-  assert.deepEqual([...STORE_THEMES], ["boutique", "escenario", "ledbox", "corporativo", "fiesta", "gourmet", "kids", "industrial"]);
+  assert.deepEqual([...STORE_THEMES], ["boutique", "escenario", "ledbox", "minimal-pro", "editorial-pro", "impacto", "corporativo", "fiesta", "gourmet", "kids", "industrial"]);
   assert.deepEqual([...TEMPLATES], [...STORE_THEMES]);
   assert.equal(new Set(THEME_REGISTRY.map((theme) => theme.id)).size, THEME_REGISTRY.length, "ids únicos");
   for (const theme of THEME_REGISTRY) {
@@ -63,7 +63,7 @@ test("registro: solo Boutique y las plantillas por rubro, cada una con id, nombr
 });
 
 test("registro: sumar una plantilla no toca componentes (los archivos de tema son solo datos)", () => {
-  for (const file of readdirSync(new URL("../lib/storefront-themes/", import.meta.url)).filter((name) => /^(boutique|escenario|ledbox|corporativo|fiesta|gourmet|kids|industrial)\.ts$/.test(name))) {
+  for (const file of readdirSync(new URL("../lib/storefront-themes/", import.meta.url)).filter((name) => /^(boutique|escenario|ledbox|minimal-pro|editorial-pro|impacto|corporativo|fiesta|gourmet|kids|industrial)\.ts$/.test(name))) {
     const source = read(`lib/storefront-themes/${file}`);
     assert.ok(!/\bimport\b[^;]*react/i.test(source), `${file}: sin React`);
     assert.ok(!/function\s/.test(source), `${file}: solo un objeto de tokens`);
@@ -267,7 +267,7 @@ test("fuentes del portal: lista cerrada sin cambios", () => {
 
 // ── Plantillas premium (v2.1.128) ────────────────────────────────────────────
 
-test("las plantillas por rubro usan tipografías cerradas y botón sólido de color", () => {
+test("las plantillas especiales usan tipografías cerradas y botón sólido de color", () => {
   for (const id of ["escenario", "corporativo", "fiesta", "gourmet", "kids", "industrial"]) {
     const t = THEMES[id];
     assert.ok(t.rubro && t.forWho);
@@ -281,7 +281,7 @@ test("las plantillas por rubro usan tipografías cerradas y botón sólido de co
 // ── Versión 2.1.129 ──────────────────────────────────────────────────────────
 
 test("acciones: negro intencional permitido y grises medios rechazados en todas las plantillas", () => {
-  assert.equal(THEME_REGISTRY.length, 8);
+  assert.equal(THEME_REGISTRY.length, 11);
   assert.equal(themePrimary("boutique", "#000000").fromBrand, true);
   assert.equal(themePrimary("corporativo", "#111111").fromBrand, true);
   assert.equal(themePrimary("escenario", "#111111").fromBrand, false);
@@ -382,7 +382,7 @@ test("guardar carrito es un popup acotado que solo abre por una acción intencio
   assert.ok(!browser.includes("showToast("), "el agregado se confirma una sola vez en el resumen del pedido");
 });
 
-test("selector compacto: solo ocho tarjetas con muestras, sin miniaturas que recorten precios", () => {
+test("selector compacto: solo once tarjetas con muestras, sin miniaturas que recorten precios", () => {
   const settings = read("components/admin/modules/AparienciaSettings.tsx");
   assert.match(settings, /themesByRubro\(\)\.map/);
   assert.match(settings, /theme\.swatch\.map/);
