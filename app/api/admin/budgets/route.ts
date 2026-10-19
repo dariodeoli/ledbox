@@ -286,6 +286,7 @@ export async function POST(request: Request) {
   const autoDeposit = await suggestDepositForOrder(organizationId, { total, lines: items.map((item) => ({ inventoryId: item.inventoryId ?? null, quantity: item.quantity })) }, { auto: true });
   const defaults = newBudgetDefaults(body, total, { ...rental, securityDepositDefault: autoDeposit });
   if (!defaults.ok) return jsonError(defaults.error, 400);
+  const paymentPlanRows = defaults.installments ?? [];
   const installments = defaults.installments ? (defaults.installments as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
   // Depósito de garantía: opcional, aparte del total; default de la empresa.
   const securityDeposit = defaults.securityDeposit;
@@ -293,7 +294,15 @@ export async function POST(request: Request) {
   const existingBudgets = lead
     ? await db.budget.findMany({ where: { organizationId, leadId: lead.id }, orderBy: { createdAt: "desc" }, select: { id: true, title: true, status: true, createdAt: true } })
     : [];
-  const created = await db.$transaction(async (tx) => {
+  const createdResult = await db.$transaction(async (tx) => {
+    // Cada hito del plan puede asignarse a una cuenta de tesorería distinta.
+    // Validar dentro de la misma transacción que el presupuesto: nunca aceptar
+    // desde el alta una cuenta inactiva, de otra empresa o en otra moneda.
+    await validateBudgetPlanAccounts(
+      tx,
+      organizationId,
+      paymentPlanRows as Array<{ accountId?: string | null }>,
+    );
     let clientId = clientIdInput;
     let clientCreated: { id: string; name: string; company: string | null } | null = null;
     if (!clientId && lead) {
@@ -336,11 +345,18 @@ export async function POST(request: Request) {
       await tx.lead.update({ where: { id: lead.id }, data: { status: nextStatus } });
     }
     return { budget: row, clientCreated, leadStatus: nextStatus };
-  }).catch((error: unknown) => {
-    if (error instanceof Error && error.message === "lead-client-unresolved") return null;
+  }).then((value) => ({ ok: true as const, value })).catch((error: unknown) => {
+    if (error instanceof Error && error.message === "lead-client-unresolved") return { ok: false as const, kind: "lead" as const };
+    if (error instanceof QuoteComparisonError) {
+      return { ok: false as const, kind: "payment-account" as const, message: error.message, status: error.status };
+    }
     throw error;
   });
-  if (!created) return jsonError("Tu rol no puede crear clientes y este lead todavía no tiene uno. Pedile a un administrador que lo convierta en cliente.", 403);
+  if (!createdResult.ok) {
+    if (createdResult.kind === "payment-account") return jsonError(createdResult.message, createdResult.status);
+    return jsonError("Tu rol no puede crear clientes y este lead todavía no tiene uno. Pedile a un administrador que lo convierta en cliente.", 403);
+  }
+  const created = createdResult.value;
   const { budget, clientCreated, leadStatus } = created;
   if (clientCreated) {
     await recordAudit({
