@@ -230,7 +230,7 @@ Preparar nombre comercial, razón social, RUC, dirección, ciudad, barrio, Maps,
 - Ajustes → Apariencia: portada escritorio 1920 × 600; celular 1080 × 1350. JPG/PNG/WebP, 2 MB cada una.
 - Ajustes → Alquileres: seña, garantía, demoras, cancelaciones y fletes. No inventar tarifas.
 - Ajustes → Tienda web: importar productos o guardar Apariencia no enciende la tienda.
-- URL pública: `https://ledbox.online/tienda/<slug>` (no app.ledbox.online). Un «no encontrado» puede ser tienda apagada o dominio equivocado.
+- URL pública: `https://eventoss.online/tienda/<slug>` (no app.eventoss.online). Los enlaces antiguos de `ledbox.online` siguen siendo compatibles, pero los nuevos se generan con el origen canónico de EventOS.
 
 ## 10. Flujo de carga y comprobación
 

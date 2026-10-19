@@ -45,7 +45,7 @@ const hasStore = (settings: RentalSettingsView) =>
 
 export function TiendaWebSettings() {
   const { demo, organization } = useAdminSession();
-  const storeUrl = organization?.slug ? `${publicConfig.siteUrl}/tienda/${organization.slug}` : null;
+  const storeUrl = organization?.slug ? `${publicConfig.storeUrl}/tienda/${organization.slug}` : null;
   const resource = useAdminResource("/api/admin/settings/rental", (payload) => (payload.settings ?? null) as RentalSettingsView | null);
   const initial = useMemo(() => (resource.data ? toForm(resource.data) : null), [resource.data]);
   const [form, setForm] = useState<Form | null>(null);

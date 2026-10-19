@@ -101,6 +101,19 @@ test("tenant favicon override is isolated to storefront routes; app brand remain
   assert.match(adminLayout, /url: "\/icon\.svg"/);
 });
 
+test("los generadores de enlaces públicos usan el origen canónico de tienda", () => {
+  for (const route of [
+    "components/admin/AdminShell.tsx",
+    "components/admin/modules/TiendaWebSettings.tsx",
+    "lib/server/catalog-access-requests.ts",
+    "app/api/admin/clients/[id]/catalog-access/route.ts",
+  ]) {
+    const source = readFileSync(route, "utf8");
+    assert.doesNotMatch(source, /publicConfig\.siteUrl}\/tienda/, route);
+    assert.match(source, /publicConfig\.storeUrl}\/tienda/, route);
+  }
+});
+
 test("public canonical pages use the shared tenant SEO builder and private pages stay noindex", () => {
   const routes = [
     "app/(catalogo)/tienda/[orgSlug]/page.tsx",

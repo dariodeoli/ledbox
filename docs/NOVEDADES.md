@@ -1,5 +1,9 @@
 # Novedades para el dueño
 
+# 2.1.148
+
+- Tienda pública: los nuevos enlaces se generan con `https://eventoss.online/tienda/<empresa>`; los enlaces antiguos de LedBox siguen siendo compatibles.
+
 # 2.1.147
 
 - Acceso: email, contraseña y campos equivalentes de recuperación/invitación usan el mismo ancho en formularios de una sola columna.

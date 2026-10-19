@@ -59,7 +59,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   });
   return Response.json(
     {
-      url: `${publicConfig.siteUrl}/tienda/${store.slug}/mayorista/${issued.token}`,
+      url: `${publicConfig.storeUrl}/tienda/${store.slug}/mayorista/${issued.token}`,
       storeEnabled: store.storeEnabled,
       access: await catalogAccessStatus(organizationId, id),
     },

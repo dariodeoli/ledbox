@@ -149,7 +149,7 @@ export async function approveAccessRequest(context: AdminContext, requestId: str
     throw error;
   }
 
-  const base = `${publicConfig.siteUrl}/tienda/${context.organization.slug}`;
+  const base = `${publicConfig.storeUrl}/tienda/${context.organization.slug}`;
   const url = kind === "WHOLESALE" ? `${base}/mayorista/${issued.token}` : `${base}/acceso/${issued.token}`;
   const brand = await mailBrandFor(organizationId);
   const content = buildAccessApprovedMail({ organizationName: context.organization.name, name: request.name, url, kind, brand });
