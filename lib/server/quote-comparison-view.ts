@@ -2,12 +2,24 @@ import { db } from "./db";
 import { findPublicComparison } from "./quote-comparison";
 import { portalBudgetView, portalInclude } from "./budget-portal";
 import { normalizeBudgetCode } from "../public-config";
+import { buildPortalCompany } from "../portal-company";
 
 export async function loadPublicComparison(token: string) {
   const code = normalizeBudgetCode(token);
   if (!code) return null;
   const group = await findPublicComparison(code);
   if (!group) return null;
+  const organization = await db.organization.findUnique({
+    where: { id: group.organizationId },
+    select: { name: true, appearance: true, rentalSettings: { select: { storefrontAccent: true } } },
+  });
+  if (!organization) return null;
+  const company = buildPortalCompany({
+    name: organization.name,
+    profile: null,
+    appearance: organization.appearance,
+    accent: organization.rentalSettings?.storefrontAccent,
+  });
   const alternatives = await Promise.all(group.budgets.map(async (member) => {
     const row = await db.budget.findUniqueOrThrow({ where: { id: member.id }, include: portalInclude });
     const view = portalBudgetView(row);
@@ -26,6 +38,14 @@ export async function loadPublicComparison(token: string) {
     };
   }));
   // Allowlist only: no payment account, technical evidence, costs or internal actors.
-  return { title: group.title, expiresAt: group.expiresAt.toISOString(), selectedBudgetId: group.selectedBudgetId, alternatives };
+  // Only the public company identity is sent to the comparison page; profile,
+  // payment details, costs, and internal actors remain outside this DTO.
+  return {
+    title: group.title,
+    expiresAt: group.expiresAt.toISOString(),
+    selectedBudgetId: group.selectedBudgetId,
+    company: { name: company.name, brand: company.brand, fontHref: company.fontHref, fontFamily: company.fontFamily },
+    alternatives,
+  };
 }
 export type PublicQuoteComparison = NonNullable<Awaited<ReturnType<typeof loadPublicComparison>>>;

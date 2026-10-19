@@ -14,6 +14,7 @@ test("comparison browser: optional admin creation/copy/view, public resources, m
   const browser = await puppeteer.launch({ executablePath: chrome, headless: true });
   try {
     await db.organization.create({ data: { id: org, slug: org, name: "Comparison browser QA" } });
+    await db.organizationRentalSettings.create({ data: { id: randomUUID(), organizationId: org, storefrontAccent: "#0a6a8a" } });
     const user = await db.adminUser.create({ data: { id: randomUUID(), name: "QA owner", email: `${suffix}@example.invalid`, role: "OWNER", passwordHash: "not-a-login", autoLockEnabled: false } });
     await db.adminMembership.create({ data: { id: randomUUID(), adminUserId: user.id, organizationId: org, role: "OWNER" } });
     const client = await db.client.create({ data: { id: randomUUID(), organizationId: org, name: "QA comparison client" } });
@@ -26,8 +27,15 @@ test("comparison browser: optional admin creation/copy/view, public resources, m
     const { createSession } = await import("../lib/server/auth");
     const page = await browser.newPage();
     await page.setViewport({ width: 1470, height: 900 });
+    const testIp = `198.51.100.${1 + Math.floor(Math.random() * 253)}`;
+    await page.setExtraHTTPHeaders({ "X-Forwarded-For": testIp });
     await page.setCookie({ name: "ledbox_session", value: (await createSession(user, org)).jwt, url: base!, httpOnly: true });
-    await page.goto(base + "/presupuestos", { waitUntil: "networkidle0" });
+    const budgetsLoaded = page.waitForResponse((response) => response.url().includes("/api/admin/budgets") && response.status() === 200);
+    // The admin shell can keep authenticated polling requests active; wait for
+    // its first client data response instead of waiting for an impossible idle network.
+    await page.goto(base + "/presupuestos", { waitUntil: "domcontentloaded" });
+    await budgetsLoaded;
+    await page.waitForFunction(() => [...document.querySelectorAll("button")].some((button) => button.textContent?.trim() === "Comparar alternativas"));
     console.log("Comparison UI: loaded admin");
     async function clickText(text: string) {
       const buttons = await page.$$("button");
@@ -35,7 +43,10 @@ test("comparison browser: optional admin creation/copy/view, public resources, m
       throw Error("Missing button " + text);
     }
     async function field(label: string) {
-      const id = await page.evaluate((text) => [...document.querySelectorAll("label")].find((node) => node.textContent?.trim() === text)?.htmlFor, label);
+      const id = await page.evaluate((text) => {
+        const node = [...document.querySelectorAll("label")].find((item) => item.textContent?.trim().startsWith(text));
+        return node?.htmlFor || node?.querySelector("input")?.id;
+      }, label);
       assert.ok(id); return '[id="' + id + '"]';
     }
     await clickText("Comparar alternativas"); await page.waitForSelector(".admin-dialog");
@@ -58,23 +69,36 @@ test("comparison browser: optional admin creation/copy/view, public resources, m
     await clickText("Ver comparación como cliente");
     const publicPage = (await (await popupPromise).page())!;
     await publicPage.waitForSelector(".portal-comparison-option");
+    const metadata = await publicPage.evaluate(() => ({ title: document.title, ogTitle: document.querySelector('meta[property="og:title"]')?.getAttribute("content"), robots: document.querySelector('meta[name="robots"]')?.getAttribute("content") }));
+    assert.match(metadata.title, /Comparison browser QA/);
+    assert.match(metadata.ogTitle ?? "", /Comparison browser QA/);
+    assert.match(metadata.robots ?? "", /noindex/);
+    const branding = await publicPage.$eval(".portal-brandscope", (node) => ({ branded: node.getAttribute("data-branded"), accent: getComputedStyle(node).getPropertyValue("--pb-a-l").trim() }));
+    assert.equal(branding.branded, "true");
+    assert.equal(branding.accent, "#0a6a8a");
     console.log("Comparison UI: public page loaded");
     assert.equal(await publicPage.$$eval(".portal-comparison-option", (nodes) => nodes.length), 5);
     assert.equal(await publicPage.$$eval(".portal-comparison-selector-option", (nodes) => nodes.length), 5);
     assert.deepEqual(await publicPage.$$eval(".portal-comparison-selector-option strong", (nodes) => nodes.map((node) => node.textContent)), ["A", "B", "C", "D", "E"]);
     const text = await publicPage.$eval(".portal-comparison", (node) => node.textContent);
+    assert.ok(text?.includes("Propuesta de Comparison browser QA"), "the comparison shows the owning company's public identity");
     assert.ok(text?.includes("QA warranty") && text.includes("QA payment conditions") && text.includes("Public PDF.pdf") && !text.includes("Private original.pdf"));
     const image = await publicPage.waitForSelector('.portal-comparison-items img');
-    assert.ok(image); await publicPage.waitForFunction(() => [...document.querySelectorAll<HTMLImageElement>(".portal-comparison-items img")].every((img) => img.complete && img.naturalWidth > 0));
+    assert.ok(image);
+    await image.evaluate((node) => node.scrollIntoView({ block: "center" }));
+    await publicPage.waitForFunction(() => { const img = document.querySelector<HTMLImageElement>(".portal-comparison-items img"); return Boolean(img?.complete && img.naturalWidth > 0); });
     const pdfLink = await publicPage.$eval('a[href*="/pdf/"]', (node) => (node as HTMLAnchorElement).href);
     assert.equal((await fetch(pdfLink)).status, 200);
     let approvalRequests = 0;
     publicPage.on("request", (request) => { if (request.url().endsWith("/approve")) approvalRequests++; });
-    await publicPage.setViewport({ width: 390, height: 844 });
-    assert.equal(await publicPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    await publicPage.$eval(".portal-comparison-option:nth-child(5)", (node) => node.scrollIntoView());
-    const selectorBox = await publicPage.$eval(".portal-comparison-selector", (node) => { const rect = node.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom }; });
-    assert.ok(selectorBox.top < 844 && selectorBox.bottom > 0, "selector remains visible in the mobile viewport");
+    for (const width of [320, 360, 390, 430, 768, 1024, 1470]) {
+      await publicPage.setViewport({ width, height: 844 });
+      assert.equal(await publicPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `no horizontal overflow at ${width}px`);
+      await publicPage.$eval(".portal-comparison-option:nth-child(5)", (node) => node.scrollIntoView());
+      const selectorBox = await publicPage.$eval(".portal-comparison-selector", (node) => { const rect = node.getBoundingClientRect(); const headerBottom = document.querySelector(".portal-top")!.getBoundingClientRect().bottom; return { top: rect.top, bottom: rect.bottom, headerBottom }; });
+      assert.ok(selectorBox.top < 844 && selectorBox.bottom > 0, `selector remains visible at ${width}px`);
+      assert.ok(selectorBox.top >= selectorBox.headerBottom, `selector does not cover the portal header at ${width}px`);
+    }
     await publicPage.click('.portal-comparison-selector-option:nth-child(5) input[type="radio"]');
     assert.equal(approvalRequests, 0, "selection sends no approval request");
     assert.equal(await db.budget.count({ where: { comparisonId: group.id, approvedAt: { not: null } } }), 0, "choosing an option does not approve or charge it");

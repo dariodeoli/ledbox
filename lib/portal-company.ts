@@ -15,6 +15,9 @@ export type PortalCompany = {
   fontFamily: string | null;
 };
 
+/** Public identity-only subset used by views that must not expose the full company profile. */
+export type PortalBrandIdentity = Pick<PortalCompany, "name" | "brand" | "fontHref" | "fontFamily">;
+
 export function buildPortalCompany(input: {
   name: string;
   profile: unknown;
@@ -70,7 +73,7 @@ export function portalActionColor(brandHex: string | null | undefined, theme: "d
 }
 
 /** Variables CSS del acento de la empresa en el portal (la hoja elige el tono según el tema). */
-export function portalBrandVars(company: PortalCompany | null): Record<string, string> {
+export function portalBrandVars(company: PortalBrandIdentity | null): Record<string, string> {
   if (!company) return {};
   const vars: Record<string, string> = {};
   if (company.brand) {

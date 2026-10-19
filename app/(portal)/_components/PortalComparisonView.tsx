@@ -26,7 +26,7 @@ export function PortalComparisonView({ initial, token }: { initial: PublicQuoteC
   }
   const lowest = Math.min(...group.alternatives.map((q) => q.total));
   return <div className="portal-comparison">
-    <header className="portal-card"><h1>{group.title}</h1><p>Compará las alternativas y aprobá solamente una. Válido hasta {formatDate(group.expiresAt)}.</p></header>
+    <header className="portal-card"><p className="portal-comparison-company">Propuesta de {group.company.name}</p><h1>{group.title}</h1><p>Compará las alternativas y aprobá solamente una. Válido hasta {formatDate(group.expiresAt)}.</p></header>
     {group.selectedBudgetId ? <section className="portal-card" role="status"><h2>Alternativa elegida</h2><p>{group.alternatives.find((q) => q.id === group.selectedBudgetId)?.label}. La elección quedó registrada; las demás alternativas no pueden aprobarse.</p></section> : null}
     <form onSubmit={approve}>
       <fieldset className="portal-comparison-choices"><legend>Elegí una alternativa</legend>

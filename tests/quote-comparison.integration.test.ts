@@ -51,6 +51,7 @@ test("comparison HTTP/DB: exclusive approvals across comparison, standalone, man
     assert.equal((await db.budget.findUniqueOrThrow({ where: { id: rows[0].id } })).status, "DRAFT", "link issuance must not mark sent");
     const publicView = (await (await call(path, "GET", undefined, false)).json()).comparison;
     assert.equal(publicView.alternatives.length, 2);
+    assert.equal(publicView.company.name, "Comparison QA");
     assert.equal(JSON.stringify(publicView).includes("costPrice"), false);
     assert.equal(JSON.stringify(publicView).includes("organizationId"), false);
     const doc = await PDFDocument.create(); doc.addPage();
