@@ -5,6 +5,7 @@ import { StoreFront } from "@/components/catalog-public/StoreFront";
 import { loadCategoryImages, loadPublicCollections, loadPublicCatalogItems, loadPublicZones, loadStorefront, parsePublicRange, resolvePublicCatalog } from "@/lib/server/catalog-public";
 import { loadStoreSocialImage } from "@/lib/server/store-seo";
 import { storefrontMetadata } from "@/lib/store-seo";
+import { storeListStateFromQuery } from "@/lib/storefront-list-state";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,7 @@ export default async function StorePage({ params, searchParams }: PageProps) {
       collections={collections}
       collectionsBase={`/tienda/${slug}`}
       initialCollection={first(query.coleccion) ?? null}
+      initialListState={storeListStateFromQuery(query)}
       zones={zones}
       showPrices={context.settings.publicShowPrices}
       demo={context.demo}

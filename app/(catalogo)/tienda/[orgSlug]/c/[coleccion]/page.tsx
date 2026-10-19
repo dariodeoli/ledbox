@@ -4,6 +4,7 @@ import { CollectionPage } from "@/components/catalog-public/CollectionPage";
 import { loadCollectionMeta, loadPublicCatalogItems, loadPublicCollections, loadPublicZones, loadStorefront, parsePublicRange, resolvePublicCatalog } from "@/lib/server/catalog-public";
 import { loadStoreSocialImage } from "@/lib/server/store-seo";
 import { storefrontMetadata } from "@/lib/store-seo";
+import { storeListStateFromQuery } from "@/lib/storefront-list-state";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,7 @@ export default async function CollectionRoute({ params, searchParams }: PageProp
       range={range ? { fromKey: range.fromKey, toKey: range.toKey, days: range.days } : null}
       zones={zones}
       basePath={`/tienda/${slug}`}
+      initialListState={storeListStateFromQuery(query)}
     />
   );
 }

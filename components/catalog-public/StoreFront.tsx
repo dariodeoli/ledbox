@@ -1,6 +1,7 @@
 import { PREORDER_RESPONSE_HOURS, preorderWhatsappUrl } from "@/lib/catalog-public";
 import type { PublicCatalogItem, PublicStorefront } from "@/lib/server/catalog-public";
 import { CatalogBrowser, type CatalogZoneView } from "./CatalogBrowser";
+import type { StoreListState } from "@/lib/storefront-list-state";
 import { CategoryAccordion } from "./CategoryAccordion";
 import { CategoryCard } from "./CategoryCard";
 import { EventPicker } from "./EventPicker";
@@ -50,6 +51,7 @@ type Props = {
   /** Ruta de la tienda pública para las landings `/c/<coleccion>`; sin ella (mayorista, acceso) las colecciones solo filtran el catálogo. */
   collectionsBase?: string | null;
   initialCollection?: string | null;
+  initialListState?: StoreListState;
 };
 
 const DEFAULT_TITLE = "Alquiler para tu próximo evento";
@@ -62,7 +64,7 @@ const STEPS = [
   { title: "Confirmá y disfrutá", text: "Si te conviene, confirmamos la reserva y coordinamos la entrega y el retiro." },
 ] as const;
 
-export function StoreFront({ store, items, showPrices: showPricesProp, demo, range, initialCategory, basePath, preorderPath, wholesale = null, zones = [], member = null, categoryImages, cartPath, cartScope, fichaBase, collections = [], collectionsBase = null, initialCollection = null }: Props) {
+export function StoreFront({ store, items, showPrices: showPricesProp, demo, range, initialCategory, basePath, preorderPath, wholesale = null, zones = [], member = null, categoryImages, cartPath, cartScope, fichaBase, collections = [], collectionsBase = null, initialCollection = null, initialListState }: Props) {
   const priceMode = store.appearance.priceMode;
   // «A cotizar»: la tienda no muestra montos aunque la empresa los tenga cargados.
   const showPrices = showPricesProp && priceMode !== "quote";
@@ -187,6 +189,7 @@ export function StoreFront({ store, items, showPrices: showPricesProp, demo, ran
             storeName={store.name}
             collections={collections.map((entry) => ({ slug: entry.slug, name: entry.name }))}
             initialCollection={initialCollection}
+            initialListState={initialListState}
           />
     ),
     "como-funciona": (

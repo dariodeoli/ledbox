@@ -49,23 +49,17 @@ test("sin contacto cargado, el menú no ofrece «Contacto»", () => {
   assert.deepEqual(storeNavLinks("", { contact: false }).map((link) => link.label), ["Catálogo", "Cómo funciona"]);
 });
 
-test("búsqueda y orden quedan plegados en una barra accesible y conservan sus controles", async () => {
+test("la barra de categorías no duplica búsqueda y conserva filtros al abrir otra categoría", async () => {
   const { FilterBar } = await import("../components/catalog-public/FilterBar");
   const html = renderToStaticMarkup(createElement(FilterBar, {
-    categories: ["Living", "Mesas"], category: "Living", onCategory: () => {}, sort: "destacados", onSort: () => {},
-    query: "Sofá", onQuery: () => {}, showPrices: true,
+    categories: ["Living", "Mesas"], category: "Living", onCategory: () => {}, listState: { query: "Sofá", sort: "nombre", filters: { capacity: "4", priceMin: null, priceMax: null, tags: [], collection: null, onlyAvailable: false } },
+    categoryNavigation: { allHref: "/tienda/demo?desde=2026-10-20&hasta=2026-10-20#catalogo", links: [{ name: "Mesas", href: "/tienda/demo/categoria/mesas?desde=2026-10-20&hasta=2026-10-20#catalogo" }] },
   }));
-  const controlsId = html.match(/aria-controls="([^"]+)"/)?.[1];
-  assert.ok(controlsId, "el botón declara su panel de controles");
-  assert.match(html, /aria-expanded="false"/, "el panel inicia plegado");
-  assert.match(html, new RegExp(`id="${controlsId}"[^>]*hidden`));
-  assert.ok(html.includes("Buscar y ordenar"));
-  assert.ok(html.includes(">Buscar productos</label>"));
-  assert.ok(html.includes(">Ordenar</label>"));
-  assert.ok(html.includes("type=\"search\""));
-  assert.ok(html.includes("«Sofá»"), "el resumen mantiene visible la búsqueda activa");
+  assert.ok(html.includes('data-hidden="false"'));
+  assert.ok(html.includes("/tienda/demo/categoria/mesas?desde=2026-10-20&amp;hasta=2026-10-20&amp;q=Sof%C3%A1&amp;orden=nombre&amp;capacidad=4#catalogo"));
+  assert.ok(!html.includes("Buscar y ordenar"));
   const source = readFileSync("components/catalog-public/FilterBar.tsx", "utf8");
-  assert.match(source, /window\.scrollY > 140 && !toolsRef\.current\?\.contains\(document\.activeElement\)/, "no oculta un control con foco");
+  assert.match(source, /railRef\.current\?\.contains\(document\.activeElement\)/, "no oculta las categorías con foco");
 });
 
 test("todas las páginas de la tienda usan el mismo pie y encabezado", () => {
