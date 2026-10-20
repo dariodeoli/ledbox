@@ -136,6 +136,7 @@ const MCP_TOOL_SCOPES: Record<string, string> = {
   "company.read": "company:read", "catalog.read": "catalog:read", "inventory.read": "inventory:read",
   "clients.read": "clients:read", "leads.read": "leads:read", "budgets.read": "budgets:read", "events.read": "events:read",
   "treasury.read": "finance:read", "payments.read": "finance:read", "reports.read": "finance:read",
+  "clients.write": "clients:write", "events.write": "events:write",
   "prices.write": "inventory:write", "quantities.write": "inventory:write", "company.write": "organization:write",
   "photos.write": "inventory:write", "budgets.write": "budgets:write",
 };

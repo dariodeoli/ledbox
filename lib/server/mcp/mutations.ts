@@ -509,3 +509,115 @@ export async function confirmBudgetComparison(context: AdminContext, input: Conf
     return { ok: true, comparison: { id: comparison.id, publicToken: comparison.publicToken, expiresAt: comparison.expiresAt, alternatives: ids.length } };
   });
 }
+
+type McpRecordKind = "client" | "lead" | "event";
+type McpRecordInput = Record<string, unknown> & { id?: string };
+const MCP_RECORD_PREVIEW_SCOPE = "mcp:records:v1";
+const MCP_RECORD_FIELDS: Record<McpRecordKind, readonly string[]> = {
+  client: ["type", "name", "company", "ruc", "tradeName", "legalName", "email", "phone", "city", "department", "address", "website", "instagram", "whatsapp"],
+  lead: ["name", "phone", "email", "company", "ruc", "reason", "eventDate", "location", "message", "status", "consentAt", "consentChannel", "consentVersion"],
+  event: ["clientId", "name", "location", "city", "department", "address", "addressReference", "locationUrl", "venueContactName", "venueContactPhone", "venueContactEmail", "responsibleName", "responsiblePhone", "responsibleEmail", "modality", "attendees", "setupAt", "startsAt", "endsAt", "strikeAt", "status", "notes"],
+};
+const MCP_RECORD_DATE_FIELDS: Record<McpRecordKind, readonly string[]> = {
+  client: [], lead: ["eventDate", "consentAt"], event: ["setupAt", "startsAt", "endsAt", "strikeAt"],
+};
+const MCP_RECORD_CAPABILITY = { client: "clients.write", lead: "clients.write", event: "events.write" } as const;
+
+function mcpDelegate(client: unknown, kind: McpRecordKind): any {
+  return (client as Record<string, any>)[kind];
+}
+
+function normalizeMcpRecordDates(kind: McpRecordKind, record: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(record).map(([key, value]) => [key, MCP_RECORD_DATE_FIELDS[kind].includes(key) && value instanceof Date ? value.toISOString() : value]));
+}
+
+function mcpRecordData(kind: McpRecordKind, record: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(record).map(([key, value]) => [key, MCP_RECORD_DATE_FIELDS[kind].includes(key) && typeof value === "string" ? new Date(value) : value]));
+}
+
+async function previewMcpRecord(context: AdminContext, kind: McpRecordKind, input: McpRecordInput) {
+  if (blocked(context)) throw new Error("MUTATION_BLOCKED");
+  requireCapability(context, MCP_RECORD_CAPABILITY[kind]);
+  const { id, ...requested } = input;
+  const fields = MCP_RECORD_FIELDS[kind];
+  if (Object.keys(requested).some((key) => !fields.includes(key))) throw new Error("INVALID_RECORD_FIELDS");
+  const select = Object.fromEntries([...fields, "updatedAt"].map((field) => [field, true]));
+  let beforeRecord: Record<string, unknown> | null = null;
+  let updatedAt: string | null = null;
+  if (id) {
+    const current = await mcpDelegate(db, kind).findFirst({ where: { id, organizationId: context.organizationId, deletedAt: null, archivedAt: null }, select });
+    if (!current) throw new Error("NOT_FOUND");
+    updatedAt = current.updatedAt.toISOString();
+    const normalized = normalizeMcpRecordDates(kind, current as Record<string, unknown>);
+    beforeRecord = Object.fromEntries(Object.keys(requested).map((key) => [key, normalized[key] ?? null]));
+  }
+  const after = mcpRecordData(kind, requested);
+  if (kind === "event") {
+    const clientId = after.clientId;
+    if (typeof clientId === "string" && !(await db.client.findFirst({ where: { id: clientId, organizationId: context.organizationId, archivedAt: null, deletedAt: null }, select: { id: true } }))) throw new Error("NOT_FOUND");
+    if (id && after.clientId === undefined) {
+      const current = await db.event.findFirst({ where: { id, organizationId: context.organizationId }, select: { clientId: true } });
+      if (current && !(await db.client.findFirst({ where: { id: current.clientId, organizationId: context.organizationId, archivedAt: null, deletedAt: null }, select: { id: true } }))) throw new Error("NOT_FOUND");
+    }
+  }
+  const previewId = randomUUID();
+  const payload = { kind: `record-${kind}`, actorId: context.user.id, operation: id ? "update" : "create", recordId: id ?? null, updatedAt, before: beforeRecord, after: normalizeMcpRecordDates(kind, after) };
+  await db.idempotencyKey.create({ data: { id: randomUUID(), organizationId: context.organizationId, scope: MCP_RECORD_PREVIEW_SCOPE, key: previewId, requestHash: requestHashOf(payload), status: 200, response: payload as Prisma.InputJsonObject, expiresAt: new Date(Date.now() + PREVIEW_TTL_MS) } });
+  return { previewId, expiresInSeconds: PREVIEW_TTL_MS / 1000, changes: { operation: payload.operation, entity: kind, before: payload.before, after: payload.after } };
+}
+
+export const previewMcpClient = (context: AdminContext, input: McpRecordInput) => previewMcpRecord(context, "client", input);
+export const previewMcpLead = (context: AdminContext, input: McpRecordInput) => previewMcpRecord(context, "lead", input);
+export const previewMcpEvent = (context: AdminContext, input: McpRecordInput) => previewMcpRecord(context, "event", input);
+
+async function applyMcpRecord(tx: Prisma.TransactionClient, context: AdminContext, kind: McpRecordKind, preview: JsonObject): Promise<JsonObject> {
+  requireCapability(context, MCP_RECORD_CAPABILITY[kind]);
+  const fields = MCP_RECORD_FIELDS[kind];
+  if (!preview.after || typeof preview.after !== "object" || Array.isArray(preview.after)) return { code: "PREVIEW_INVALID" };
+  const after = preview.after as Record<string, unknown>;
+  if (Object.keys(after).some((key) => !fields.includes(key))) return { code: "PREVIEW_INVALID" };
+  const delegate = mcpDelegate(tx, kind);
+  const select = Object.fromEntries([...fields, "updatedAt"].map((field) => [field, true]));
+  let recordId: string;
+  if (preview.operation === "create") {
+    const id = randomUUID();
+    let data: Record<string, unknown> = { id, organizationId: context.organizationId, ...mcpRecordData(kind, after) };
+    if (kind === "client") data = { ...data, type: after.type ?? "FINAL", name: after.name };
+    if (kind === "lead") {
+      if (typeof after.name !== "string" || typeof after.phone !== "string" || typeof after.email !== "string" || typeof after.consentAt !== "string" || typeof after.consentChannel !== "string" || typeof after.consentVersion !== "string") return { code: "PREVIEW_INVALID" };
+      data = { ...data, source: "mcp", consentAt: new Date(after.consentAt) };
+    }
+    if (kind === "event") {
+      if (typeof after.clientId !== "string" || typeof after.name !== "string") return { code: "PREVIEW_INVALID" };
+      const client = await tx.client.findFirst({ where: { id: after.clientId, organizationId: context.organizationId, archivedAt: null, deletedAt: null }, select: { id: true } });
+      if (!client) return { code: "NOT_FOUND" };
+      data = { ...data, status: after.status ?? "DRAFT" };
+    }
+    await delegate.create({ data, select: { id: true } });
+    recordId = id;
+  } else if (preview.operation === "update" && typeof preview.recordId === "string" && typeof preview.updatedAt === "string") {
+    const record = await delegate.findFirst({ where: { id: preview.recordId, organizationId: context.organizationId, deletedAt: null, archivedAt: null }, select });
+    if (!record) return { code: "NOT_FOUND" };
+    if (record.updatedAt.toISOString() !== preview.updatedAt) return { code: "PREVIEW_STALE" };
+    if (kind === "event" && typeof after.clientId === "string" && !(await tx.client.findFirst({ where: { id: after.clientId, organizationId: context.organizationId, archivedAt: null, deletedAt: null }, select: { id: true } }))) return { code: "NOT_FOUND" };
+    const updated = await delegate.updateMany({ where: { id: preview.recordId, organizationId: context.organizationId, updatedAt: new Date(preview.updatedAt) }, data: mcpRecordData(kind, after) });
+    if (updated.count !== 1) return { code: "PREVIEW_STALE" };
+    recordId = preview.recordId;
+  } else return { code: "PREVIEW_INVALID" };
+  const action = preview.operation === "create" ? "create" : "update";
+  await recordAudit({ context, action, entity: kind === "client" ? "Client" : kind === "lead" ? "Lead" : "Event", entityId: recordId, summary: `${action === "create" ? "Creó" : "Actualizó"} un registro ${kind} por MCP`, detail: { fields: Object.fromEntries(Object.keys(after).map((key) => [key, true])), before: preview.before && typeof preview.before === "object" && !Array.isArray(preview.before) ? Object.fromEntries(Object.keys(after).map((key) => [key, (preview.before as Record<string, unknown>)[key] ?? null])) : undefined } }, tx);
+  return { ok: true, entity: kind, id: recordId, operation: action, updatedFields: Object.keys(after) };
+}
+
+async function confirmMcpRecord(context: AdminContext, input: ConfirmInput, kind: McpRecordKind) {
+  if (blocked(context)) throw new Error("MUTATION_BLOCKED");
+  requireCapability(context, MCP_RECORD_CAPABILITY[kind]);
+  return confirmMcpPreview(context, input, MCP_RECORD_PREVIEW_SCOPE, `mcp:${kind}:confirm:v1`, async (tx, preview) => {
+    if (preview.kind !== `record-${kind}`) return { code: "PREVIEW_INVALID" };
+    return applyMcpRecord(tx, context, kind, preview);
+  });
+}
+
+export const confirmMcpClient = (context: AdminContext, input: ConfirmInput) => confirmMcpRecord(context, input, "client");
+export const confirmMcpLead = (context: AdminContext, input: ConfirmInput) => confirmMcpRecord(context, input, "lead");
+export const confirmMcpEvent = (context: AdminContext, input: ConfirmInput) => confirmMcpRecord(context, input, "event");

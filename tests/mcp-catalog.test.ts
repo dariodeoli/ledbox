@@ -30,6 +30,9 @@ test("write permissions separate prices, quantities, company profile, photos and
     "budgets.preview": ["OWNER", "ADMIN", "FINANCE"], "budgets.confirm": ["OWNER", "ADMIN", "FINANCE"],
     "budgets.edit.preview": ["OWNER", "ADMIN", "FINANCE"], "budgets.edit.confirm": ["OWNER", "ADMIN", "FINANCE"],
     "budgets.compare.preview": ["OWNER", "ADMIN", "FINANCE"], "budgets.compare.confirm": ["OWNER", "ADMIN", "FINANCE"],
+    "clients.preview": ["OWNER", "ADMIN", "OPERATIONS"], "clients.confirm": ["OWNER", "ADMIN", "OPERATIONS"],
+    "leads.preview": ["OWNER", "ADMIN", "OPERATIONS"], "leads.confirm": ["OWNER", "ADMIN", "OPERATIONS"],
+    "events.preview": ["OWNER", "ADMIN", "OPERATIONS"], "events.confirm": ["OWNER", "ADMIN", "OPERATIONS"],
   };
   for (const [name, roles] of Object.entries(allowed)) {
     for (const role of ["OWNER", "ADMIN", "FINANCE", "OPERATIONS", "VIEWER"] as const) {
@@ -66,6 +69,19 @@ test("budget and photo write schemas are bounded and previews do not accept hidd
   assert.throws(() => parseMcpToolInput("budgets.preview", { title: "Presupuesto", lines: [{ description: "Pantalla", quantity: 1, unitPrice: 100000, purchaseCost: 30000 }] }));
   assert.throws(() => parseMcpToolInput("photos.preview", { resourceType: "product", resourceId: "p1", fileName: "x.svg", mimeType: "image/svg+xml", byteLength: 12, sha256: "a".repeat(64) }));
   assert.equal(getMcpTool("unlisted.tool"), undefined);
+});
+
+test("MCP record write schemas are strict and lead creation needs explicit consent evidence", () => {
+  assert.deepEqual(parseMcpToolInput("clients.preview", { name: "Cliente", email: "c@example.com" }), { name: "Cliente", email: "c@example.com" });
+  assert.throws(() => parseMcpToolInput("clients.preview", { name: "Cliente", organizationId: "other" }));
+  assert.throws(() => parseMcpToolInput("clients.preview", { name: "" }));
+  assert.throws(() => parseMcpToolInput("leads.preview", { name: "Lead", phone: "0981", email: "l@example.com" }));
+  const lead = { name: "Lead", phone: "0981", email: "l@example.com", consentAt: "2026-10-20T12:00:00.000Z", consentChannel: "web-form", consentVersion: "v1" };
+  assert.deepEqual(parseMcpToolInput("leads.preview", lead), lead);
+  assert.throws(() => parseMcpToolInput("leads.preview", { id: "lead-123", status: "NEW", internalNotes: "private" }));
+  assert.throws(() => parseMcpToolInput("leads.preview", { id: "lead-123", consentAt: lead.consentAt }));
+  assert.throws(() => parseMcpToolInput("events.preview", { clientId: "client-1", name: "Event", startsAt: "2026-10-22T12:00:00.000Z", endsAt: "2026-10-21T12:00:00.000Z" }));
+  assert.throws(() => parseMcpToolInput("events.preview", { clientId: "client-1", name: "Event", organizationId: "other" }));
 });
 
 test("photo preview requires bounded image bytes and a company logo variant", () => {

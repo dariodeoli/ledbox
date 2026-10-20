@@ -1,7 +1,7 @@
 import type { AdminContext } from "@/lib/server/tenancy";
 import { getMcpTool, MCP_TOOL_CATALOG, McpAuthorizationError, authorizeMcpTool, parseMcpToolInput, sanitizeMcpReadOutput } from "@/lib/server/mcp-catalog";
 import { mcpReadHandlers, type McpReadHandlers } from "./readers";
-import { confirmBudgetDraft, confirmBudgetEdit, confirmBudgetComparison, confirmCompanyPhoto, confirmCompanyProfile, confirmInventoryQuantity, confirmRentalPrice, confirmSalesPrice, previewBudgetDraft, previewBudgetEdit, previewBudgetComparison, previewCompanyPhoto, previewCompanyProfile, previewInventoryQuantity, previewRentalPrice, previewSalesPrice } from "./mutations";
+import { confirmBudgetDraft, confirmBudgetEdit, confirmBudgetComparison, confirmCompanyPhoto, confirmCompanyProfile, confirmInventoryQuantity, confirmRentalPrice, confirmSalesPrice, confirmMcpClient, confirmMcpEvent, confirmMcpLead, previewBudgetDraft, previewBudgetEdit, previewBudgetComparison, previewCompanyPhoto, previewCompanyProfile, previewInventoryQuantity, previewRentalPrice, previewSalesPrice, previewMcpClient, previewMcpEvent, previewMcpLead } from "./mutations";
 
 type TextResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
 export type McpMutationHandlers = {
@@ -21,8 +21,14 @@ export type McpMutationHandlers = {
   budgetEditConfirm: typeof confirmBudgetEdit;
   budgetComparePreview: typeof previewBudgetComparison;
   budgetCompareConfirm: typeof confirmBudgetComparison;
+  clientPreview: typeof previewMcpClient;
+  clientConfirm: typeof confirmMcpClient;
+  leadPreview: typeof previewMcpLead;
+  leadConfirm: typeof confirmMcpLead;
+  eventPreview: typeof previewMcpEvent;
+  eventConfirm: typeof confirmMcpEvent;
 };
-const mcpMutationHandlers: McpMutationHandlers = { pricePreview: previewSalesPrice, priceConfirm: confirmSalesPrice, rentalPricePreview: previewRentalPrice, rentalPriceConfirm: confirmRentalPrice, quantityPreview: previewInventoryQuantity, quantityConfirm: confirmInventoryQuantity, companyPreview: previewCompanyProfile, companyConfirm: confirmCompanyProfile, photoPreview: previewCompanyPhoto, photoConfirm: confirmCompanyPhoto, budgetPreview: previewBudgetDraft, budgetConfirm: confirmBudgetDraft, budgetEditPreview: previewBudgetEdit, budgetEditConfirm: confirmBudgetEdit, budgetComparePreview: previewBudgetComparison, budgetCompareConfirm: confirmBudgetComparison };
+const mcpMutationHandlers: McpMutationHandlers = { pricePreview: previewSalesPrice, priceConfirm: confirmSalesPrice, rentalPricePreview: previewRentalPrice, rentalPriceConfirm: confirmRentalPrice, quantityPreview: previewInventoryQuantity, quantityConfirm: confirmInventoryQuantity, companyPreview: previewCompanyProfile, companyConfirm: confirmCompanyProfile, photoPreview: previewCompanyPhoto, photoConfirm: confirmCompanyPhoto, budgetPreview: previewBudgetDraft, budgetConfirm: confirmBudgetDraft, budgetEditPreview: previewBudgetEdit, budgetEditConfirm: confirmBudgetEdit, budgetComparePreview: previewBudgetComparison, budgetCompareConfirm: confirmBudgetComparison, clientPreview: previewMcpClient, clientConfirm: confirmMcpClient, leadPreview: previewMcpLead, leadConfirm: confirmMcpLead, eventPreview: previewMcpEvent, eventConfirm: confirmMcpEvent };
 
 function result(value: unknown, isError = false): TextResult {
   return { content: [{ type: "text", text: JSON.stringify(value) }], ...(isError ? { isError: true } : {}) };
@@ -50,6 +56,9 @@ export async function dispatchMcpTool(
       if (tool.name === "budgets.confirm") return result(await mutations.budgetConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
       if (tool.name === "budgets.edit.confirm") return result(await mutations.budgetEditConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
       if (tool.name === "budgets.compare.confirm") return result(await mutations.budgetCompareConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
+      if (tool.name === "clients.confirm") return result(await mutations.clientConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
+      if (tool.name === "leads.confirm") return result(await mutations.leadConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
+      if (tool.name === "events.confirm") return result(await mutations.eventConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
       return result({ code: "NOT_IMPLEMENTED", message: "This confirmation handler is not enabled; no change was made." }, true);
     }
     if (tool.access === "preview") {
@@ -61,6 +70,9 @@ export async function dispatchMcpTool(
       if (tool.name === "budgets.preview") return result(await mutations.budgetPreview(context, parsed as Parameters<typeof mutations.budgetPreview>[1]));
       if (tool.name === "budgets.edit.preview") return result(await mutations.budgetEditPreview(context, parsed as Parameters<typeof mutations.budgetEditPreview>[1]));
       if (tool.name === "budgets.compare.preview") return result(await mutations.budgetComparePreview(context, parsed as Parameters<typeof mutations.budgetComparePreview>[1]));
+      if (tool.name === "clients.preview") return result(await mutations.clientPreview(context, parsed as Parameters<typeof mutations.clientPreview>[1]));
+      if (tool.name === "leads.preview") return result(await mutations.leadPreview(context, parsed as Parameters<typeof mutations.leadPreview>[1]));
+      if (tool.name === "events.preview") return result(await mutations.eventPreview(context, parsed as Parameters<typeof mutations.eventPreview>[1]));
       return result({ code: "PREVIEW_NOT_IMPLEMENTED", message: "This preview handler is not enabled; no change was made." }, true);
     }
     const reader = readers[tool.name];
