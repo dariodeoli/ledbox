@@ -1,16 +1,24 @@
 import type { AdminContext } from "@/lib/server/tenancy";
 import { getMcpTool, MCP_TOOL_CATALOG, McpAuthorizationError, authorizeMcpTool, parseMcpToolInput, sanitizeMcpReadOutput } from "@/lib/server/mcp-catalog";
 import { mcpReadHandlers, type McpReadHandlers } from "./readers";
-import { confirmInventoryQuantity, confirmSalesPrice, previewInventoryQuantity, previewSalesPrice } from "./mutations";
+import { confirmBudgetDraft, confirmCompanyPhoto, confirmCompanyProfile, confirmInventoryQuantity, confirmRentalPrice, confirmSalesPrice, previewBudgetDraft, previewCompanyPhoto, previewCompanyProfile, previewInventoryQuantity, previewRentalPrice, previewSalesPrice } from "./mutations";
 
 type TextResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
 export type McpMutationHandlers = {
   pricePreview: typeof previewSalesPrice;
   priceConfirm: typeof confirmSalesPrice;
+  rentalPricePreview: typeof previewRentalPrice;
+  rentalPriceConfirm: typeof confirmRentalPrice;
   quantityPreview: typeof previewInventoryQuantity;
   quantityConfirm: typeof confirmInventoryQuantity;
+  companyPreview: typeof previewCompanyProfile;
+  companyConfirm: typeof confirmCompanyProfile;
+  photoPreview: typeof previewCompanyPhoto;
+  photoConfirm: typeof confirmCompanyPhoto;
+  budgetPreview: typeof previewBudgetDraft;
+  budgetConfirm: typeof confirmBudgetDraft;
 };
-const mcpMutationHandlers: McpMutationHandlers = { pricePreview: previewSalesPrice, priceConfirm: confirmSalesPrice, quantityPreview: previewInventoryQuantity, quantityConfirm: confirmInventoryQuantity };
+const mcpMutationHandlers: McpMutationHandlers = { pricePreview: previewSalesPrice, priceConfirm: confirmSalesPrice, rentalPricePreview: previewRentalPrice, rentalPriceConfirm: confirmRentalPrice, quantityPreview: previewInventoryQuantity, quantityConfirm: confirmInventoryQuantity, companyPreview: previewCompanyProfile, companyConfirm: confirmCompanyProfile, photoPreview: previewCompanyPhoto, photoConfirm: confirmCompanyPhoto, budgetPreview: previewBudgetDraft, budgetConfirm: confirmBudgetDraft };
 
 function result(value: unknown, isError = false): TextResult {
   return { content: [{ type: "text", text: JSON.stringify(value) }], ...(isError ? { isError: true } : {}) };
@@ -31,12 +39,20 @@ export async function dispatchMcpTool(
     authorizeMcpTool({ organizationId: context.organizationId, actorId: context.user.id, role: context.role, ...(context.mcpScopes ? { scopes: context.mcpScopes } : {}) }, name as never);
     if (tool.access === "confirm") {
       if (tool.name === "prices.confirm") return result(await mutations.priceConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
+      if (tool.name === "rental-prices.confirm") return result(await mutations.rentalPriceConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
       if (tool.name === "quantities.confirm") return result(await mutations.quantityConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
+      if (tool.name === "company.confirm") return result(await mutations.companyConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
+      if (tool.name === "photos.confirm") return result(await mutations.photoConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
+      if (tool.name === "budgets.confirm") return result(await mutations.budgetConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
       return result({ code: "NOT_IMPLEMENTED", message: "This confirmation handler is not enabled; no change was made." }, true);
     }
     if (tool.access === "preview") {
       if (tool.name === "prices.preview") return result(await mutations.pricePreview(context, parsed as { productId: string; price: number; currency: string; audience: "RETAIL" | "WHOLESALE"; minimumUnits: number }));
+      if (tool.name === "rental-prices.preview") return result(await mutations.rentalPricePreview(context, parsed as { productId: string; price: number }));
       if (tool.name === "quantities.preview") return result(await mutations.quantityPreview(context, parsed as { productId: string; quantity: number; reason: string }));
+      if (tool.name === "company.preview") return result(await mutations.companyPreview(context, parsed as Parameters<typeof mutations.companyPreview>[1]));
+      if (tool.name === "photos.preview") return result(await mutations.photoPreview(context, parsed as Parameters<typeof mutations.photoPreview>[1]));
+      if (tool.name === "budgets.preview") return result(await mutations.budgetPreview(context, parsed as Parameters<typeof mutations.budgetPreview>[1]));
       return result({ code: "PREVIEW_NOT_IMPLEMENTED", message: "This preview handler is not enabled; no change was made." }, true);
     }
     const reader = readers[tool.name];
@@ -47,7 +63,9 @@ export async function dispatchMcpTool(
     if (error instanceof McpAuthorizationError) return result({ code: "FORBIDDEN", message: error.message }, true);
     if (error instanceof Error && error.message === "FORBIDDEN") return result({ code: "FORBIDDEN", message: "The active role lacks the required capability." }, true);
     if (error instanceof Error && error.message === "MUTATION_BLOCKED") return result({ code: "MUTATION_BLOCKED", message: "Mutations are disabled in demo and sandbox companies." }, true);
+    if (error instanceof Error && error.message === "PHOTO_INVALID") return result({ code: "PHOTO_INVALID", message: "The image bytes, size or digest are invalid; no change was made." }, true);
     if (error instanceof Error && error.message === "NOT_FOUND") return result({ code: "NOT_FOUND", message: "The resource was not found in the active company." }, true);
+    if (error instanceof Error && ["CLIENT_REQUIRED", "INVALID_CURRENCY", "INVALID_BUDGET_LINE", "INVALID_BUDGET_TOTAL"].includes(error.message)) return result({ code: error.message, message: "Review the client, currency and line amounts. No budget was created." }, true);
     if (error instanceof Error && error.message === "PREVIEW_EXPIRED") return result({ code: "PREVIEW_EXPIRED", message: "The preview is missing or expired; review a new preview." }, true);
     if (error instanceof Error && error.message === "PREVIEW_STALE") return result({ code: "PREVIEW_STALE", message: "The resource changed after preview; review a new preview." }, true);
     if (error instanceof Error && ["QUANTITY_DECREASE_BLOCKED", "COMBO_STOCK_BLOCKED", "PREVIEW_INVALID"].includes(error.message)) return result({ code: error.message, message: "This operation cannot be safely applied; no change was made." }, true);

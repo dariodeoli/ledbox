@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { AdminContext } from "../lib/server/tenancy";
-import { dispatchMcpTool } from "../lib/server/mcp/dispatch";
+import { dispatchMcpTool, type McpMutationHandlers } from "../lib/server/mcp/dispatch";
 import type { McpReadHandlers } from "../lib/server/mcp/readers";
 
 const context = (role: "OWNER" | "VIEWER" = "OWNER"): AdminContext => ({
@@ -50,26 +50,43 @@ test("confirmation without a persisted preview fails closed", async () => {
     priceConfirm: async () => { throw new Error("PREVIEW_EXPIRED"); },
     pricePreview: async () => ({ previewId: "12345678-1234-4234-8234-123456789012", expiresInSeconds: 3600, changes: {} } as never),
     quantityConfirm: async () => ({}), quantityPreview: async () => ({ previewId: "12345678-1234-4234-8234-123456789012", expiresInSeconds: 3600, changes: {} } as never),
+    rentalPricePreview: async () => ({} as never), rentalPriceConfirm: async () => ({}),
+    companyPreview: async () => ({} as never), companyConfirm: async () => ({}),
+    photoPreview: async () => ({} as never), photoConfirm: async () => ({}),
+    budgetPreview: async () => ({} as never), budgetConfirm: async () => ({}),
   });
   assert.equal(response.isError, true);
   assert.match(response.content[0].text, /PREVIEW_EXPIRED/);
 });
 
-test("unsupported mutation families stay explicitly blocked", async () => {
-  const cases: Array<[string, unknown]> = [
-    ["company.preview", { name: "New name" }],
-    ["photos.preview", { resourceType: "company", resourceId: "org-1", fileName: "logo.webp", mimeType: "image/webp", byteLength: 512, sha256: "a".repeat(64) }],
-    ["budgets.preview", { title: "Draft", lines: [{ description: "Item", quantity: 1, unitPrice: 1000 }] }],
-  ];
-  for (const [tool, input] of cases) {
-    const result = await dispatchMcpTool(tool, input, context(), {});
-    assert.match(result.content[0].text, /PREVIEW_NOT_IMPLEMENTED/, tool);
-  }
+test("profile, rental, photo and budget mutation tools dispatch to their scoped handlers", async () => {
+  const calls: string[] = [];
+  const mutations = {
+    priceConfirm: async () => ({}), pricePreview: async () => ({}), quantityConfirm: async () => ({}), quantityPreview: async () => ({}),
+    rentalPriceConfirm: async () => { calls.push("rental.confirm"); return { ok: true }; },
+    rentalPricePreview: async () => { calls.push("rental.preview"); return { previewId: "preview-id-123456" }; },
+    companyPreview: async () => { calls.push("company.preview"); return { previewId: "preview-id-123456" }; },
+    companyConfirm: async () => { calls.push("company.confirm"); return { ok: true }; },
+    photoPreview: async () => { calls.push("photo.preview"); return { previewId: "preview-id-123456" }; },
+    photoConfirm: async () => { calls.push("photo.confirm"); return { ok: true }; },
+    budgetPreview: async () => { calls.push("budget.preview"); return { previewId: "preview-id-123456" }; },
+    budgetConfirm: async () => { calls.push("budget.confirm"); return { ok: true }; },
+  } as unknown as McpMutationHandlers;
+  await dispatchMcpTool("rental-prices.preview", { productId: "item-1", price: 120000 }, context(), {}, mutations);
+  await dispatchMcpTool("rental-prices.confirm", { previewId: "preview-id-123456", idempotencyKey: "key-idempotency-123" }, context(), {}, mutations);
+  await dispatchMcpTool("company.preview", { name: "New name" }, context(), {}, mutations);
+  await dispatchMcpTool("company.confirm", { previewId: "preview-id-123456", idempotencyKey: "key-idempotency-123" }, context(), {}, mutations);
+  await dispatchMcpTool("photos.preview", { resourceType: "product", resourceId: "item-1", fileName: "item.png", mimeType: "image/png", byteLength: 512, sha256: "a".repeat(64), data: "YQ==" }, context(), {}, mutations);
+  await dispatchMcpTool("photos.confirm", { previewId: "preview-id-123456", idempotencyKey: "key-idempotency-123" }, context(), {}, mutations);
+  await dispatchMcpTool("budgets.preview", { clientId: "client-1", title: "Draft", lines: [{ description: "Item", quantity: 1, unitPrice: 1000 }] }, context(), {}, mutations);
+  await dispatchMcpTool("budgets.confirm", { previewId: "preview-id-123456", idempotencyKey: "key-idempotency-123" }, context(), {}, mutations);
+  assert.deepEqual(calls, ["rental.preview", "rental.confirm", "company.preview", "company.confirm", "photo.preview", "photo.confirm", "budget.preview", "budget.confirm"]);
 });
 
 test("role matrix is rechecked for every confirm tool", async () => {
   const inputs: Record<string, unknown> = {
     "prices.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
+    "rental-prices.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
     "quantities.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
     "company.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
     "photos.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
