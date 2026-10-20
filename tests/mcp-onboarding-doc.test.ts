@@ -5,7 +5,8 @@ import { test } from "node:test";
 const doc = readFileSync(new URL("../docs/INTEGRACIONES-MCP.md", import.meta.url), "utf8");
 
 test("MCP onboarding distinguishes proposal from available integration and defines core OAuth safeguards", () => {
-  assert.match(doc, /No existe una conexión MCP\/OAuth publicada/);
+  assert.match(doc, /authorization server OAuth/);
+  assert.match(doc, /Google OAuth sigue siendo únicamente el inicio de sesión web/);
   assert.match(doc, /Authorization Code y PKCE S256/);
   assert.match(doc, /oauth-protected-resource/);
   assert.match(doc, /resource tanto a authorize como a token/);

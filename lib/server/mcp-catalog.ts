@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AdminRole } from "@prisma/client";
+import { MCP_BASE_SCOPE, mcpScopeForToolCapability } from "@/lib/mcp-oauth";
 
 /**
  * MCP tool contract for EventOS. The MCP adapter must create this context from
@@ -9,6 +10,7 @@ export type McpActorContext = Readonly<{
   organizationId: string;
   actorId: string;
   role: AdminRole;
+  scopes?: readonly string[];
 }>;
 
 export type McpToolName =
@@ -162,6 +164,10 @@ export class McpAuthorizationError extends Error {
 export function authorizeMcpTool(context: McpActorContext, name: string): McpToolDefinition {
   const tool = byName.get(name as McpToolName);
   if (!tool || !tool.allowedRoles.includes(context.role)) throw new McpAuthorizationError();
+  if (context.scopes) {
+    const requiredScope = mcpScopeForToolCapability(tool.capability);
+    if (!context.scopes.includes(MCP_BASE_SCOPE) || !requiredScope || !context.scopes.includes(requiredScope)) throw new McpAuthorizationError();
+  }
   return tool;
 }
 

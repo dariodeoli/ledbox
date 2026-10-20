@@ -150,6 +150,8 @@ model Organization {
   memberships           OrganizationMembership[]
   adminMemberships      AdminMembership[]
   adminSessions         AdminSession[]
+  mcpOAuthAuthorizations McpOAuthAuthorization[]
+  mcpOAuthAccessTokens   McpOAuthAccessToken[]
   apiTokens             ApiToken[]
   catalogAccessTokens   CatalogAccessToken[]
   logos                 OrganizationLogo[]
@@ -289,6 +291,8 @@ model AdminUser {
   autoLockMinutes       Int                  @default(10)
   sessions              AdminSession[]
   memberships           AdminMembership[]
+  mcpOAuthAuthorizations McpOAuthAuthorization[]
+  mcpOAuthAccessTokens   McpOAuthAccessToken[]
   passwordResetTokens   PasswordResetToken[]
   avatar                AdminUserAvatar?
   /// Última actividad en el panel (docs/SUPERADMIN.md §3): a lo sumo una escritura por hora de Paraguay.
@@ -443,6 +447,57 @@ model PasswordResetToken {
   user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
+}
+
+/// OAuth authorization codes are single-use and stored only as SHA-256 hashes.
+/// A row begins as a short-lived consent request and receives codeHash only
+/// after the signed-in user explicitly approves the displayed scopes.
+model McpOAuthAuthorization {
+  id                    String       @id
+  clientId              String
+  redirectUri           String
+  responseState         String
+  resource              String
+  requestedScopes       String[]
+  approvedScopes        String[]     @default([])
+  codeChallenge         String
+  codeChallengeMethod   String
+  consentTokenHash      String       @unique
+  codeHash              String?      @unique
+  userId                String
+  organizationId        String
+  consentExpiresAt       DateTime
+  codeExpiresAt          DateTime?
+  consumedAt             DateTime?
+  createdAt              DateTime     @default(now())
+  user                   AdminUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, organizationId, clientId, createdAt])
+  @@index([consentExpiresAt])
+  @@index([codeExpiresAt])
+}
+
+/// Opaque bearer token record; raw tokens are returned once and never stored.
+/// Every MCP request rechecks expiry, revocation, user, organization and role.
+model McpOAuthAccessToken {
+  id             String       @id
+  tokenHash      String       @unique
+  clientId       String
+  resource       String
+  scopes         String[]
+  userId         String
+  organizationId String
+  issuedAt       DateTime     @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  user           AdminUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId, expiresAt])
+  @@index([expiresAt])
+  @@index([clientId, revokedAt])
 }
 
 /// Avatar del panel (issue #22): un binario por usuario, en la base igual que

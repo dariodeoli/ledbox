@@ -28,7 +28,7 @@ export async function dispatchMcpTool(
     const tool = getMcpTool(name);
     if (!tool) return result({ code: "NOT_FOUND", message: "Unknown MCP tool." }, true);
     const parsed = parseMcpToolInput(name, rawInput);
-    authorizeMcpTool({ organizationId: context.organizationId, actorId: context.user.id, role: context.role }, name as never);
+    authorizeMcpTool({ organizationId: context.organizationId, actorId: context.user.id, role: context.role, ...(context.mcpScopes ? { scopes: context.mcpScopes } : {}) }, name as never);
     if (tool.access === "confirm") {
       if (tool.name === "prices.confirm") return result(await mutations.priceConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
       if (tool.name === "quantities.confirm") return result(await mutations.quantityConfirm(context, parsed as { previewId: string; idempotencyKey: string }));

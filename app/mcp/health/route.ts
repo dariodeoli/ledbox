@@ -1,6 +1,7 @@
 import packageJson from "@/package.json";
 import { NextResponse } from "next/server";
 import { MCP_TOOL_CATALOG } from "@/lib/server/mcp-catalog";
+import { loadMcpOAuthConfig } from "@/lib/mcp-oauth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export function GET() {
     protocol: "streamable-http",
     endpoint: "/mcp",
     version: packageJson.version,
-    oauthConfigured: false,
+    oauthConfigured: Boolean(loadMcpOAuthConfig()),
     toolsEnabled: MCP_TOOL_CATALOG.filter((tool) => tool.access === "read").length,
   }, { headers: { "Cache-Control": "no-store" } });
 }
