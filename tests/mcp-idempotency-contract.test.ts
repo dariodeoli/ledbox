@@ -12,6 +12,15 @@ test("MCP confirm requires a caller-provided idempotency key and preview referen
   }
 });
 
+test("MCP budget preview requires a tenant client, integer PYG lines, and rejects tenant selectors", () => {
+  const valid = { clientId: "client-123", title: "Reviewed draft", currency: "PYG", lines: [{ productId: "inventory-123", description: "Chair", quantity: 2, unitPrice: 50000 }] };
+  assert.deepEqual(parseMcpToolInput("budgets.preview", valid), valid);
+  assert.throws(() => parseMcpToolInput("budgets.preview", { ...valid, organizationId: "other-company" }));
+  assert.throws(() => parseMcpToolInput("budgets.preview", { ...valid, clientId: undefined }));
+  assert.throws(() => parseMcpToolInput("budgets.preview", { ...valid, lines: [{ ...valid.lines[0], quantity: 1.5 }] }));
+  assert.throws(() => parseMcpToolInput("budgets.preview", { ...valid, currency: "USD" }));
+});
+
 test("idempotency request fingerprint ignores only the retry key and remains payload-sensitive", () => {
   const a = requestHashOf({ previewId: "preview-a", idempotencyKey: "retry-key-a", amount: 120000 });
   const sameOperation = requestHashOf({ amount: 120000, idempotencyKey: "retry-key-b", previewId: "preview-a" });

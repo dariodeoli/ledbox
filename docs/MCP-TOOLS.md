@@ -15,7 +15,7 @@ actor identity, or an active-company selector from MCP arguments.
 | `quantities.preview` / `quantities.confirm` | Two-step write | OWNER, ADMIN, OPERATIONS | Preview exact change, then confirm once. |
 | `company.preview` / `company.confirm` | Two-step write | OWNER, ADMIN | Preview public profile changes, then confirm once. |
 | `photos.preview` / `photos.confirm` | Two-step write | OWNER, ADMIN, OPERATIONS | Validate image metadata, then store via existing tenant-scoped storage. |
-| `budgets.preview` / `budgets.confirm` | Two-step write | OWNER, ADMIN, FINANCE | Review a draft, then create draft only. |
+| `budgets.preview` / `budgets.confirm` | Two-step write | OWNER, ADMIN, FINANCE | Review a PYG draft for an existing tenant client and optional inventory items, then create draft only. |
 
 `VIEWER` is read-only. No tool exposes internal purchase costs, margins,
 supplier records, or supplier banking details. Budget reads expose customer
@@ -25,7 +25,10 @@ must load that preview, recheck membership/role and resource ownership, compare
 the digest, and atomically record the idempotency key with the write. Replaying
 the same key returns the original result; reusing it with a different payload
 is a conflict. Confirmation never means “send”: budget confirmation only
-creates a draft and never reserves stock or records payment.
+creates a draft and captures the reviewed commercial line prices. It does not
+change lead/client status, send, approve, sign, reserve stock, create payment
+plan entries, or record payment. The one-hour preview becomes stale if its
+selected client or inventory product changes before confirmation.
 
 ## Adapter requirements
 
