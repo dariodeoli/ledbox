@@ -23,7 +23,16 @@ export async function POST(request: Request) {
     const result = await lookupOwnData(typeof numero === "string" ? numero.trim() : "");
     const confirmation = await signRucConfirmation(result, organizationId, user.id);
     await recordAudit({ context: auth.context, action: "update", entity: "Organization", entityId: organizationId, summary: "Consultó OwnData para revisar identidad fiscal (sin aplicar al cliente)", detail: { fields: { source: result.ownData.provenance.source, publicationDate: result.ownData.provenance.publicationDate, lookedUpAt: confirmation.lookedUpAt, environment: result.ownData.environment, quotaUsed: result.ownData.quota.used, costKnown: false } } });
-    return Response.json({ ...result, ...confirmation }, { headers: { "Cache-Control": "private, no-store" } });
+    // Serializador público explícito: estados fiscales del proveedor pueden cambiar y
+    // nunca forman parte del contrato del navegador (ni se copian al cliente).
+    const { ruc, dv, nameOfficial, equivalenceRaw, sourcePartition, environment, quota, provenance, requestId } = result.ownData;
+    return Response.json({
+      name: result.name,
+      fullRuc: result.fullRuc,
+      reviewRequired: true,
+      ownData: { ruc, dv, nameOfficial, equivalenceRaw, ...(sourcePartition !== undefined ? { sourcePartition } : {}), environment, quota, provenance, ...(requestId ? { requestId } : {}) },
+      ...confirmation,
+    }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const e = error instanceof OwnDataLookupError ? error : new OwnDataLookupError("OWNDATA_UNAVAILABLE", 503, "OwnData no está disponible. Completá los datos a mano.");
     await recordAudit({ context: auth.context, action: "update", entity: "Organization", entityId: organizationId, summary: "La consulta de identidad fiscal OwnData no produjo un resultado aplicable", detail: { fields: { code: e.code, status: e.status, costKnown: false } } });
