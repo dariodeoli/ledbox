@@ -54,6 +54,8 @@ test("confirmation without a persisted preview fails closed", async () => {
     companyPreview: async () => ({} as never), companyConfirm: async () => ({}),
     photoPreview: async () => ({} as never), photoConfirm: async () => ({}),
     budgetPreview: async () => ({} as never), budgetConfirm: async () => ({}),
+    budgetEditPreview: async () => ({} as never), budgetEditConfirm: async () => ({}),
+    budgetComparePreview: async () => ({} as never), budgetCompareConfirm: async () => ({}),
   });
   assert.equal(response.isError, true);
   assert.match(response.content[0].text, /PREVIEW_EXPIRED/);
@@ -71,6 +73,10 @@ test("profile, rental, photo and budget mutation tools dispatch to their scoped 
     photoConfirm: async () => { calls.push("photo.confirm"); return { ok: true }; },
     budgetPreview: async () => { calls.push("budget.preview"); return { previewId: "preview-id-123456" }; },
     budgetConfirm: async () => { calls.push("budget.confirm"); return { ok: true }; },
+    budgetEditPreview: async () => { calls.push("budget.edit.preview"); return { previewId: "preview-id-123456" }; },
+    budgetEditConfirm: async () => { calls.push("budget.edit.confirm"); return { ok: true }; },
+    budgetComparePreview: async () => { calls.push("budget.compare.preview"); return { previewId: "preview-id-123456" }; },
+    budgetCompareConfirm: async () => { calls.push("budget.compare.confirm"); return { ok: true }; },
   } as unknown as McpMutationHandlers;
   await dispatchMcpTool("rental-prices.preview", { productId: "item-1", price: 120000 }, context(), {}, mutations);
   await dispatchMcpTool("rental-prices.confirm", { previewId: "preview-id-123456", idempotencyKey: "key-idempotency-123" }, context(), {}, mutations);
@@ -80,7 +86,11 @@ test("profile, rental, photo and budget mutation tools dispatch to their scoped 
   await dispatchMcpTool("photos.confirm", { previewId: "preview-id-123456", idempotencyKey: "key-idempotency-123" }, context(), {}, mutations);
   await dispatchMcpTool("budgets.preview", { clientId: "client-1", title: "Draft", lines: [{ description: "Item", quantity: 1, unitPrice: 1000 }] }, context(), {}, mutations);
   await dispatchMcpTool("budgets.confirm", { previewId: "preview-id-123456", idempotencyKey: "key-idempotency-123" }, context(), {}, mutations);
-  assert.deepEqual(calls, ["rental.preview", "rental.confirm", "company.preview", "company.confirm", "photo.preview", "photo.confirm", "budget.preview", "budget.confirm"]);
+  await dispatchMcpTool("budgets.edit.preview", { budgetId: "budget-1", title: "Nuevo título" }, context(), {}, mutations);
+  await dispatchMcpTool("budgets.edit.confirm", { previewId: "preview-id-123456", idempotencyKey: "key-idempotency-123" }, context(), {}, mutations);
+  await dispatchMcpTool("budgets.compare.preview", { title: "Opciones", expiresAt: "2026-12-01T00:00:00.000Z", alternatives: [{ budgetId: "b1", label: "A" }, { budgetId: "b2", label: "B" }] }, context(), {}, mutations);
+  await dispatchMcpTool("budgets.compare.confirm", { previewId: "preview-id-123456", idempotencyKey: "key-idempotency-123" }, context(), {}, mutations);
+  assert.deepEqual(calls, ["rental.preview", "rental.confirm", "company.preview", "company.confirm", "photo.preview", "photo.confirm", "budget.preview", "budget.confirm", "budget.edit.preview", "budget.edit.confirm", "budget.compare.preview", "budget.compare.confirm"]);
 });
 
 test("role matrix is rechecked for every confirm tool", async () => {
@@ -91,6 +101,8 @@ test("role matrix is rechecked for every confirm tool", async () => {
     "company.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
     "photos.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
     "budgets.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
+    "budgets.edit.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
+    "budgets.compare.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
   };
   for (const [tool, input] of Object.entries(inputs)) {
     const denied = await dispatchMcpTool(tool, input, context("VIEWER"), {});

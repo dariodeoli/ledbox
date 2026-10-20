@@ -28,6 +28,8 @@ test("write permissions separate prices, quantities, company profile, photos and
     "company.preview": ["OWNER", "ADMIN"], "company.confirm": ["OWNER", "ADMIN"],
     "photos.preview": ["OWNER", "ADMIN", "OPERATIONS"], "photos.confirm": ["OWNER", "ADMIN", "OPERATIONS"],
     "budgets.preview": ["OWNER", "ADMIN", "FINANCE"], "budgets.confirm": ["OWNER", "ADMIN", "FINANCE"],
+    "budgets.edit.preview": ["OWNER", "ADMIN", "FINANCE"], "budgets.edit.confirm": ["OWNER", "ADMIN", "FINANCE"],
+    "budgets.compare.preview": ["OWNER", "ADMIN", "FINANCE"], "budgets.compare.confirm": ["OWNER", "ADMIN", "FINANCE"],
   };
   for (const [name, roles] of Object.entries(allowed)) {
     for (const role of ["OWNER", "ADMIN", "FINANCE", "OPERATIONS", "VIEWER"] as const) {
@@ -38,6 +40,16 @@ test("write permissions separate prices, quantities, company profile, photos and
   for (const tool of MCP_TOOL_CATALOG.filter((item) => item.access !== "read")) {
     assert.throws(() => authorizeMcpTool(actor("VIEWER"), tool.name), McpAuthorizationError);
   }
+});
+
+test("budget edit and comparison schemas accept only bounded payment terms and alternatives", () => {
+  const edit = { budgetId: "budget-1", paymentTerms: "50% al aprobar", installmentsJson: [{ label: "Seña", type: "percent", value: 50, moment: "Al aprobar", accountId: "account-1" }] };
+  assert.deepEqual(parseMcpToolInput("budgets.edit.preview", edit), edit);
+  assert.throws(() => parseMcpToolInput("budgets.edit.preview", { ...edit, organizationId: "other" }));
+  assert.throws(() => parseMcpToolInput("budgets.edit.preview", { budgetId: "budget-1", installmentsJson: [{ label: "X", accountId: "other", internalCost: 2000 }] }));
+  const comparison = { title: "Opciones", expiresAt: "2026-11-01T12:00:00.000Z", alternatives: [{ budgetId: "b1", label: "A" }, { budgetId: "b2", label: "B" }] };
+  assert.deepEqual(parseMcpToolInput("budgets.compare.preview", comparison), comparison);
+  assert.throws(() => parseMcpToolInput("budgets.compare.preview", { ...comparison, alternatives: [{ budgetId: "b1", label: "A" }] }));
 });
 
 test("input schemas reject caller-selected tenant scope and malformed confirmation", () => {

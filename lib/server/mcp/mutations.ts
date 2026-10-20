@@ -6,6 +6,10 @@ import { recordAudit } from "@/lib/server/audit";
 import { requestHashOf, withIdempotency } from "@/lib/server/idempotency";
 import { roleCan, type AdminCapability } from "@/lib/server/permissions";
 import { parseImageUpload } from "@/lib/server/branding";
+import { resolveBudgetPaymentPlan } from "@/lib/budget-payment-plan";
+import { assertBudgetPlanLedger, validateBudgetPlanAccounts } from "@/lib/server/budget-payment-plan";
+import { generatePublicToken } from "@/lib/server/budget-portal";
+import { quotePortalAvailable } from "@/lib/quote-sharing";
 
 type PricePreviewInput = { productId: string; price: number; currency: string; audience: "RETAIL" | "WHOLESALE"; minimumUnits: number };
 type ConfirmInput = { previewId: string; idempotencyKey: string };
@@ -404,4 +408,104 @@ export async function confirmBudgetDraft(context: AdminContext, input: ConfirmIn
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw Object.assign(new Error(String((result as Record<string, unknown>).code ?? "MUTATION_FAILED")), { status: response.status });
   return result;
+}
+const BUDGET_EDIT_PREVIEW_SCOPE = "mcp:preview:budget-edit:v1";
+const BUDGET_COMPARE_PREVIEW_SCOPE = "mcp:preview:budget-compare:v1";
+
+type BudgetEditInput = { budgetId: string; title?: string; validUntil?: string | null; advanceAmount?: number; paymentTerms?: string | null; installmentsJson?: Array<{ label: string; amount?: number; dueAt?: string | null; type?: "fixed" | "percent" | "remainder"; value?: number; moment?: string | null; accountId?: string | null }> };
+
+/** Draft-only editor preview. No client mail, approval, stock reservation or payment is triggered. */
+export async function previewBudgetEdit(context: AdminContext, input: BudgetEditInput) {
+  if (blocked(context)) throw new Error("MUTATION_BLOCKED");
+  requireCapability(context, "budgets.write");
+  const budget = await db.budget.findFirst({ where: { id: input.budgetId, organizationId: context.organizationId, deletedAt: null, archivedAt: null }, select: { id: true, title: true, status: true, updatedAt: true, total: true, validUntil: true, advanceAmount: true, paymentTerms: true, installmentsJson: true, client: { select: { name: true, company: true } } } });
+  if (!budget) throw new Error("NOT_FOUND");
+  if (budget.status !== "DRAFT") throw new Error("BUDGET_NOT_DRAFT");
+  const advance = input.advanceAmount ?? budget.advanceAmount;
+  const rawPlan = input.installmentsJson ?? budget.installmentsJson ?? [];
+  const plan = resolveBudgetPaymentPlan(rawPlan, budget.total, advance);
+  if (!plan.ok) throw new Error("INVALID_PAYMENT_PLAN");
+  await db.$transaction(async (tx) => validateBudgetPlanAccounts(tx, context.organizationId, plan.rows));
+  const scheduled = plan.rows.reduce((sum, row) => sum + row.amount, 0);
+  if (advance + scheduled > budget.total) throw new Error("INVALID_PAYMENT_PLAN");
+  const after = {
+    title: input.title ?? budget.title,
+    validUntil: input.validUntil === undefined ? budget.validUntil?.toISOString().slice(0, 10) ?? null : input.validUntil,
+    advanceAmount: advance,
+    paymentTerms: input.paymentTerms === undefined ? budget.paymentTerms : input.paymentTerms,
+    installmentsJson: plan.rows,
+  };
+  const stored = await storePreview(context, BUDGET_EDIT_PREVIEW_SCOPE, {
+    kind: "budget-edit", actorId: context.user.id, budgetId: budget.id, updatedAt: budget.updatedAt.toISOString(), total: budget.total,
+    before: { title: budget.title, validUntil: budget.validUntil?.toISOString().slice(0, 10) ?? null, advanceAmount: budget.advanceAmount, paymentTerms: budget.paymentTerms, installmentsJson: budget.installmentsJson },
+    after: after as unknown as JsonObject,
+  });
+  return { ...stored, budget: { id: budget.id, clientName: budget.client.company?.trim() || budget.client.name }, changes: { ...after, installmentCount: plan.rows.length, scheduledAmount: scheduled, remainingAmount: budget.total - advance - scheduled } };
+}
+
+export async function confirmBudgetEdit(context: AdminContext, input: ConfirmInput): Promise<unknown> {
+  if (blocked(context)) throw new Error("MUTATION_BLOCKED");
+  requireCapability(context, "budgets.write");
+  return confirmMcpPreview(context, input, BUDGET_EDIT_PREVIEW_SCOPE, "mcp:budgets:edit:confirm:v1", async (tx, preview) => {
+    if (preview.kind !== "budget-edit" || preview.actorId !== context.user.id || typeof preview.budgetId !== "string" || typeof preview.updatedAt !== "string" || !preview.after || typeof preview.after !== "object") return { code: "PREVIEW_INVALID" };
+    const budgetId = preview.budgetId;
+    await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${budgetId} FOR UPDATE`;
+    const budget = await tx.budget.findFirst({ where: { id: budgetId, organizationId: context.organizationId, deletedAt: null, archivedAt: null }, select: { id: true, title: true, status: true, updatedAt: true, total: true, client: { select: { name: true, company: true } } } });
+    if (!budget) return { code: "NOT_FOUND" };
+    if (budget.status !== "DRAFT") return { code: "BUDGET_NOT_DRAFT" };
+    if (budget.updatedAt.toISOString() !== preview.updatedAt || budget.total !== preview.total) return { code: "PREVIEW_STALE" };
+    const after = preview.after as Record<string, unknown>;
+    if (typeof after.title !== "string" || !after.title.trim() || typeof after.advanceAmount !== "number" || !Array.isArray(after.installmentsJson)) return { code: "PREVIEW_INVALID" };
+    const plan = resolveBudgetPaymentPlan(after.installmentsJson, budget.total, after.advanceAmount);
+    if (!plan.ok) return { code: "INVALID_PAYMENT_PLAN" };
+    await validateBudgetPlanAccounts(tx, context.organizationId, plan.rows);
+    await assertBudgetPlanLedger(tx, budget.id, budget.total, after.advanceAmount, plan.rows);
+    const updated = await tx.budget.update({ where: { id: budget.id }, data: {
+      title: after.title.trim(),
+      validUntil: typeof after.validUntil === "string" ? new Date(`${after.validUntil}T12:00:00.000Z`) : null,
+      advanceAmount: after.advanceAmount,
+      paymentTerms: typeof after.paymentTerms === "string" && after.paymentTerms.trim() ? after.paymentTerms.trim() : null,
+      installmentsJson: after.installmentsJson as Prisma.InputJsonValue,
+    }, select: { id: true, title: true, status: true, validUntil: true, advanceAmount: true, paymentTerms: true, total: true } });
+    await recordAudit({ context, action: "update", entity: "Budget", entityId: budget.id, summary: `Actualizó el borrador «${budget.title}» por MCP`, detail: { fields: { title: updated.title, paymentPlanChanged: true, source: "MCP" } } }, tx);
+    return { ok: true, budget: updated, installmentCount: plan.rows.length };
+  });
+}
+
+type BudgetCompareInput = { title: string; expiresAt: string; alternatives: Array<{ budgetId: string; label: string }> };
+export async function previewBudgetComparison(context: AdminContext, input: BudgetCompareInput) {
+  if (blocked(context)) throw new Error("MUTATION_BLOCKED");
+  requireCapability(context, "budgets.write");
+  const expiresAt = new Date(input.expiresAt);
+  if (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date() || +expiresAt > Date.now() + 90 * 86400000) throw new Error("INVALID_COMPARISON");
+  if (new Set(input.alternatives.map((row) => row.budgetId)).size !== input.alternatives.length || new Set(input.alternatives.map((row) => row.label.trim().toLowerCase())).size !== input.alternatives.length) throw new Error("INVALID_COMPARISON");
+  const budgets = await db.budget.findMany({ where: { id: { in: input.alternatives.map((row) => row.budgetId) }, organizationId: context.organizationId, deletedAt: null, archivedAt: null }, select: { id: true, clientId: true, title: true, status: true, updatedAt: true, approvedAt: true, comparisonId: true, publicToken: true, event: { select: { id: true } }, items: { select: { id: true, name: true, quantity: true, unitPrice: true } }, signatureRequests: { where: { status: { in: ["SIGNED", "VALIDATED"] } }, select: { id: true } } } });
+  if (budgets.length !== input.alternatives.length || new Set(budgets.map((row) => row.clientId)).size !== 1 || budgets.some((row) => row.approvedAt || row.status === "APPROVED" || row.comparisonId || row.signatureRequests.length || !quotePortalAvailable(row as never))) throw new Error("COMPARISON_NOT_ALLOWED");
+  const rows = input.alternatives.map((alt) => {
+    const budget = budgets.find((row) => row.id === alt.budgetId)!;
+    return { budgetId: budget.id, label: alt.label.trim(), title: budget.title, status: budget.status, updatedAt: budget.updatedAt.toISOString() };
+  });
+  // Do not include totals or cost data in comparison preview metadata; the customer's comparison page renders current public terms.
+  return storePreview(context, BUDGET_COMPARE_PREVIEW_SCOPE, { kind: "budget-comparison", actorId: context.user.id, organizationId: context.organizationId, clientId: budgets[0].clientId, title: input.title.trim(), expiresAt: expiresAt.toISOString(), alternatives: rows });
+}
+
+export async function confirmBudgetComparison(context: AdminContext, input: ConfirmInput): Promise<unknown> {
+  if (blocked(context)) throw new Error("MUTATION_BLOCKED");
+  requireCapability(context, "budgets.write");
+  return confirmMcpPreview(context, input, BUDGET_COMPARE_PREVIEW_SCOPE, "mcp:budgets:compare:confirm:v1", async (tx, preview) => {
+    if (preview.kind !== "budget-comparison" || preview.actorId !== context.user.id || preview.organizationId !== context.organizationId || !Array.isArray(preview.alternatives) || typeof preview.title !== "string" || typeof preview.clientId !== "string") return { code: "PREVIEW_INVALID" };
+    const alternatives = preview.alternatives as Array<Record<string, unknown>>;
+    for (const id of alternatives.map((row) => String(row.budgetId)).sort()) await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${id} FOR UPDATE`;
+    const ids = alternatives.map((row) => String(row.budgetId));
+    const budgets = await tx.budget.findMany({ where: { id: { in: ids }, organizationId: context.organizationId, deletedAt: null, archivedAt: null }, include: { signatureRequests: { where: { status: { in: ["SIGNED", "VALIDATED"] } }, select: { id: true } } } });
+    if (budgets.length !== ids.length || budgets.some((row) => row.clientId !== preview.clientId || row.approvedAt || row.status === "APPROVED" || row.comparisonId || row.signatureRequests.length || !quotePortalAvailable(row))) return { code: "COMPARISON_NOT_ALLOWED" };
+    for (const snapshot of alternatives) {
+      const current = budgets.find((row) => row.id === snapshot.budgetId);
+      if (!current || current.updatedAt.toISOString() !== snapshot.updatedAt || current.title !== snapshot.title || current.status !== snapshot.status) return { code: "PREVIEW_STALE" };
+    }
+    const comparison = await tx.quoteComparison.create({ data: { id: randomUUID(), organizationId: context.organizationId, clientId: String(preview.clientId), title: String(preview.title), expiresAt: new Date(String(preview.expiresAt)), publicToken: generatePublicToken() } });
+    for (const row of alternatives) await tx.budget.update({ where: { id: String(row.budgetId) }, data: { comparisonId: comparison.id, comparisonLabel: String(row.label) } });
+    await recordAudit({ context, action: "create", entity: "Budget", entityId: ids[0], summary: "Creó una comparación de presupuestos por MCP", detail: { fields: { comparisonId: comparison.id, alternatives: ids.length, source: "MCP" } } }, tx);
+    return { ok: true, comparison: { id: comparison.id, publicToken: comparison.publicToken, expiresAt: comparison.expiresAt, alternatives: ids.length } };
+  });
 }
