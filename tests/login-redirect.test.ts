@@ -42,6 +42,6 @@ test("la raíz del host del panel y el retorno de Google usan la misma home", ()
   assert.match(callback, /PANEL_HOME/);
   assert.doesNotMatch(callback, /\/dashboard/);
   const form = repoFile("components/admin/AdminLoginForm.tsx");
-  assert.match(form, /router\.replace\(PANEL_HOME\)/);
+  assert.match(form, /router\.replace\(next\)/);
   assert.doesNotMatch(form, /router\.replace\("\/dashboard"\)/);
 });

@@ -26,7 +26,7 @@ export type McpHttpDependencies = { authenticate: McpAuthProvider; readers?: Mcp
  * sessions. Sessions contain protocol state only, never tenant data. */
 export async function handleMcpHttpRequest(request: Request, dependencies: McpHttpDependencies): Promise<Response> {
   pruneExpiredSessions();
-  const auth = await dependencies.authenticate();
+  const auth = await dependencies.authenticate(request);
   if (!auth.ok) return auth.response;
 
   const sessionId = request.headers.get("mcp-session-id");
@@ -58,7 +58,7 @@ export async function handleMcpHttpRequest(request: Request, dependencies: McpHt
       },
       onsessionclosed: (id) => { sessions.delete(id); },
     });
-    session = { server, transport, lastSeenAt: Date.now(), actorId: auth.context.user.id, context: auth.context };
+    session = { server, transport, lastSeenAt: Date.now(), actorId: `${auth.context.user.id}:${auth.context.session.id}:${auth.context.organizationId}`, context: auth.context };
     await server.connect(transport);
     const response = await transport.handleRequest(request);
     // Defensive fallback for SDK releases that set the ID before invoking the callback.
@@ -67,7 +67,7 @@ export async function handleMcpHttpRequest(request: Request, dependencies: McpHt
   }
 
   if (!session || !sessionId) return new Response("MCP session not found", { status: 404 });
-  if (session.actorId !== auth.context.user.id) return new Response("MCP session belongs to another actor", { status: 403 });
+  if (session.actorId !== `${auth.context.user.id}:${auth.context.session.id}:${auth.context.organizationId}`) return new Response("MCP session belongs to another actor", { status: 403 });
   session.context = auth.context;
   session.lastSeenAt = Date.now();
   return session.transport.handleRequest(request);

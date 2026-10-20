@@ -48,6 +48,8 @@ export type AdminContext = {
    * salida hacia afuera queda cortada (`lib/server/demo-sandbox.ts`).
    */
   sandbox: boolean;
+  /** OAuth grant scopes; absent for panel/API-key callers. */
+  mcpScopes?: readonly string[];
 };
 
 /** Opciones de `requireAdminContext`. */

@@ -5,7 +5,7 @@ import { handleMcpHttpRequest, resetMcpSessionsForTests } from "../lib/server/mc
 import type { McpAuthProvider } from "../lib/server/mcp/auth";
 
 const authenticated: McpAuthProvider = async () => ({ ok: true, context: {
-  organizationId: "org-1", role: "OWNER", user: { id: "actor-1" },
+  organizationId: "org-1", role: "OWNER", user: { id: "actor-1" }, session: { id: "session-1" },
 } as never });
 
 function rpcRequest(body: unknown, sessionId?: string) {
