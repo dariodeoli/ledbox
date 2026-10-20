@@ -59,6 +59,8 @@ test("confirmation without a persisted preview fails closed", async () => {
     clientPreview: async () => ({} as never), clientConfirm: async () => ({}),
     leadPreview: async () => ({} as never), leadConfirm: async () => ({}),
     eventPreview: async () => ({} as never), eventConfirm: async () => ({}),
+    treasuryPreview: async () => ({} as never), treasuryConfirm: async () => ({}),
+    paymentPreview: async () => ({} as never), paymentConfirm: async () => ({}),
   });
   assert.equal(response.isError, true);
   assert.match(response.content[0].text, /PREVIEW_EXPIRED/);
