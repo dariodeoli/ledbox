@@ -4,7 +4,9 @@ import { GET as health } from "../app/mcp/health/route";
 import { handleMcpHttpRequest, resetMcpSessionsForTests } from "../lib/server/mcp/http";
 import type { McpAuthProvider } from "../lib/server/mcp/auth";
 
-const authenticated: McpAuthProvider = async () => ({ ok: true, context: {} as never });
+const authenticated: McpAuthProvider = async () => ({ ok: true, context: {
+  organizationId: "org-1", role: "OWNER", user: { id: "actor-1" },
+} as never });
 
 function rpcRequest(body: unknown, sessionId?: string) {
   return new Request("https://example.test/mcp", {
@@ -28,7 +30,7 @@ test("la sonda MCP informa estado sin datos de empresa", async () => {
   assert.equal(body.service, "eventos-mcp");
   assert.equal(body.protocol, "streamable-http");
   assert.equal(body.oauthConfigured, false);
-  assert.equal(body.toolsEnabled, 0);
+  assert.equal(body.toolsEnabled, 7);
   assert.equal("organization" in body, false);
 });
 

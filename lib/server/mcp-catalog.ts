@@ -65,10 +65,10 @@ const confirmInput = z.object({ previewId: actionId, idempotencyKey }).strict();
 
 const safeCompany = ["id", "name", "slug", "publicPhone", "publicEmail", "website", "logoUrl"] as const;
 const safeProduct = ["id", "sku", "name", "description", "category", "imageUrl", "rentalPrice", "salePrice", "currency", "variants"] as const;
-const safeInventory = ["productId", "sku", "name", "availableQuantity", "totalQuantity", "unitStatus", "warehouseName"] as const;
+const safeInventory = ["productId", "sku", "name", "availableQuantity", "totalQuantity", "unitStatus", "warehouseId"] as const;
 const safeClient = ["id", "name", "email", "phone", "companyName"] as const;
-const safeLead = ["id", "name", "email", "phone", "message", "createdAt", "status", "requestedItems"] as const;
-const safeBudget = ["id", "code", "title", "status", "currency", "subtotal", "discount", "charges", "total", "validUntil", "clientName", "lines"] as const;
+const safeLead = ["id", "name", "email", "phone", "message", "createdAt", "status"] as const;
+const safeBudget = ["id", "title", "status", "currency", "subtotal", "discount", "total", "validUntil", "clientName", "lines"] as const;
 const safeEvent = ["id", "title", "status", "startsAt", "endsAt", "venueName", "clientName"] as const;
 
 function definition(name: McpToolName, title: string, capability: McpCapability, access: McpToolDefinition["access"], allowedRoles: readonly AdminRole[], outputFields: readonly string[], inputSchema: z.ZodType, description: string): McpToolDefinition {
@@ -79,10 +79,10 @@ function definition(name: McpToolName, title: string, capability: McpCapability,
 export const MCP_TOOL_CATALOG: readonly McpToolDefinition[] = [
   definition("company.read", "Read company profile", "company.read", "read", readOnly, safeCompany, noArgs, "Read public profile fields for the authenticated active company."),
   definition("catalog.read", "Search catalog", "catalog.read", "read", readOnly, safeProduct, z.object({ query: z.string().trim().max(120).optional(), category: z.string().trim().max(100).optional(), limit: z.number().int().min(1).max(50).default(20) }).strict(), "Search products and variants. Internal costs, margins, suppliers and purchasing data are excluded."),
-  definition("inventory.read", "Read inventory availability", "inventory.read", "read", readOnly, safeInventory, z.object({ productId: resourceId.optional(), warehouseId: resourceId.optional() }).strict(), "Read tenant-scoped quantities and availability. Internal costs and supplier details are excluded."),
+  definition("inventory.read", "Read inventory availability", "inventory.read", "read", readOnly, safeInventory, z.object({ productId: resourceId.optional(), limit: z.number().int().min(1).max(50).default(20) }).strict(), "Read tenant-scoped quantities and availability. Internal costs and supplier details are excluded."),
   definition("clients.read", "Search clients", "clients.read", "read", readOnly, safeClient, z.object({ query: z.string().trim().max(120).optional(), limit: z.number().int().min(1).max(50).default(20) }).strict(), "Search clients belonging to the authenticated active company."),
-  definition("leads.read", "Read leads", "leads.read", "read", readOnly, safeLead, z.object({ status: z.string().trim().max(40).optional(), limit: z.number().int().min(1).max(50).default(20) }).strict(), "Read leads belonging to the authenticated active company."),
-  definition("budgets.read", "Read budgets", "budgets.read", "read", readOnly, safeBudget, z.object({ budgetId: resourceId.optional(), status: z.string().trim().max(40).optional(), limit: z.number().int().min(1).max(50).default(20) }).strict(), "Read tenant-scoped budgets. Cost, margin, supplier and bank account internals are excluded."),
+  definition("leads.read", "Read leads", "leads.read", "read", readOnly, safeLead, z.object({ status: z.enum(["NEW", "CONTACTED", "QUOTED", "WON", "LOST"]).optional(), limit: z.number().int().min(1).max(50).default(20) }).strict(), "Read leads belonging to the authenticated active company; internal notes and consent metadata are excluded."),
+  definition("budgets.read", "Read budgets", "budgets.read", "read", readOnly, safeBudget, z.object({ budgetId: resourceId.optional(), status: z.enum(["DRAFT", "SENT", "NEGOTIATING", "APPROVED", "LOST", "CANCELLED"]).optional(), limit: z.number().int().min(1).max(50).default(20) }).strict(), "Read tenant-scoped budgets. Cost, margin, supplier and bank account internals are excluded."),
   definition("events.read", "Read events", "events.read", "read", readOnly, safeEvent, z.object({ eventId: resourceId.optional(), from: z.string().datetime().optional(), to: z.string().datetime().optional(), limit: z.number().int().min(1).max(50).default(20) }).strict(), "Read events belonging to the authenticated active company."),
   definition("prices.preview", "Preview price change", "prices.write", "preview", financeWriters, [], pricePreviewInput, "Show the exact before/after price and impact before confirmation; no write occurs."),
   definition("prices.confirm", "Confirm price change", "prices.write", "confirm", financeWriters, [], confirmInput, "Apply a previously reviewed price preview once, with an idempotency key."),

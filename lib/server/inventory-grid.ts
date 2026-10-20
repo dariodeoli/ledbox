@@ -186,6 +186,8 @@ export async function loadGridExtras(options: {
 
 export type GridPageOptions = {
   organizationId: string;
+  /** Optional exact tenant-scoped item filter for trusted integrations. */
+  productId?: string;
   cursor?: string | null;
   query?: string;
   limit?: number;
@@ -234,6 +236,7 @@ export async function listInventoryGrid(options: GridPageOptions) {
   const search: Prisma.InventoryItemWhereInput = query ? { OR: ["name", "sku", "category"].map((field) => ({ [field]: { contains: query, mode: "insensitive" as const } })) } : {};
   const scope: Prisma.InventoryItemWhereInput = {
     organizationId,
+    ...(options.productId ? { id: options.productId } : {}),
     AND: [search, ...(options.saleCatalogOnly ? [{ saleCatalogEnabled: true }] : [])],
     ...(options.createdBefore ? { createdAt: { lte: options.createdBefore } } : {}),
   };
