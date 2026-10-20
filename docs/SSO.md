@@ -1,5 +1,7 @@
 # SSO con Google — panel e invitaciones al equipo
 
+> Este OAuth autentica el ingreso al panel. **No autentica clientes MCP ni delega acceso a datos**. La propuesta separada y aún no publicada está en [INTEGRACIONES-MCP.md](INTEGRACIONES-MCP.md).
+
 Cómo funciona hoy el acceso con Google de EventOS, qué hay que configurar en
 Google Cloud, cómo se comportan los errores y qué haría falta para el login de
 clientes en el portal (propuesta, **sin implementar**).
