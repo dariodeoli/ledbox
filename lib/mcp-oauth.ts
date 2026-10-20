@@ -13,6 +13,7 @@ const MCP_SCOPE_CAPABILITIES = {
   "promoters:write": "promoters.write",
   "budgets:write": "budgets.write",
   "finance:write": "finance.write",
+  "finance:read": "finance.write",
   "suppliers:write": "suppliers.write",
   "users:manage": "users.manage",
 } as const satisfies Record<string, AdminCapability>;
@@ -134,6 +135,7 @@ export function mcpAuthorizationServerMetadata(config: McpOAuthConfig): Record<s
 const MCP_TOOL_SCOPES: Record<string, string> = {
   "company.read": "company:read", "catalog.read": "catalog:read", "inventory.read": "inventory:read",
   "clients.read": "clients:read", "leads.read": "leads:read", "budgets.read": "budgets:read", "events.read": "events:read",
+  "treasury.read": "finance:read", "payments.read": "finance:read", "reports.read": "finance:read",
   "prices.write": "inventory:write", "quantities.write": "inventory:write", "company.write": "organization:write",
   "photos.write": "inventory:write", "budgets.write": "budgets:write",
 };

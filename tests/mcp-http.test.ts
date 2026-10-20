@@ -30,7 +30,7 @@ test("la sonda MCP informa estado sin datos de empresa", async () => {
   assert.equal(body.service, "eventos-mcp");
   assert.equal(body.protocol, "streamable-http");
   assert.equal(body.oauthConfigured, false);
-  assert.equal(body.toolsEnabled, 7);
+  assert.equal(body.toolsEnabled, 10);
   assert.equal("organization" in body, false);
 });
 
