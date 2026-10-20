@@ -60,6 +60,8 @@ E2E_CHROME_PATH="/ruta/al/Chrome" npm run e2e           # Chrome no estándar
 En el ciclo `ht`, el E2E corre **después del smoke y no bloquea** el release:
 si falla, queda anotado en `~/.config/ledbox/auto-hd.log`.
 
+Para el cierre verificable de cada release, usar además el [checklist de release y smoke](RELEASE-SMOKE-CHECKLIST.md), que separa CI, SHA/health terminal y recorridos de solo lectura de las mutaciones que deben probarse únicamente con datos sintéticos.
+
 ## Política automática de integración
 
 - **Umbral**: ≥ **10 commits** nuevos sin integrar (suma de
