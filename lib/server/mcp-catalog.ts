@@ -23,6 +23,8 @@ export type McpToolName =
   | "events.read"
   | "prices.preview"
   | "prices.confirm"
+  | "rental-prices.preview"
+  | "rental-prices.confirm"
   | "quantities.preview"
   | "quantities.confirm"
   | "company.preview"
@@ -59,10 +61,11 @@ const actionId = z.string().trim().min(16).max(128);
 const idempotencyKey = z.string().trim().min(16).max(128);
 
 const pricePreviewInput = z.object({ productId: resourceId, price: currencyAmount, currency: z.string().length(3).default("PYG"), audience: z.enum(["RETAIL", "WHOLESALE"]).default("RETAIL"), minimumUnits: z.number().int().min(1).max(100_000).default(1) }).strict();
+const rentalPricePreviewInput = z.object({ productId: resourceId, price: currencyAmount }).strict();
 const quantityPreviewInput = z.object({ productId: resourceId, unitId: resourceId.optional(), quantity: z.number().int().min(0).max(100_000), reason: z.string().trim().min(3).max(300) }).strict();
-const companyPreviewInput = z.object({ name: z.string().trim().min(1).max(160).optional(), publicPhone: z.string().trim().max(40).nullable().optional(), publicEmail: z.string().trim().email().max(254).nullable().optional(), website: z.string().trim().url().max(500).nullable().optional() }).strict().refine((value) => Object.keys(value).length > 0, "Provide at least one company field");
-const photoPreviewInput = z.object({ resourceType: z.enum(["product", "company"]), resourceId, fileName: z.string().trim().min(1).max(180), mimeType: imageMime, byteLength: z.number().int().positive().max(8 * 1024 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/i) }).strict();
-const budgetPreviewInput = z.object({ clientId: resourceId.optional(), title: z.string().trim().min(1).max(180), currency: z.string().length(3).default("PYG"), validUntil: z.string().date().nullable().optional(), lines: z.array(z.object({ productId: resourceId.optional(), description: z.string().trim().min(1).max(500), quantity: z.number().positive().max(100_000), unitPrice: currencyAmount }).strict()).min(1).max(200) }).strict();
+const companyPreviewInput = z.object({ name: z.string().trim().min(1).max(160).optional(), publicPhone: z.string().trim().max(40).nullable().optional(), publicEmail: z.string().trim().email().max(254).nullable().optional(), website: z.string().trim().url().max(500).nullable().optional(), tagline: z.string().trim().max(180).nullable().optional(), accent: z.string().regex(/^#[0-9a-f]{6}$/i).nullable().optional() }).strict().refine((value) => Object.keys(value).length > 0, "Provide at least one company field");
+const photoPreviewInput = z.object({ resourceType: z.enum(["product", "company"]), resourceId, variant: z.enum(["light", "dark"]).optional(), fileName: z.string().trim().min(1).max(180), mimeType: imageMime, byteLength: z.number().int().positive().max(1 * 1024 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/i), data: z.string().max(1_400_000) }).strict().refine((v) => (v.resourceType === "company") === Boolean(v.variant), "Company photos require a logo variant; product photos cannot include one");
+const budgetPreviewInput = z.object({ clientId: resourceId, title: z.string().trim().min(1).max(160), currency: z.literal("PYG").default("PYG"), validUntil: z.string().date().nullable().optional(), lines: z.array(z.object({ productId: resourceId.optional(), description: z.string().trim().min(1).max(500), quantity: z.number().int().min(1).max(100_000), unitPrice: currencyAmount }).strict()).min(1).max(200) }).strict();
 const confirmInput = z.object({ previewId: actionId, idempotencyKey }).strict();
 
 const safeCompany = ["id", "name", "slug", "publicPhone", "publicEmail", "website", "logoUrl"] as const;
@@ -143,6 +146,8 @@ export const MCP_TOOL_CATALOG: readonly McpToolDefinition[] = [
   definition("events.read", "Read events", "events.read", "read", readOnly, safeEvent, z.object({ eventId: resourceId.optional(), from: z.string().datetime().optional(), to: z.string().datetime().optional(), limit: z.number().int().min(1).max(50).default(20) }).strict(), "Read events belonging to the authenticated active company."),
   definition("prices.preview", "Preview price change", "prices.write", "preview", financeWriters, [], pricePreviewInput, "Show the exact before/after price and impact before confirmation; no write occurs."),
   definition("prices.confirm", "Confirm price change", "prices.write", "confirm", financeWriters, [], confirmInput, "Apply a previously reviewed price preview once, with an idempotency key."),
+  definition("rental-prices.preview", "Preview rental price change", "prices.write", "preview", financeWriters, [], rentalPricePreviewInput, "Preview a rental tariff change only; inventory quantities and sale prices are untouched."),
+  definition("rental-prices.confirm", "Confirm rental price change", "prices.write", "confirm", financeWriters, [], confirmInput, "Apply a reviewed rental tariff once, with idempotency and audit."),
   definition("quantities.preview", "Preview quantity change", "quantities.write", "preview", operationsWriters, [], quantityPreviewInput, "Show current and proposed quantity before confirmation; no write occurs."),
   definition("quantities.confirm", "Confirm quantity change", "quantities.write", "confirm", operationsWriters, [], confirmInput, "Apply a previously reviewed quantity preview once, with an idempotency key."),
   definition("company.preview", "Preview company profile change", "company.write", "preview", ownerAdmin, [], companyPreviewInput, "Show the exact public profile changes before confirmation; no write occurs."),
