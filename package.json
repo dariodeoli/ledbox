@@ -33,6 +33,7 @@
     "check:shared-fields": "node scripts/check-shared-fields.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@prisma/client": "^6.16.2",
     "bcryptjs": "^3.0.2",
     "fflate": "0.8.3",
