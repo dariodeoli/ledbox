@@ -19,6 +19,8 @@ const RENTAL_PREVIEW_SCOPE = "mcp:preview:rental-prices:v1";
 const COMPANY_PREVIEW_SCOPE = "mcp:preview:company:v1";
 const PHOTO_PREVIEW_SCOPE = "mcp:preview:photos:v1";
 const BUDGET_PREVIEW_SCOPE = "mcp:preview:budgets:v1";
+const TREASURY_PREVIEW_SCOPE = "mcp:preview:treasury:v1";
+const PAYMENT_PREVIEW_SCOPE = "mcp:preview:payments:v1";
 
 function blocked(context: AdminContext): boolean {
   return context.demo || context.sandbox;
@@ -303,6 +305,95 @@ type BudgetDraftInput = {
 const BUDGET_MAX_INT = 2_147_483_647;
 
 /** Build a reviewable snapshot from a tenant client and optional tenant inventory items. */
+type TreasuryPreviewInput = { accountId?: string; name?: string; type?: "CASH" | "BANK" | "CHEQUE" | "OTHER"; bank?: string | null; number?: string | null; alias?: string | null; openingBalance?: number; active?: boolean };
+
+export async function previewTreasuryAccount(context: AdminContext, input: TreasuryPreviewInput) {
+  if (blocked(context)) throw new Error("MUTATION_BLOCKED");
+  requireCapability(context, "finance.write");
+  const before = input.accountId ? await db.treasuryAccount.findFirst({ where: { id: input.accountId, organizationId: context.organizationId }, select: { id: true, name: true, type: true, bank: true, number: true, alias: true, openingBalance: true, active: true } }) : null;
+  if (input.accountId && !before) throw new Error("NOT_FOUND");
+  const after = {
+    name: input.name ?? before?.name ?? "", type: input.type ?? before?.type ?? "CASH",
+    bank: input.bank === undefined ? before?.bank ?? null : input.bank,
+    number: input.number === undefined ? before?.number ?? null : input.number,
+    alias: input.alias === undefined ? before?.alias ?? null : input.alias,
+    openingBalance: input.openingBalance ?? before?.openingBalance ?? 0,
+    active: input.active ?? before?.active ?? true,
+  };
+  if (after.type !== "BANK") after.bank = null;
+  return storePreview(context, TREASURY_PREVIEW_SCOPE, { kind: "treasury-account", actorId: context.user.id, accountId: before?.id ?? null,
+    before: before ? { name: before.name, type: before.type, bank: before.bank, number: before.number, alias: before.alias, openingBalance: before.openingBalance, active: before.active } : null,
+    after });
+}
+
+export async function confirmTreasuryAccount(context: AdminContext, input: ConfirmInput): Promise<unknown> {
+  if (blocked(context)) throw new Error("MUTATION_BLOCKED");
+  requireCapability(context, "finance.write");
+  return confirmMcpPreview(context, input, TREASURY_PREVIEW_SCOPE, "mcp:treasury:confirm:v1", async (tx, preview) => {
+    if (preview.kind !== "treasury-account" || !preview.after || typeof preview.after !== "object") return { code: "PREVIEW_INVALID" };
+    const after = preview.after as JsonObject;
+    const before = preview.before && typeof preview.before === "object" ? preview.before as JsonObject : null;
+    const accountId = typeof preview.accountId === "string" ? preview.accountId : null;
+    const current = accountId ? await tx.treasuryAccount.findFirst({ where: { id: accountId, organizationId: context.organizationId }, select: { id: true, name: true, type: true, bank: true, number: true, alias: true, openingBalance: true, active: true } }) : null;
+    if (accountId && !current) return { code: "NOT_FOUND" };
+    if ((current?.name ?? null) !== (before?.name ?? null) || (current?.type ?? null) !== (before?.type ?? null) || (current?.bank ?? null) !== (before?.bank ?? null) || (current?.number ?? null) !== (before?.number ?? null) || (current?.alias ?? null) !== (before?.alias ?? null) || (current?.openingBalance ?? null) !== (before?.openingBalance ?? null) || (current?.active ?? null) !== (before?.active ?? null)) return { code: "PREVIEW_STALE" };
+    const name = String(after.name).trim();
+    const duplicate = await tx.treasuryAccount.findFirst({ where: { organizationId: context.organizationId, name, ...(current ? { id: { not: current.id } } : {}) }, select: { id: true } });
+    if (duplicate) return { code: "DUPLICATE_ACCOUNT" };
+    if (current && current.openingBalance !== after.openingBalance && await tx.treasuryMovement.count({ where: { organizationId: context.organizationId, accountId: current.id } }) > 0) return { code: "OPENING_BALANCE_LOCKED" };
+    const data = { name, type: after.type as never, bank: after.type === "BANK" ? after.bank as string | null : null, number: after.number as string | null, alias: after.alias as string | null, openingBalance: Number(after.openingBalance), active: after.active === true };
+    const account = current ? await tx.treasuryAccount.update({ where: { id: current.id }, data }) : await tx.treasuryAccount.create({ data: { id: randomUUID(), organizationId: context.organizationId, ...data, currency: "PYG", sortOrder: 0 } });
+    const changed = before ? Object.keys(data).filter((key) => before[key] !== (data as JsonObject)[key]) : Object.keys(data);
+    await recordAudit({ context, action: current ? "update" : "create", entity: "TreasuryAccount", entityId: account.id, summary: `${current ? "Actualizó" : "Creó"} la cuenta de tesorería «${account.name}»`, detail: current ? { changes: Object.fromEntries(changed.map((key) => [key, { from: before?.[key] ?? null, to: (data as JsonObject)[key] }])) } : { fields: data } }, tx);
+    return { ok: true, account: { id: account.id, name: account.name, type: account.type, bank: account.bank, number: account.number, alias: account.alias, openingBalance: account.openingBalance, active: account.active } };
+  });
+}
+
+type PaymentPreviewInput = { expectedPaymentId: string; amount: number; accountId: string; method: string; collectedAt?: string; reference?: string; notes?: string };
+export async function previewClientPayment(context: AdminContext, input: PaymentPreviewInput) {
+  if (blocked(context)) throw new Error("MUTATION_BLOCKED");
+  requireCapability(context, "finance.write");
+  const expected = await db.expectedPayment.findFirst({ where: { id: input.expectedPaymentId, organizationId: context.organizationId }, select: { id: true, label: true, amount: true, paidAmount: true, status: true, budgetId: true, budget: { select: { title: true, clientId: true, client: { select: { id: true, name: true, company: true } } } } } });
+  if (!expected) throw new Error("NOT_FOUND");
+  const remaining = Math.max(0, expected.amount - expected.paidAmount);
+  if (["CONFIRMED", "CANCELLED"].includes(expected.status) || remaining < 1) throw new Error("PAYMENT_CLOSED");
+  if (input.amount > remaining) throw new Error("PAYMENT_EXCEEDS_REMAINING");
+  const account = await db.treasuryAccount.findFirst({ where: { id: input.accountId, organizationId: context.organizationId, active: true }, select: { id: true, name: true } });
+  if (!account) throw new Error("NOT_FOUND");
+  const previewId = randomUUID();
+  const payload = { kind: "client-payment", actorId: context.user.id, expectedPaymentId: expected.id, expectedStatus: expected.status, expectedAmount: expected.amount, paidAmount: expected.paidAmount, remaining, budgetId: expected.budgetId, budgetTitle: expected.budget.title, clientId: expected.budget.client.id, clientName: expected.budget.client.company || expected.budget.client.name, accountId: account.id, accountName: account.name, amount: input.amount, method: input.method, collectedAt: input.collectedAt ?? new Date().toISOString(), reference: input.reference?.trim() || null, notes: input.notes?.trim() || null };
+  await db.idempotencyKey.create({ data: { id: randomUUID(), organizationId: context.organizationId, scope: PAYMENT_PREVIEW_SCOPE, key: previewId, requestHash: "mcp-preview-v1", status: 200, response: payload as Prisma.InputJsonObject, expiresAt: new Date(Date.now() + PREVIEW_TTL_MS) } });
+  return { previewId, expiresInSeconds: PREVIEW_TTL_MS / 1000, changes: payload };
+}
+
+export async function confirmClientPayment(context: AdminContext, input: ConfirmInput): Promise<unknown> {
+  if (blocked(context)) throw new Error("MUTATION_BLOCKED");
+  requireCapability(context, "finance.write");
+  const body = { previewId: input.previewId, idempotencyKey: input.idempotencyKey };
+  const response = await withIdempotency({ request: new Request("https://mcp.internal/payments/confirm", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": input.idempotencyKey }, body: JSON.stringify(body) }), organizationId: context.organizationId, scope: "mcp:payments:confirm:v1", body }, async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`mcp-preview:${context.organizationId}:${PAYMENT_PREVIEW_SCOPE}:${input.previewId}`}, 0))::text AS locked`;
+    const row = await tx.idempotencyKey.findFirst({ where: { organizationId: context.organizationId, scope: PAYMENT_PREVIEW_SCOPE, key: input.previewId, expiresAt: { gt: new Date() } }, select: { id: true, response: true } });
+    if (!row?.response || typeof row.response !== "object" || Array.isArray(row.response)) return Response.json({ code: "PREVIEW_EXPIRED" }, { status: 409 });
+    const preview = row.response as JsonObject;
+    if (preview.kind !== "client-payment" || preview.actorId !== context.user.id || typeof preview.expectedPaymentId !== "string") return Response.json({ code: "PREVIEW_INVALID" }, { status: 403 });
+    await tx.$queryRaw`SELECT "id" FROM "ExpectedPayment" WHERE "id" = ${preview.expectedPaymentId} AND "organizationId" = ${context.organizationId} FOR UPDATE`;
+    const expected = await tx.expectedPayment.findFirst({ where: { id: preview.expectedPaymentId, organizationId: context.organizationId }, select: { amount: true, paidAmount: true, status: true, budgetId: true } });
+    if (!expected) return Response.json({ code: "NOT_FOUND" }, { status: 404 });
+    if (expected.amount !== preview.expectedAmount || expected.paidAmount !== preview.paidAmount || expected.status !== preview.expectedStatus || expected.budgetId !== preview.budgetId) return Response.json({ code: "PREVIEW_STALE" }, { status: 409 });
+    const account = await tx.treasuryAccount.findFirst({ where: { id: preview.accountId as string, organizationId: context.organizationId, active: true }, select: { id: true } });
+    if (!account) return Response.json({ code: "NOT_FOUND" }, { status: 404 });
+    const hooks: Array<() => Promise<void>> = [];
+    const { confirmExpectedPayment } = await import("@/lib/server/expected-payments");
+    const outcome = await confirmExpectedPayment({ organizationId: context.organizationId, expectedPaymentId: preview.expectedPaymentId, tx, afterCommit: hooks, accountId: account.id, amount: Number(preview.amount), method: String(preview.method), collectedAt: new Date(String(preview.collectedAt)), reference: typeof preview.reference === "string" ? preview.reference : null, notes: typeof preview.notes === "string" ? preview.notes : null, actor: context });
+    if (!outcome.ok) return Response.json({ code: "PAYMENT_REJECTED", message: outcome.error }, { status: outcome.status });
+    await tx.idempotencyKey.delete({ where: { id: row.id } });
+    return { status: 200, body: { ok: true, paymentId: outcome.paymentId, appliedAmount: outcome.appliedAmount, remaining: outcome.remaining, alreadyConfirmed: outcome.alreadyConfirmed }, afterCommit: async () => { for (const hook of hooks) await hook(); } };
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(String((result as JsonObject).code ?? "PAYMENT_REJECTED")), { status: response.status });
+  return result;
+}
+
 export async function previewBudgetDraft(context: AdminContext, input: BudgetDraftInput) {
   if (blocked(context)) throw new Error("MUTATION_BLOCKED");
   requireCapability(context, "budgets.write");

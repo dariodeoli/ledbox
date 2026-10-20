@@ -108,6 +108,25 @@ test("profile, rental, photo and budget mutation tools dispatch to their scoped 
   assert.deepEqual(calls, ["rental.preview", "rental.confirm", "company.preview", "company.confirm", "photo.preview", "photo.confirm", "budget.preview", "budget.confirm", "budget.edit.preview", "budget.edit.confirm", "budget.compare.preview", "budget.compare.confirm", "client.preview", "client.confirm", "lead.preview", "lead.confirm", "event.preview", "event.confirm"]);
 });
 
+test("treasury and payment preview/confirm tools route through finance handlers", async () => {
+  const calls: string[] = [];
+  const mutations = {
+    treasuryPreview: async () => { calls.push("treasury.preview"); return { previewId: "preview-id-123456" }; },
+    treasuryConfirm: async () => { calls.push("treasury.confirm"); return { ok: true }; },
+    paymentPreview: async () => { calls.push("payments.preview"); return { previewId: "preview-id-123456" }; },
+    paymentConfirm: async () => { calls.push("payments.confirm"); return { ok: true }; },
+  } as unknown as McpMutationHandlers;
+  const financeContext = { ...context(), role: "FINANCE" } as AdminContext;
+  await dispatchMcpTool("treasury.preview", { name: "Cuenta", type: "BANK" }, financeContext, {}, mutations);
+  await dispatchMcpTool("treasury.confirm", { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" }, financeContext, {}, mutations);
+  await dispatchMcpTool("payments.preview", { expectedPaymentId: "expected-1", amount: 50000, accountId: "account-1", method: "Transferencia" }, financeContext, {}, mutations);
+  await dispatchMcpTool("payments.confirm", { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" }, financeContext, {}, mutations);
+  assert.deepEqual(calls, ["treasury.preview", "treasury.confirm", "payments.preview", "payments.confirm"]);
+  const viewer = await dispatchMcpTool("payments.confirm", { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" }, context("VIEWER"), {}, mutations);
+  assert.equal(viewer.isError, true);
+  assert.match(viewer.content[0].text, /FORBIDDEN/);
+});
+
 test("role matrix is rechecked for every confirm tool", async () => {
   const inputs: Record<string, unknown> = {
     "prices.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
@@ -121,6 +140,8 @@ test("role matrix is rechecked for every confirm tool", async () => {
     "clients.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
     "leads.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
     "events.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
+    "treasury.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
+    "payments.confirm": { previewId: "preview-id-123456", idempotencyKey: "stable-key-1234567" },
   };
   for (const [tool, input] of Object.entries(inputs)) {
     const denied = await dispatchMcpTool(tool, input, context("VIEWER"), {});

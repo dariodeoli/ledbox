@@ -12,6 +12,8 @@ actor identity, or an active-company selector from MCP arguments.
 | --- | --- | --- | --- |
 | `company.read`, `catalog.read`, `inventory.read`, `clients.read`, `leads.read`, `budgets.read`, `events.read` | Read | All five roles | Tenant-scoped read; response fields are allowlisted. |
 | `treasury.read`, `payments.read`, `reports.read` | Read | OWNER, ADMIN, FINANCE | Bank accounts, client payments and aggregate cash/commercial reports. No supplier costs or secrets. |
+| `treasury.preview` / `treasury.confirm` | Two-step write | OWNER, ADMIN, FINANCE | Create or edit an account; opening balance cannot be changed after movements exist. |
+| `payments.preview` / `payments.confirm` | Two-step write | OWNER, ADMIN, FINANCE | Apply a partial or full collection to an existing expected budget payment, posting the client payment and treasury movement atomically. |
 | `prices.preview` / `prices.confirm` | Two-step write | OWNER, ADMIN, FINANCE | Preview exact change, then confirm once. |
 | `quantities.preview` / `quantities.confirm` | Two-step write | OWNER, ADMIN, OPERATIONS | Preview exact change, then confirm once. |
 | `company.preview` / `company.confirm` | Two-step write | OWNER, ADMIN | Preview public profile changes, then confirm once. |

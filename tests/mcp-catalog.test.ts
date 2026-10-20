@@ -33,6 +33,8 @@ test("write permissions separate prices, quantities, company profile, photos and
     "clients.preview": ["OWNER", "ADMIN", "OPERATIONS"], "clients.confirm": ["OWNER", "ADMIN", "OPERATIONS"],
     "leads.preview": ["OWNER", "ADMIN", "OPERATIONS"], "leads.confirm": ["OWNER", "ADMIN", "OPERATIONS"],
     "events.preview": ["OWNER", "ADMIN", "OPERATIONS"], "events.confirm": ["OWNER", "ADMIN", "OPERATIONS"],
+    "treasury.preview": ["OWNER", "ADMIN", "FINANCE"], "treasury.confirm": ["OWNER", "ADMIN", "FINANCE"],
+    "payments.preview": ["OWNER", "ADMIN", "FINANCE"], "payments.confirm": ["OWNER", "ADMIN", "FINANCE"],
   };
   for (const [name, roles] of Object.entries(allowed)) {
     for (const role of ["OWNER", "ADMIN", "FINANCE", "OPERATIONS", "VIEWER"] as const) {
@@ -53,6 +55,21 @@ test("budget edit and comparison schemas accept only bounded payment terms and a
   const comparison = { title: "Opciones", expiresAt: "2026-11-01T12:00:00.000Z", alternatives: [{ budgetId: "b1", label: "A" }, { budgetId: "b2", label: "B" }] };
   assert.deepEqual(parseMcpToolInput("budgets.compare.preview", comparison), comparison);
   assert.throws(() => parseMcpToolInput("budgets.compare.preview", { ...comparison, alternatives: [{ budgetId: "b1", label: "A" }] }));
+});
+
+test("treasury and payment previews are strict and require tenant resource IDs", () => {
+  const create = { name: "Cuenta principal", type: "BANK", bank: "Banco de prueba", number: "001234", alias: "empresa.py", openingBalance: 0 };
+  assert.deepEqual(parseMcpToolInput("treasury.preview", create), create);
+  assert.throws(() => parseMcpToolInput("treasury.preview", { ...create, organizationId: "other" }));
+  assert.throws(() => parseMcpToolInput("treasury.preview", { accountId: "account-1" }));
+  const edit = { accountId: "account-1", active: false };
+  assert.deepEqual(parseMcpToolInput("treasury.preview", edit), edit);
+  const payment = { expectedPaymentId: "expected-1", amount: 250000, accountId: "account-1", method: "Transferencia" };
+  assert.deepEqual(parseMcpToolInput("payments.preview", payment), payment);
+  assert.throws(() => parseMcpToolInput("payments.preview", { ...payment, amount: 1.5 }));
+  assert.throws(() => parseMcpToolInput("payments.preview", { ...payment, organizationId: "other" }));
+  assert.throws(() => authorizeMcpTool({ ...actor("FINANCE"), scopes: ["mcp:connect", "finance:read"] }, "treasury.preview"), McpAuthorizationError);
+  assert.equal(authorizeMcpTool({ ...actor("FINANCE"), scopes: ["mcp:connect", "finance:write"] }, "payments.confirm").name, "payments.confirm");
 });
 
 test("input schemas reject caller-selected tenant scope and malformed confirmation", () => {
