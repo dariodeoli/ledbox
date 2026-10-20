@@ -5,7 +5,7 @@ import { parseMcpToolInput } from "../lib/server/mcp-catalog";
 
 test("MCP confirm requires a caller-provided idempotency key and preview reference", () => {
   const confirm = { previewId: "preview-reference-1234", idempotencyKey: "retry-safe-key-123456" };
-  for (const tool of ["prices.confirm", "quantities.confirm", "company.confirm", "photos.confirm", "budgets.confirm"]) {
+  for (const tool of ["prices.confirm", "quantities.confirm", "company.confirm", "photos.confirm", "budgets.confirm", "budgets.edit.confirm", "budgets.compare.confirm"]) {
     assert.deepEqual(parseMcpToolInput(tool, confirm), confirm, tool);
     assert.throws(() => parseMcpToolInput(tool, { previewId: confirm.previewId }), tool);
     assert.throws(() => parseMcpToolInput(tool, { ...confirm, organizationId: "other-tenant" }), tool);

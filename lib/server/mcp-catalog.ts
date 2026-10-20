@@ -35,7 +35,11 @@ export type McpToolName =
   | "photos.preview"
   | "photos.confirm"
   | "budgets.preview"
-  | "budgets.confirm";
+  | "budgets.confirm"
+  | "budgets.edit.preview"
+  | "budgets.edit.confirm"
+  | "budgets.compare.preview"
+  | "budgets.compare.confirm";
 
 export type McpCapability = "company.read" | "catalog.read" | "inventory.read" | "clients.read" | "leads.read" | "budgets.read" | "events.read" | "finance.read" | "prices.write" | "quantities.write" | "company.write" | "photos.write" | "budgets.write";
 
@@ -70,6 +74,9 @@ const companyPreviewInput = z.object({ name: z.string().trim().min(1).max(160).o
 const photoPreviewInput = z.object({ resourceType: z.enum(["product", "company"]), resourceId, variant: z.enum(["light", "dark"]).optional(), fileName: z.string().trim().min(1).max(180), mimeType: imageMime, byteLength: z.number().int().positive().max(1 * 1024 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/i), data: z.string().max(1_400_000) }).strict().refine((v) => (v.resourceType === "company") === Boolean(v.variant), "Company photos require a logo variant; product photos cannot include one");
 const budgetPreviewInput = z.object({ clientId: resourceId, title: z.string().trim().min(1).max(160), currency: z.literal("PYG").default("PYG"), validUntil: z.string().date().nullable().optional(), lines: z.array(z.object({ productId: resourceId.optional(), description: z.string().trim().min(1).max(500), quantity: z.number().int().min(1).max(100_000), unitPrice: currencyAmount }).strict()).min(1).max(200) }).strict();
 const confirmInput = z.object({ previewId: actionId, idempotencyKey }).strict();
+const paymentCondition = z.object({ label: z.string().trim().min(1).max(60), amount: currencyAmount.optional(), dueAt: z.string().date().nullable().optional(), type: z.enum(["fixed", "percent", "remainder"]).optional(), value: z.number().min(0).max(2_147_483_647).optional(), moment: z.string().trim().max(120).nullable().optional(), accountId: resourceId.nullable().optional() }).strict();
+const budgetEditPreviewInput = z.object({ budgetId: resourceId, title: z.string().trim().min(1).max(160).optional(), validUntil: z.string().date().nullable().optional(), advanceAmount: currencyAmount.optional(), paymentTerms: z.string().trim().max(600).nullable().optional(), installmentsJson: z.array(paymentCondition).max(12).optional() }).strict().refine((v) => Object.keys(v).some((key) => key !== "budgetId"), "Provide at least one budget change");
+const budgetComparePreviewInput = z.object({ title: z.string().trim().min(1).max(120), expiresAt: z.string().datetime(), alternatives: z.array(z.object({ budgetId: resourceId, label: z.string().trim().min(1).max(80) }).strict()).min(2).max(5) }).strict();
 
 const safeCompany = ["id", "name", "slug", "publicPhone", "publicEmail", "website", "logoUrl"] as const;
 const safeProduct = ["id", "sku", "name", "description", "category", "imageUrl", "rentalPrice", "salePrice", "currency", "variants"] as const;
@@ -166,6 +173,10 @@ export const MCP_TOOL_CATALOG: readonly McpToolDefinition[] = [
   definition("photos.confirm", "Confirm photo upload", "photos.write", "confirm", operationsWriters, [], confirmInput, "Store a previously reviewed photo via existing tenant-scoped image storage once, with an idempotency key."),
   definition("budgets.preview", "Preview budget draft", "budgets.write", "preview", financeWriters, [], budgetPreviewInput, "Recalculate and compare totals, show the draft and unresolved fields; no budget is created or sent."),
   definition("budgets.confirm", "Confirm budget draft", "budgets.write", "confirm", financeWriters, [], confirmInput, "Create a draft from a reviewed preview once. Does not send, reserve inventory or record payment."),
+  definition("budgets.edit.preview", "Preview draft budget update", "budgets.write", "preview", financeWriters, [], budgetEditPreviewInput, "Preview changes to a draft's title, validity or payment conditions, including validated tenant bank accounts; no change is made."),
+  definition("budgets.edit.confirm", "Confirm draft budget update", "budgets.write", "confirm", financeWriters, [], confirmInput, "Apply an actor-bound draft edit once, with stale-preview protection, payment-plan validation and audit."),
+  definition("budgets.compare.preview", "Preview budget alternatives", "budgets.write", "preview", financeWriters, [], budgetComparePreviewInput, "Validate 2 to 5 active budgets for the same tenant and client before creating a comparison link."),
+  definition("budgets.compare.confirm", "Confirm budget alternatives", "budgets.write", "confirm", financeWriters, [], confirmInput, "Create a client comparison from a reviewed preview once, with tenant checks and audit."),
 ];
 
 const byName = new Map(MCP_TOOL_CATALOG.map((tool) => [tool.name, tool]));

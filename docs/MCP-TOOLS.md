@@ -17,6 +17,8 @@ actor identity, or an active-company selector from MCP arguments.
 | `company.preview` / `company.confirm` | Two-step write | OWNER, ADMIN | Preview public profile changes, then confirm once. |
 | `photos.preview` / `photos.confirm` | Two-step write | OWNER, ADMIN, OPERATIONS | Validate image metadata, then store via existing tenant-scoped storage. |
 | `budgets.preview` / `budgets.confirm` | Two-step write | OWNER, ADMIN, FINANCE | Review a PYG draft for an existing tenant client and optional inventory items, then create draft only. |
+| `budgets.edit.preview` / `budgets.edit.confirm` | Two-step write | OWNER, ADMIN, FINANCE | Edit title, validity and payment plan on a DRAFT only; payment conditions may reference active PYG treasury accounts in the same company. |
+| `budgets.compare.preview` / `budgets.compare.confirm` | Two-step write | OWNER, ADMIN, FINANCE | Create a public 2–5 option comparison from eligible budgets of one client after a current-state preview. |
 
 `VIEWER` is read-only. No tool exposes internal purchase costs, margins,
 supplier records, or supplier banking details. Budget reads expose customer
