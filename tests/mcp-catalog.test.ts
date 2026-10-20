@@ -18,6 +18,7 @@ test("catalog exposes tenant-safe read tools to all roles, including read-only V
 test("write permissions separate prices, quantities, company profile, photos and budget drafts", () => {
   const allowed: Record<string, readonly AdminRole[]> = {
     "prices.preview": ["OWNER", "ADMIN", "FINANCE"], "prices.confirm": ["OWNER", "ADMIN", "FINANCE"],
+    "rental-prices.preview": ["OWNER", "ADMIN", "FINANCE"], "rental-prices.confirm": ["OWNER", "ADMIN", "FINANCE"],
     "quantities.preview": ["OWNER", "ADMIN", "OPERATIONS"], "quantities.confirm": ["OWNER", "ADMIN", "OPERATIONS"],
     "company.preview": ["OWNER", "ADMIN"], "company.confirm": ["OWNER", "ADMIN"],
     "photos.preview": ["OWNER", "ADMIN", "OPERATIONS"], "photos.confirm": ["OWNER", "ADMIN", "OPERATIONS"],
@@ -50,13 +51,15 @@ test("budget and photo write schemas are bounded and previews do not accept hidd
   assert.equal(getMcpTool("unlisted.tool"), undefined);
 });
 
-test("photo preview accepts the documented maximum and rejects oversized, unsupported or malformed files", () => {
-  const valid = { resourceType: "product", resourceId: "p1", fileName: "panel.webp", mimeType: "image/webp", byteLength: 8 * 1024 * 1024, sha256: "a".repeat(64) };
-  assert.equal((parseMcpToolInput("photos.preview", valid) as { byteLength: number }).byteLength, 8 * 1024 * 1024);
-  assert.throws(() => parseMcpToolInput("photos.preview", { ...valid, byteLength: 8 * 1024 * 1024 + 1 }));
+test("photo preview requires bounded image bytes and a company logo variant", () => {
+  const valid = { resourceType: "product", resourceId: "p1", fileName: "panel.webp", mimeType: "image/webp", byteLength: 1024 * 1024, sha256: "a".repeat(64), data: "A".repeat(1_400_000) };
+  assert.equal((parseMcpToolInput("photos.preview", valid) as { byteLength: number }).byteLength, 1024 * 1024);
+  assert.throws(() => parseMcpToolInput("photos.preview", { ...valid, byteLength: 1024 * 1024 + 1 }));
   assert.throws(() => parseMcpToolInput("photos.preview", { ...valid, mimeType: "image/svg+xml" }));
   assert.throws(() => parseMcpToolInput("photos.preview", { ...valid, sha256: "not-a-digest" }));
   assert.throws(() => parseMcpToolInput("photos.preview", { ...valid, fileName: "x.png", organizationId: "org_b" }));
+  assert.throws(() => parseMcpToolInput("photos.preview", { ...valid, resourceType: "company" }));
+  assert.doesNotThrow(() => parseMcpToolInput("photos.preview", { ...valid, resourceType: "company", variant: "dark" }));
 });
 
 test("read output allowlists remove internal cost, margin, supplier and bank fields recursively", () => {
