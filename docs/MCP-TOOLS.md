@@ -1,0 +1,47 @@
+# EventOS MCP tool contract
+
+This catalog is the server-side source of truth for tool names, input schemas,
+field allowlists, and role gates: `lib/server/mcp-catalog.ts`. The HTTP adapter
+must resolve the bearer token to an active membership first and then construct
+`McpActorContext` from that membership. Never accept `organizationId`, role,
+actor identity, or an active-company selector from MCP arguments.
+
+## Tools
+
+| Tool | Access | Roles | Effect |
+| --- | --- | --- | --- |
+| `company.read`, `catalog.read`, `inventory.read`, `clients.read`, `leads.read`, `budgets.read`, `events.read` | Read | All five roles | Tenant-scoped read; response fields are allowlisted. |
+| `prices.preview` / `prices.confirm` | Two-step write | OWNER, ADMIN, FINANCE | Preview exact change, then confirm once. |
+| `quantities.preview` / `quantities.confirm` | Two-step write | OWNER, ADMIN, OPERATIONS | Preview exact change, then confirm once. |
+| `company.preview` / `company.confirm` | Two-step write | OWNER, ADMIN | Preview public profile changes, then confirm once. |
+| `photos.preview` / `photos.confirm` | Two-step write | OWNER, ADMIN, OPERATIONS | Validate image metadata, then store via existing tenant-scoped storage. |
+| `budgets.preview` / `budgets.confirm` | Two-step write | OWNER, ADMIN, FINANCE | Review a draft, then create draft only. |
+
+`VIEWER` is read-only. No tool exposes internal purchase costs, margins,
+supplier records, or supplier banking details. Budget reads expose customer
+prices only. A write preview must be persisted server-side, scoped to actor and
+organization, expire, and include a digest of normalized input. Confirmation
+must load that preview, recheck membership/role and resource ownership, compare
+the digest, and atomically record the idempotency key with the write. Replaying
+the same key returns the original result; reusing it with a different payload
+is a conflict. Confirmation never means “send”: budget confirmation only
+creates a draft and never reserves stock or records payment.
+
+## Adapter requirements
+
+- Call `authorizeMcpTool` on every request, including confirmation. Do not rely
+  on the tool list exposed during initialization as authorization.
+- Parse arguments using `parseMcpToolInput`; schemas are strict and do not
+  accept tenant IDs or unexpected properties.
+- Every database query and mutation must include the context's organization ID
+  in the database predicate. Resolve parent-child ownership before mutation.
+- Project read responses through each tool's `outputFields` allowlist. Never
+  serialize ORM rows directly.
+- The photo adapter must verify actual bytes (not only declared MIME/name),
+  enforce size limits, and use existing image storage.
+- Add rate limits, audit actor/tool/resource/outcome, and cap result sizes at
+  the adapter boundary. Errors must not reveal whether another tenant's ID
+  exists.
+
+This file defines the reusable catalog and policy contract; it does not claim
+OAuth discovery or a deployed `/mcp` transport exists.
