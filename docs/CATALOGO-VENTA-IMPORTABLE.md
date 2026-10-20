@@ -1,6 +1,10 @@
 # Catálogo de venta importable por JSON — auditoría y contrato propuesto
 
-Estado: **propuesta de contrato**, no implementado ni habilitado en el importador. No contiene productos, costos ni precios reales. La empresa y el usuario salen de la sesión autenticada; el JSON nunca puede seleccionar otro tenant.
+Estado: **contrato y esquema persistente aditivo**, sin endpoints ni importación habilitada. No contiene productos, costos ni precios reales. La empresa y el usuario salen de la sesión autenticada; el JSON nunca puede seleccionar otro tenant.
+
+La primera etapa añade `SalesProduct`, `SalesProductFamily`, `SalesProductCost`, `SalesProductPriceTier` y `SalesProductImage`. Todos pertenecen a `Organization`; las relaciones producto/familia/costo/precio/imagen incluyen `organizationId` para impedir cruces entre empresas en la base. `SalesProduct` no tiene relación con `InventoryItem`, alquiler ni stock. Campos de costos y precios admiten `null` para valores desconocidos; los componentes conservan su moneda y monto como datos estructurados JSON hasta acordar un contrato versionado de persistencia. `dimensions` permite registrar dimensiones/CBM explícitos sin derivar valores faltantes. La familia almacena ejes y cada SKU sus opciones.
+
+La migración crea tablas vacías y no copia el catálogo de alquiler. Todavía no hay escritor, lectura de tienda/carrito/presupuesto, carga de binarios, undo de importación ni permisos específicos. El contrato JSON existente continúa siendo sólo vista previa; la idempotencia y el deshacer requieren diseñar y probar un servicio transaccional antes de activarlos.
 
 ## Hallazgos del esquema actual
 
