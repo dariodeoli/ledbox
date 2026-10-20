@@ -154,6 +154,40 @@ export const mcpReadHandlers: McpReadHandlers = {
     });
     return { events: events.map((event) => ({ id: event.id, title: event.name, status: event.status, startsAt: event.startsAt, endsAt: event.endsAt, venueName: event.location, clientName: event.client.name })) };
   },
+
+  "treasury.read": async ({ organizationId }, input) => {
+    const accounts = await db.treasuryAccount.findMany({
+      where: { organizationId, ...(input.activeOnly !== false ? { active: true } : {}) },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }], take: Number(input.limit ?? 50),
+      select: { id: true, name: true, type: true, bank: true, number: true, alias: true, currency: true, openingBalance: true, active: true,
+        movements: { select: { direction: true, amount: true } } },
+    });
+    return { accounts: accounts.map((account) => {
+      const balance = account.openingBalance + account.movements.reduce((sum, movement) => sum + (movement.direction === "IN" ? movement.amount : movement.direction === "OUT" ? -movement.amount : 0), 0);
+      return { id: account.id, name: account.name, type: account.type, bank: account.bank, number: account.number, alias: account.alias, currency: account.currency, openingBalance: account.openingBalance, balance, active: account.active };
+    }) };
+  },
+
+  "payments.read": async ({ organizationId }, input) => {
+    const payments = await db.clientPayment.findMany({
+      where: { organizationId, ...(typeof input.clientId === "string" ? { clientId: input.clientId } : {}), ...(typeof input.budgetId === "string" ? { budgetId: input.budgetId } : {}), ...(typeof input.status === "string" ? { status: input.status as never } : {}) },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: Number(input.limit ?? 50),
+      select: { id: true, amount: true, status: true, paidAt: true, collectedAt: true, method: true, reference: true, dueAt: true, client: { select: { name: true } }, budget: { select: { title: true } }, treasuryAccount: { select: { name: true } } },
+    });
+    return { payments: payments.map((payment) => ({ id: payment.id, amount: payment.amount, status: payment.status, paidAt: payment.paidAt, collectedAt: payment.collectedAt, method: payment.method, reference: payment.reference, dueAt: payment.dueAt, clientName: payment.client.name, budgetTitle: payment.budget?.title ?? null, accountName: payment.treasuryAccount?.name ?? null })) };
+  },
+
+  "reports.read": async ({ organizationId }, input) => {
+    const from = new Date(`${String(input.from)}T00:00:00.000Z`); const to = new Date(`${String(input.to)}T23:59:59.999Z`);
+    if (from > to) throw new Error("INVALID_RANGE");
+    const [budgets, received, pending, events] = await Promise.all([
+      db.budget.aggregate({ where: { organizationId, createdAt: { gte: from, lte: to } }, _count: { _all: true }, _sum: { total: true } }),
+      db.clientPayment.aggregate({ where: { organizationId, status: "RECEIVED", OR: [{ collectedAt: { gte: from, lte: to } }, { collectedAt: null, paidAt: { gte: from, lte: to } }] }, _count: { _all: true }, _sum: { amount: true } }),
+      db.clientPayment.aggregate({ where: { organizationId, status: "PENDING", dueAt: { gte: from, lte: to } }, _count: { _all: true }, _sum: { amount: true } }),
+      db.event.count({ where: { organizationId, deletedAt: null, createdAt: { gte: from, lte: to } } }),
+    ]);
+    return { period: { from: String(input.from), to: String(input.to) }, budgets: { count: budgets._count._all, total: budgets._sum.total ?? 0 }, payments: { receivedCount: received._count._all, receivedAmount: received._sum.amount ?? 0, pendingCount: pending._count._all, pendingAmount: pending._sum.amount ?? 0 }, received: received._sum.amount ?? 0, pending: pending._sum.amount ?? 0, events };
+  },
 };
 
 /** Convert the trusted tenancy context into the narrow context the MCP catalog accepts. */

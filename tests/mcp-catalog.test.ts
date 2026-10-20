@@ -7,11 +7,16 @@ const actor = (role: AdminRole, organizationId = "org_a"): McpActorContext => ({
 
 test("catalog exposes tenant-safe read tools to all roles, including read-only VIEWER", () => {
   const reads = MCP_TOOL_CATALOG.filter((tool) => tool.access === "read");
-  assert.deepEqual(reads.map((tool) => tool.name), ["company.read", "catalog.read", "inventory.read", "clients.read", "leads.read", "budgets.read", "events.read"]);
+  assert.deepEqual(reads.map((tool) => tool.name), ["company.read", "catalog.read", "inventory.read", "clients.read", "leads.read", "budgets.read", "events.read", "treasury.read", "payments.read", "reports.read"]);
   for (const role of ["OWNER", "ADMIN", "FINANCE", "OPERATIONS", "VIEWER"] as const) {
-    for (const tool of reads) assert.equal(authorizeMcpTool(actor(role), tool.name).name, tool.name);
+    for (const tool of reads) {
+      if (["treasury.read", "payments.read", "reports.read"].includes(tool.name)) {
+        if (["OWNER", "ADMIN", "FINANCE"].includes(role)) assert.equal(authorizeMcpTool(actor(role), tool.name).name, tool.name);
+        else assert.throws(() => authorizeMcpTool(actor(role), tool.name), McpAuthorizationError);
+      } else assert.equal(authorizeMcpTool(actor(role), tool.name).name, tool.name);
+    }
   }
-  const allFields = reads.flatMap((tool) => tool.outputFields).join(" ").toLowerCase();
+  const allFields = reads.filter((tool) => !["treasury.read", "payments.read"].includes(tool.name)).flatMap((tool) => tool.outputFields).join(" ").toLowerCase();
   assert.doesNotMatch(allFields, /cost|margin|supplier|proveedor|bank/);
 });
 

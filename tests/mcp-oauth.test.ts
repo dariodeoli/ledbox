@@ -70,7 +70,7 @@ test("MCP scopes are capped by the existing server role matrix", () => {
   assert.deepEqual(mcpScopesForRole("FINANCE"), [
     MCP_BASE_SCOPE,
     "company:read", "catalog:read", "inventory:read", "clients:read", "leads:read", "budgets:read", "events:read",
-    "inventory:costs:read", "budgets:write", "finance:write", "suppliers:write",
+    "inventory:costs:read", "budgets:write", "finance:write", "finance:read", "suppliers:write",
   ]);
   assert.ok(mcpScopesForRole("OWNER").includes("users:manage"));
   assert.equal(mcpScopeForToolCapability("inventory.read"), "inventory:read");

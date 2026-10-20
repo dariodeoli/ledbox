@@ -21,6 +21,9 @@ export type McpToolName =
   | "leads.read"
   | "budgets.read"
   | "events.read"
+  | "treasury.read"
+  | "payments.read"
+  | "reports.read"
   | "prices.preview"
   | "prices.confirm"
   | "rental-prices.preview"
@@ -34,7 +37,7 @@ export type McpToolName =
   | "budgets.preview"
   | "budgets.confirm";
 
-export type McpCapability = "company.read" | "catalog.read" | "inventory.read" | "clients.read" | "leads.read" | "budgets.read" | "events.read" | "prices.write" | "quantities.write" | "company.write" | "photos.write" | "budgets.write";
+export type McpCapability = "company.read" | "catalog.read" | "inventory.read" | "clients.read" | "leads.read" | "budgets.read" | "events.read" | "finance.read" | "prices.write" | "quantities.write" | "company.write" | "photos.write" | "budgets.write";
 
 const readOnly = ["OWNER", "ADMIN", "FINANCE", "OPERATIONS", "VIEWER"] as const satisfies readonly AdminRole[];
 const ownerAdmin = ["OWNER", "ADMIN"] as const satisfies readonly AdminRole[];
@@ -75,10 +78,14 @@ const safeClient = ["id", "name", "email", "phone", "companyName"] as const;
 const safeLead = ["id", "name", "email", "phone", "message", "createdAt", "status"] as const;
 const safeBudget = ["id", "title", "status", "currency", "subtotal", "discount", "total", "validUntil", "clientName", "lines"] as const;
 const safeEvent = ["id", "title", "status", "startsAt", "endsAt", "venueName", "clientName"] as const;
+const safeTreasury = ["id", "name", "type", "bank", "number", "alias", "currency", "openingBalance", "balance", "active"] as const;
+const safePayment = ["id", "amount", "status", "paidAt", "collectedAt", "method", "reference", "dueAt", "clientName", "budgetTitle", "accountName"] as const;
+const safeReport = ["period", "budgets", "payments", "received", "pending", "events"] as const;
 
 const readCollectionKeys: Partial<Record<McpToolName, string>> = {
   "catalog.read": "products", "inventory.read": "inventory", "clients.read": "clients",
   "leads.read": "leads", "budgets.read": "budgets", "events.read": "events",
+  "treasury.read": "accounts", "payments.read": "payments",
 };
 
 /**
@@ -144,6 +151,9 @@ export const MCP_TOOL_CATALOG: readonly McpToolDefinition[] = [
   definition("leads.read", "Read leads", "leads.read", "read", readOnly, safeLead, z.object({ status: z.enum(["NEW", "CONTACTED", "QUOTED", "WON", "LOST"]).optional(), limit: z.number().int().min(1).max(50).default(20) }).strict(), "Read leads belonging to the authenticated active company; internal notes and consent metadata are excluded."),
   definition("budgets.read", "Read budgets", "budgets.read", "read", readOnly, safeBudget, z.object({ budgetId: resourceId.optional(), status: z.enum(["DRAFT", "SENT", "NEGOTIATING", "APPROVED", "LOST", "CANCELLED"]).optional(), limit: z.number().int().min(1).max(50).default(20) }).strict(), "Read tenant-scoped budgets. Cost, margin, supplier and bank account internals are excluded."),
   definition("events.read", "Read events", "events.read", "read", readOnly, safeEvent, z.object({ eventId: resourceId.optional(), from: z.string().datetime().optional(), to: z.string().datetime().optional(), limit: z.number().int().min(1).max(50).default(20) }).strict(), "Read events belonging to the authenticated active company."),
+  definition("treasury.read", "Read bank and treasury accounts", "finance.read", "read", financeWriters, safeTreasury, z.object({ activeOnly: z.boolean().default(true), limit: z.number().int().min(1).max(50).default(50) }).strict(), "Read the company's treasury accounts and derived balances. Restricted to finance roles."),
+  definition("payments.read", "Read client payments", "finance.read", "read", financeWriters, safePayment, z.object({ clientId: resourceId.optional(), budgetId: resourceId.optional(), status: z.enum(["PENDING", "RECEIVED", "CANCELLED"]).optional(), limit: z.number().int().min(1).max(100).default(50) }).strict(), "Read client payment records and their account assignment. Restricted to finance roles."),
+  definition("reports.read", "Read commercial and cash summary", "finance.read", "read", financeWriters, safeReport, z.object({ from: z.string().date(), to: z.string().date() }).strict(), "Return aggregate budget, payment and event totals for a date range. No internal costs or supplier data."),
   definition("prices.preview", "Preview price change", "prices.write", "preview", financeWriters, [], pricePreviewInput, "Show the exact before/after price and impact before confirmation; no write occurs."),
   definition("prices.confirm", "Confirm price change", "prices.write", "confirm", financeWriters, [], confirmInput, "Apply a previously reviewed price preview once, with an idempotency key."),
   definition("rental-prices.preview", "Preview rental price change", "prices.write", "preview", financeWriters, [], rentalPricePreviewInput, "Preview a rental tariff change only; inventory quantities and sale prices are untouched."),
