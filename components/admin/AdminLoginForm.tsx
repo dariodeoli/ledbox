@@ -19,7 +19,7 @@ async function responseMessage(response: Response, fallback: string) {
   }
 }
 
-export function AdminLoginForm({ googleError = "" }: { googleError?: string }) {
+export function AdminLoginForm({ googleError = "", next = PANEL_HOME }: { googleError?: string; next?: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,7 +40,7 @@ export function AdminLoginForm({ googleError = "" }: { googleError?: string }) {
         setError(await responseMessage(response, "No pudimos iniciar sesión. Revisá tus datos."));
         return;
       }
-      router.replace(PANEL_HOME);
+      router.replace(next);
       router.refresh();
     } catch {
       setError("No pudimos conectar con el panel. Intentá nuevamente.");
@@ -54,7 +54,7 @@ export function AdminLoginForm({ googleError = "" }: { googleError?: string }) {
       <span className="admin-card-index">01 / acceso</span>
       <h1 id="login-title" className="admin-title">Entrar<br /><span>al panel.</span></h1>
       <p className="admin-lede">Gestioná consultas, leads y cotizaciones de LedBox desde un espacio privado.</p>
-      <a className="admin-google-button" href="/api/auth/login/google"><span aria-hidden="true"><GoogleMark /></span> Continuar con Google</a>
+      <a className="admin-google-button" href={`/api/auth/login/google?next=${encodeURIComponent(next)}`}><span aria-hidden="true"><GoogleMark /></span> Continuar con Google</a>
       <div className="admin-divider" aria-hidden="true"><span>o ingresá con correo</span></div>
       <form className="admin-form admin-form--uniform" onSubmit={handleSubmit} noValidate>
         {error && <AdminError message={error} />}

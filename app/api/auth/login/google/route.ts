@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { getPublicOrigin } from "@/lib/server/public-origin";
 import { isGoogleAuthOriginAllowed } from "@/lib/server/google-origin";
+import { safeLocalReturnTo } from "@/lib/local-return-to";
 export const runtime = "nodejs";
 /**
  * Inicio del flujo de Google del panel. Con `?invitation=<token>` (issue #31)
@@ -24,5 +25,7 @@ export async function GET(request: Request) {
       `ledbox_google_invitation=${encodeURIComponent(invitation)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`,
     );
   }
+  const next = safeLocalReturnTo(new URL(request.url).searchParams.get("next"));
+  if (next) headers.append("Set-Cookie", `ledbox_google_next=${encodeURIComponent(next)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`);
   return new Response(null, { status: 302, headers });
 }

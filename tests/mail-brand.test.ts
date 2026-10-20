@@ -151,7 +151,8 @@ function sources(dir: string): string[] {
 
 test("un correo nuevo no puede armar HTML sin la plantilla única", () => {
   const html = /<!(?:doctype|DOCTYPE) html|<html[\s>]|<table[\s>]|<tr[\s>]|<td[\s>]|<body[\s>]|<h1[\s>]/;
-  const allowed = new Set(["lib/server/mail/template.ts", "app/api/demo/session/route.ts"]);
+  // The OAuth consent screen is HTML, but it is not an email template or email dispatch.
+  const allowed = new Set(["lib/server/mail/template.ts", "app/api/demo/session/route.ts", "app/oauth/authorize/route.ts"]);
   const offenders = [...sources("lib"), ...sources("app")]
     .filter((path) => !allowed.has(path))
     .filter((path) => html.test(readFileSync(join(root, path), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")));

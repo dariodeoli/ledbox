@@ -1,6 +1,8 @@
 # Conectar LedBox/EventOS a clientes MCP (ChatGPT, Claude y compatibles)
 
-**Estado: propuesta de implementación y guía de onboarding. No existe una conexión MCP/OAuth publicada ni este documento permite conectar cuentas hoy.** No se encontró servidor o endpoint MCP, metadata OAuth MCP ni paquete/route MCP en el código inspeccionado. El OAuth de Google descrito en [SSO.md](SSO.md) sólo inicia sesión en el panel: no es OAuth delegado para acceder a herramientas MCP. Verificar de nuevo antes de anunciar disponibilidad.
+**Estado: implementación en revisión, aún no publicada.** Esta rama agrega un authorization server OAuth para el transporte MCP existente, con registro estático de clientes, consentimiento ligado a la sesión/empresa activa, PKCE S256, audiencia y scopes, access tokens opacos de corta duración y revocación. Google OAuth sigue siendo únicamente el inicio de sesión web; el grant MCP es independiente. La compatibilidad con cada cliente, los dominios, TLS y configuración real deben probarse antes de habilitarlo en producción.
+
+Discovery propuesto para el panel configurado: `/.well-known/oauth-authorization-server` y `/.well-known/oauth-protected-resource/mcp`; autorización, token y revocación: `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`. El AS permanece deshabilitado hasta configurar `MCP_OAUTH_ENABLED=true`, `MCP_OAUTH_ISSUER`, `MCP_OAUTH_CLIENTS` y el host `NEXT_PUBLIC_ADMIN_URL` coincidente. No hay registro dinámico de clientes: callbacks y scopes se declaran explícitamente en servidor. Esta documentación no acredita DNS, proveedor OAuth externo, ni conexión de ChatGPT/Claude probada.
 
 Esta guía define el contrato deseado y cómo preparar una futura conexión. Los endpoints, scopes y límites que siguen son propuestas que deben implementarse, probarse y aprobarse; no son endpoints ni permisos activos.
 

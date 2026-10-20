@@ -19,7 +19,7 @@ export async function dispatchMcpTool(
     const tool = getMcpTool(name);
     if (!tool) return result({ code: "NOT_FOUND", message: "Unknown MCP tool." }, true);
     const parsed = parseMcpToolInput(name, rawInput);
-    authorizeMcpTool({ organizationId: context.organizationId, actorId: context.user.id, role: context.role }, name as never);
+    authorizeMcpTool({ organizationId: context.organizationId, actorId: context.user.id, role: context.role, ...(context.mcpScopes ? { scopes: context.mcpScopes } : {}) }, name as never);
     if (tool.access === "confirm") {
       return result({ code: "NOT_IMPLEMENTED", message: "This confirmation handler is not enabled; no change was made." }, true);
     }
