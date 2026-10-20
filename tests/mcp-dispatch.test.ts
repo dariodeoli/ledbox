@@ -6,7 +6,7 @@ import type { McpReadHandlers } from "../lib/server/mcp/readers";
 
 const context = (role: "OWNER" | "VIEWER" = "OWNER"): AdminContext => ({
   organizationId: "org-trusted", role, user: { id: "actor-1" } as never,
-} as AdminContext);
+} as unknown as AdminContext);
 
 test("dispatch supplies trusted tenant context and schema defaults to read handlers", async () => {
   let seen: unknown;
