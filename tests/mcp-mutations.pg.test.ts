@@ -27,12 +27,26 @@ test("MCP sale-price preview is tenant/actor bound, stale-safe, audited and idem
     assert.equal(await db.salesProductPriceTier.count({ where: { productId, organizationId } }), 0, "preview must not write the business price");
     await assert.rejects(() => confirmSalesPrice(context(otherOrganizationId), { previewId: firstPreview.previewId, idempotencyKey: randomUUID() }));
     await assert.rejects(() => confirmSalesPrice(context(organizationId, otherAdminId), { previewId: firstPreview.previewId, idempotencyKey: randomUUID() }));
-    const applied = await confirmSalesPrice(context(organizationId), { previewId: firstPreview.previewId, idempotencyKey: randomUUID() });
+    const confirmKey = randomUUID();
+    const confirmInput = { previewId: firstPreview.previewId, idempotencyKey: confirmKey };
+    const applied = await confirmSalesPrice(context(organizationId), confirmInput);
+    const replay = await confirmSalesPrice(context(organizationId), confirmInput);
     assert.equal((applied as { ok: boolean }).ok, true);
+    assert.deepEqual(replay, applied, "a retry of the exact MCP confirmation returns the original result");
     const tier = await db.salesProductPriceTier.findFirstOrThrow({ where: { productId, organizationId } });
     assert.equal(tier.amount?.toString(), "125000");
+    assert.equal(await db.salesProductPriceTier.count({ where: { productId, organizationId } }), 1, "replay must not create another price tier");
     const auditCount = await db.auditLog.count({ where: { organizationId, entity: "SalesProduct", entityId: productId } });
     assert.equal(auditCount, 1);
+
+    const anotherPreview = await previewSalesPrice(context(organizationId), { productId, price: 128000, currency: "PYG", audience: "RETAIL", minimumUnits: 1 });
+    await assert.rejects(
+      () => confirmSalesPrice(context(organizationId), { previewId: anotherPreview.previewId, idempotencyKey: confirmKey }),
+      (error: unknown) => Boolean(error && typeof error === "object" && "status" in error && error.status === 409),
+      "reusing the same idempotency key for a different preview must conflict",
+    );
+    assert.equal((await db.salesProductPriceTier.findUniqueOrThrow({ where: { id: tier.id } })).amount?.toString(), "125000");
+    assert.equal(await db.auditLog.count({ where: { organizationId, entity: "SalesProduct", entityId: productId } }), 1);
 
     const stalePreview = await previewSalesPrice(context(organizationId), { productId, price: 150000, currency: "PYG", audience: "RETAIL", minimumUnits: 1 });
     await db.salesProductPriceTier.update({ where: { id: tier.id }, data: { amount: 130000 } });
