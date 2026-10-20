@@ -19,13 +19,16 @@ actor identity, or an active-company selector from MCP arguments.
 | `budgets.preview` / `budgets.confirm` | Two-step write | OWNER, ADMIN, FINANCE | Review a PYG draft for an existing tenant client and optional inventory items, then create draft only. |
 | `budgets.edit.preview` / `budgets.edit.confirm` | Two-step write | OWNER, ADMIN, FINANCE | Edit title, validity and payment plan on a DRAFT only; payment conditions may reference active PYG treasury accounts in the same company. |
 | `budgets.compare.preview` / `budgets.compare.confirm` | Two-step write | OWNER, ADMIN, FINANCE | Create a public 2–5 option comparison from eligible budgets of one client after a current-state preview. |
+| `clients.preview` / `clients.confirm` | Two-step write | OWNER, ADMIN, OPERATIONS | Create or edit tenant client contact details after review. |
+| `leads.preview` / `leads.confirm` | Two-step write | OWNER, ADMIN, OPERATIONS | Create or edit leads. Creating a lead requires caller-supplied consent time, channel and notice version; internal notes are not writable. |
+| `events.preview` / `events.confirm` | Two-step write | OWNER, ADMIN, OPERATIONS | Create or edit events linked to a client in the active company. |
 
 `VIEWER` is read-only. No tool exposes internal purchase costs, margins,
 supplier records, or supplier banking details. Budget reads expose customer
 prices only. A write preview must be persisted server-side, scoped to actor and
 organization, expire, and include a digest of normalized input. Confirmation
 must load that preview, recheck membership/role and resource ownership, compare
-the digest, and atomically record the idempotency key with the write. Replaying
+the target row version for edits, and atomically record the idempotency key with the write. Replaying
 the same key returns the original result; reusing it with a different payload
 is a conflict. Confirmation never means “send”: budget confirmation only
 creates a draft and captures the reviewed commercial line prices. It does not
