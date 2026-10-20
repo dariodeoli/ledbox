@@ -172,6 +172,11 @@ model Organization {
   suppliers             Supplier[]
   supplierJobs          SupplierJob[]
   inventoryItems        InventoryItem[]
+  salesProducts         SalesProduct[]
+  salesProductFamilies SalesProductFamily[]
+  salesProductCosts     SalesProductCost[]
+  salesProductPriceTiers SalesProductPriceTier[]
+  salesProductImages    SalesProductImage[]
   inventoryUnits        InventoryUnit[]
   inventoryIncidents    InventoryIncident[]
   inventoryCountSessions InventoryCountSession[]
@@ -3190,6 +3195,114 @@ model InventoryFamily {
 
   @@index([organizationId, code])
   @@index([organizationId, deletedAt])
+}
+
+/// Producto comercial independiente de alquiler e inventario físico (issue #356).
+/// No contiene cantidad/stock. Datos comerciales desconocidos permanecen null.
+model SalesProduct {
+  id             String   @id
+  organizationId String
+  familyId       String?
+  sku            String
+  name           String
+  description    String?
+  category       String?
+  specifications Json     @default("{}")
+  variantOptions Json     @default("{}")
+  dimensions     Json?
+  archivedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  family         SalesProductFamily? @relation(fields: [familyId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  cost           SalesProductCost?
+  priceTiers     SalesProductPriceTier[]
+  images         SalesProductImage[]
+
+  @@unique([organizationId, sku])
+  @@unique([id, organizationId])
+  @@index([organizationId, familyId])
+  @@index([organizationId, archivedAt])
+}
+
+/// Agrupa variantes comerciales; nunca crea un artículo de alquiler.
+model SalesProductFamily {
+  id             String   @id
+  organizationId String
+  code           String
+  name           String
+  axes           Json     @default("[]")
+  archivedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products       SalesProduct[]
+
+  @@unique([organizationId, code])
+  @@unique([id, organizationId])
+  @@index([organizationId, archivedAt])
+}
+
+/// Snapshot vigente del costo estructurado. amount nullable = desconocido, currency ISO 4217.
+model SalesProductCost {
+  id             String   @id
+  organizationId String
+  productId      String   @unique
+  originCost     Json?
+  chinaInland    Json?
+  freight        Json?
+  importCost     Json?
+  otherCosts     Json     @default("[]")
+  cbm            Decimal? @db.Decimal(12, 6)
+  landedCost     Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product        SalesProduct @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([productId, organizationId])
+  @@index([organizationId])
+}
+
+/// Precios explícitos por audiencia y umbral de unidades; nunca sustituye precios de alquiler.
+model SalesProductPriceTier {
+  id             String   @id
+  organizationId String
+  productId      String
+  audience       SalesPriceAudience
+  minimumUnits   Int
+  amount         Decimal? @db.Decimal(14, 2)
+  currency       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product        SalesProduct @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([productId, audience, minimumUnits])
+  @@index([organizationId, productId])
+}
+
+enum SalesPriceAudience {
+  RETAIL
+  WHOLESALE
+}
+
+/// Metadatos de imagen comercial; el binario sigue el pipeline de medios de la aplicación.
+model SalesProductImage {
+  id             String   @id
+  organizationId String
+  productId      String
+  position       Int      @default(0)
+  alt            String?
+  url            String?
+  mime           String?
+  size           Int?
+  data           Bytes?
+  createdAt      DateTime @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product        SalesProduct @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@index([organizationId, productId, position])
 }
 
 /// Foto extra de un producto (tienda, parte 2). La foto principal queda en `InventoryItem`; estas son
