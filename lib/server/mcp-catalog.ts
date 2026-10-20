@@ -56,7 +56,7 @@ const imageMime = z.enum(["image/jpeg", "image/png", "image/webp"]);
 const actionId = z.string().trim().min(16).max(128);
 const idempotencyKey = z.string().trim().min(16).max(128);
 
-const pricePreviewInput = z.object({ productId: resourceId, variantId: resourceId.optional(), price: currencyAmount, currency: z.string().length(3).default("PYG") }).strict();
+const pricePreviewInput = z.object({ productId: resourceId, price: currencyAmount, currency: z.string().length(3).default("PYG"), audience: z.enum(["RETAIL", "WHOLESALE"]).default("RETAIL"), minimumUnits: z.number().int().min(1).max(100_000).default(1) }).strict();
 const quantityPreviewInput = z.object({ productId: resourceId, unitId: resourceId.optional(), quantity: z.number().int().min(0).max(100_000), reason: z.string().trim().min(3).max(300) }).strict();
 const companyPreviewInput = z.object({ name: z.string().trim().min(1).max(160).optional(), publicPhone: z.string().trim().max(40).nullable().optional(), publicEmail: z.string().trim().email().max(254).nullable().optional(), website: z.string().trim().url().max(500).nullable().optional() }).strict().refine((value) => Object.keys(value).length > 0, "Provide at least one company field");
 const photoPreviewInput = z.object({ resourceType: z.enum(["product", "company"]), resourceId, fileName: z.string().trim().min(1).max(180), mimeType: imageMime, byteLength: z.number().int().positive().max(8 * 1024 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/i) }).strict();
@@ -70,6 +70,61 @@ const safeClient = ["id", "name", "email", "phone", "companyName"] as const;
 const safeLead = ["id", "name", "email", "phone", "message", "createdAt", "status"] as const;
 const safeBudget = ["id", "title", "status", "currency", "subtotal", "discount", "total", "validUntil", "clientName", "lines"] as const;
 const safeEvent = ["id", "title", "status", "startsAt", "endsAt", "venueName", "clientName"] as const;
+
+const readCollectionKeys: Partial<Record<McpToolName, string>> = {
+  "catalog.read": "products", "inventory.read": "inventory", "clients.read": "clients",
+  "leads.read": "leads", "budgets.read": "budgets", "events.read": "events",
+};
+
+/**
+ * Enforce the output allowlist at the dispatch boundary as defense in depth.
+ * Reader implementations should still use narrow database `select`s.
+ */
+export function sanitizeMcpReadOutput(name: McpToolName, value: unknown): unknown {
+  const tool = byName.get(name);
+  if (!tool || tool.access !== "read") return undefined;
+  const collectionKey = readCollectionKeys[name];
+  if (collectionKey && value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    const rows = record[collectionKey];
+    if (!Array.isArray(rows)) return { [collectionKey]: [] };
+    return { [collectionKey]: rows.map((row) => sanitizeReadRecord(tool.outputFields, row)) };
+  }
+  return sanitizeReadRecord(tool.outputFields, value);
+}
+
+function sanitizeReadRecord(fields: readonly string[], value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((entry) => sanitizeReadRecord(fields, entry));
+  if (!value || typeof value !== "object" || value instanceof Date) return value;
+  const source = value as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  for (const field of fields) {
+    if (!(field in source)) continue;
+    const nested = source[field];
+    if (field === "lines" && Array.isArray(nested)) {
+      result[field] = nested.map((line) => sanitizeReadRecord(["name", "description", "quantity", "days", "unitPrice", "subtotal"], line));
+    } else if (field === "variants" && nested && typeof nested === "object") {
+      result[field] = sanitizeReadRecord(["familyId", "code", "name", "axes", "options"], nested);
+    } else if (field === "axes" || field === "options") {
+      // Variant metadata is user-authored JSON; recursively retain descriptive
+      // choice data but reject internal cost/supplier keys by explicit schema.
+      result[field] = sanitizeVariantMetadata(nested);
+    } else if (field === "requestedItems" && Array.isArray(nested)) {
+      result[field] = nested.map((item) => sanitizeReadRecord(["name", "sku", "quantity", "days", "notes", "imageUrl"], item));
+    } else {
+      result[field] = nested;
+    }
+  }
+  return result;
+}
+
+function sanitizeVariantMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeVariantMetadata);
+  if (!value || typeof value !== "object") return value;
+  const source = value as Record<string, unknown>;
+  const allowed = ["id", "name", "label", "code", "sku", "value", "values", "type", "required", "position", "price", "amount", "currency", "imageUrl"];
+  return Object.fromEntries(allowed.filter((key) => key in source).map((key) => [key, sanitizeVariantMetadata(source[key])]));
+}
 
 function definition(name: McpToolName, title: string, capability: McpCapability, access: McpToolDefinition["access"], allowedRoles: readonly AdminRole[], outputFields: readonly string[], inputSchema: z.ZodType, description: string): McpToolDefinition {
   return { name, title, capability, access, allowedRoles, outputFields, inputSchema, description };

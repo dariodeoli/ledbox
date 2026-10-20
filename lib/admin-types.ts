@@ -2347,6 +2347,8 @@ export const AUDIT_ENTITIES = [
   "InventoryCategory",
   // Familia de variantes de producto (docs/VARIANTES.md).
   "InventoryFamily",
+  // Catálogo comercial de venta separado del inventario de alquiler.
+  "SalesProduct",
   "Warehouse",
   "EventInventory",
   "EventExternalNeed",
