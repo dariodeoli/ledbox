@@ -1,7 +1,7 @@
 import type { AdminContext } from "@/lib/server/tenancy";
 import { getMcpTool, MCP_TOOL_CATALOG, McpAuthorizationError, authorizeMcpTool, parseMcpToolInput, sanitizeMcpReadOutput } from "@/lib/server/mcp-catalog";
 import { mcpReadHandlers, type McpReadHandlers } from "./readers";
-import { confirmBudgetDraft, confirmBudgetEdit, confirmBudgetComparison, confirmCompanyPhoto, confirmCompanyProfile, confirmInventoryQuantity, confirmRentalPrice, confirmSalesPrice, confirmMcpClient, confirmMcpEvent, confirmMcpLead, previewBudgetDraft, previewBudgetEdit, previewBudgetComparison, previewCompanyPhoto, previewCompanyProfile, previewInventoryQuantity, previewRentalPrice, previewSalesPrice, previewMcpClient, previewMcpEvent, previewMcpLead } from "./mutations";
+import { confirmBudgetDraft, confirmBudgetEdit, confirmBudgetComparison, confirmClientPayment, confirmTreasuryAccount, confirmCompanyPhoto, confirmCompanyProfile, confirmInventoryQuantity, confirmRentalPrice, confirmSalesPrice, confirmMcpClient, confirmMcpEvent, confirmMcpLead, previewBudgetDraft, previewBudgetEdit, previewBudgetComparison, previewClientPayment, previewTreasuryAccount, previewCompanyPhoto, previewCompanyProfile, previewInventoryQuantity, previewRentalPrice, previewSalesPrice, previewMcpClient, previewMcpEvent, previewMcpLead } from "./mutations";
 
 type TextResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
 export type McpMutationHandlers = {
@@ -27,8 +27,12 @@ export type McpMutationHandlers = {
   leadConfirm: typeof confirmMcpLead;
   eventPreview: typeof previewMcpEvent;
   eventConfirm: typeof confirmMcpEvent;
+  treasuryPreview: typeof previewTreasuryAccount;
+  treasuryConfirm: typeof confirmTreasuryAccount;
+  paymentPreview: typeof previewClientPayment;
+  paymentConfirm: typeof confirmClientPayment;
 };
-const mcpMutationHandlers: McpMutationHandlers = { pricePreview: previewSalesPrice, priceConfirm: confirmSalesPrice, rentalPricePreview: previewRentalPrice, rentalPriceConfirm: confirmRentalPrice, quantityPreview: previewInventoryQuantity, quantityConfirm: confirmInventoryQuantity, companyPreview: previewCompanyProfile, companyConfirm: confirmCompanyProfile, photoPreview: previewCompanyPhoto, photoConfirm: confirmCompanyPhoto, budgetPreview: previewBudgetDraft, budgetConfirm: confirmBudgetDraft, budgetEditPreview: previewBudgetEdit, budgetEditConfirm: confirmBudgetEdit, budgetComparePreview: previewBudgetComparison, budgetCompareConfirm: confirmBudgetComparison, clientPreview: previewMcpClient, clientConfirm: confirmMcpClient, leadPreview: previewMcpLead, leadConfirm: confirmMcpLead, eventPreview: previewMcpEvent, eventConfirm: confirmMcpEvent };
+const mcpMutationHandlers: McpMutationHandlers = { pricePreview: previewSalesPrice, priceConfirm: confirmSalesPrice, rentalPricePreview: previewRentalPrice, rentalPriceConfirm: confirmRentalPrice, quantityPreview: previewInventoryQuantity, quantityConfirm: confirmInventoryQuantity, companyPreview: previewCompanyProfile, companyConfirm: confirmCompanyProfile, photoPreview: previewCompanyPhoto, photoConfirm: confirmCompanyPhoto, budgetPreview: previewBudgetDraft, budgetConfirm: confirmBudgetDraft, budgetEditPreview: previewBudgetEdit, budgetEditConfirm: confirmBudgetEdit, budgetComparePreview: previewBudgetComparison, budgetCompareConfirm: confirmBudgetComparison, clientPreview: previewMcpClient, clientConfirm: confirmMcpClient, leadPreview: previewMcpLead, leadConfirm: confirmMcpLead, eventPreview: previewMcpEvent, eventConfirm: confirmMcpEvent, treasuryPreview: previewTreasuryAccount, treasuryConfirm: confirmTreasuryAccount, paymentPreview: previewClientPayment, paymentConfirm: confirmClientPayment };
 
 function result(value: unknown, isError = false): TextResult {
   return { content: [{ type: "text", text: JSON.stringify(value) }], ...(isError ? { isError: true } : {}) };
@@ -59,6 +63,8 @@ export async function dispatchMcpTool(
       if (tool.name === "clients.confirm") return result(await mutations.clientConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
       if (tool.name === "leads.confirm") return result(await mutations.leadConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
       if (tool.name === "events.confirm") return result(await mutations.eventConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
+      if (tool.name === "treasury.confirm") return result(await mutations.treasuryConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
+      if (tool.name === "payments.confirm") return result(await mutations.paymentConfirm(context, parsed as { previewId: string; idempotencyKey: string }));
       return result({ code: "NOT_IMPLEMENTED", message: "This confirmation handler is not enabled; no change was made." }, true);
     }
     if (tool.access === "preview") {
@@ -73,6 +79,8 @@ export async function dispatchMcpTool(
       if (tool.name === "clients.preview") return result(await mutations.clientPreview(context, parsed as Parameters<typeof mutations.clientPreview>[1]));
       if (tool.name === "leads.preview") return result(await mutations.leadPreview(context, parsed as Parameters<typeof mutations.leadPreview>[1]));
       if (tool.name === "events.preview") return result(await mutations.eventPreview(context, parsed as Parameters<typeof mutations.eventPreview>[1]));
+      if (tool.name === "treasury.preview") return result(await mutations.treasuryPreview(context, parsed as Parameters<typeof mutations.treasuryPreview>[1]));
+      if (tool.name === "payments.preview") return result(await mutations.paymentPreview(context, parsed as Parameters<typeof mutations.paymentPreview>[1]));
       return result({ code: "PREVIEW_NOT_IMPLEMENTED", message: "This preview handler is not enabled; no change was made." }, true);
     }
     const reader = readers[tool.name];
@@ -89,6 +97,7 @@ export async function dispatchMcpTool(
     if (error instanceof Error && ["BUDGET_NOT_DRAFT", "INVALID_PAYMENT_PLAN", "INVALID_COMPARISON", "COMPARISON_NOT_ALLOWED"].includes(error.message)) return result({ code: error.message, message: "The budget operation could not be safely applied. Review the terms and current budget state." }, true);
     if (error instanceof Error && error.message === "PREVIEW_EXPIRED") return result({ code: "PREVIEW_EXPIRED", message: "The preview is missing or expired; review a new preview." }, true);
     if (error instanceof Error && error.message === "PREVIEW_STALE") return result({ code: "PREVIEW_STALE", message: "The resource changed after preview; review a new preview." }, true);
+    if (error instanceof Error && ["PAYMENT_CLOSED", "PAYMENT_EXCEEDS_REMAINING", "PAYMENT_REJECTED", "DUPLICATE_ACCOUNT", "OPENING_BALANCE_LOCKED"].includes(error.message)) return result({ code: error.message, message: "The account or payment changed, is closed, or exceeds the remaining amount. Review the current values and create a new preview." }, true);
     if (error instanceof Error && ["QUANTITY_DECREASE_BLOCKED", "COMBO_STOCK_BLOCKED", "PREVIEW_INVALID"].includes(error.message)) return result({ code: error.message, message: "This operation cannot be safely applied; no change was made." }, true);
     if (error instanceof Error && error.name === "ZodError") return result({ code: "INVALID_ARGUMENTS", message: error.message }, true);
     if (error instanceof Error && (error.message === "NOT_FOUND" || error.message === "INVALID_RANGE")) {
