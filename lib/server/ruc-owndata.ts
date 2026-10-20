@@ -1,4 +1,3 @@
-import * as ownCodingUtils from "owncoding-ui/utils";
 import type { AdminClientRucSnapshot } from "@/lib/admin-types";
 
 export type OwnDataResult = {
@@ -15,15 +14,77 @@ export type OwnDataResult = {
 type ProviderFactory = (options: { lookup: (ruc: string) => Promise<unknown> }) => (ruc: string) => Promise<OwnDataResult>;
 type ResponseMapper = (envelope: unknown, ruc: string) => OwnDataResult;
 
+const SAFE_ERROR_CODES = new Set([
+  "INVALID_RUC_FORMAT", "API_KEY_REQUIRED", "API_KEY_INVALID", "API_KEY_REVOKED", "API_KEY_EXPIRED",
+  "API_KEY_ENVIRONMENT_MISMATCH", "ENVIRONMENT_MISMATCH", "INSUFFICIENT_SCOPE", "PLAN_REQUIRED",
+  "REGISTERED_RUC_NOT_FOUND", "DAILY_QUOTA_REACHED", "COMMERCIAL_API_DISABLED", "COMMERCIAL_API_UNAVAILABLE",
+  "DNIT_DATA_UNAVAILABLE", "FREE_API_DISABLED",
+]);
+
 export class OwnDataLookupError extends Error {
   constructor(public code: string, public status: number, message: string, public retryAfter?: number) { super(message); }
 }
 
-/** Acceso por export: v0.55 no lo tiene; falla cerrado hasta actualizar el kit. */
+type Envelope = { data?: Record<string, unknown>; meta?: Record<string, unknown>; error?: { code?: unknown; retryAfter?: unknown }; requestId?: unknown; retryAfter?: unknown };
+
+function safeRequestId(value: unknown) {
+  return typeof value === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(value) ? value : undefined;
+}
+
+function invalidResponse(): never {
+  throw new OwnDataLookupError("OWNDATA_INVALID_RESPONSE", 502, "OwnData devolvió una respuesta incompleta. Completá los datos a mano.");
+}
+
+export function mapOwnDataRucResponse(envelope: unknown, requested: string): OwnDataResult {
+  if (!ownDataRucValid(requested)) throw new OwnDataLookupError("INVALID_RUC_FORMAT", 400, "Ingresá un RUC de 1 a 9 dígitos, sin cero inicial y con DV opcional explícito.");
+  const value = (envelope && typeof envelope === "object" ? envelope : {}) as Envelope;
+  if (value.error && typeof value.error === "object") {
+    const candidate = value.error.code;
+    const code = typeof candidate === "string" && SAFE_ERROR_CODES.has(candidate) ? candidate : "OWNDATA_INVALID_RESPONSE";
+    const status = code === "REGISTERED_RUC_NOT_FOUND" ? 404 : code === "DAILY_QUOTA_REACHED" ? 429 : ["API_KEY_INVALID", "API_KEY_REVOKED", "API_KEY_EXPIRED", "API_KEY_REQUIRED", "API_KEY_ENVIRONMENT_MISMATCH", "ENVIRONMENT_MISMATCH"].includes(code) ? 503 : code === "INVALID_RUC_FORMAT" ? 400 : code === "PLAN_REQUIRED" || code === "INSUFFICIENT_SCOPE" ? 503 : 503;
+    const messages: Record<string, string> = {
+      COMMERCIAL_API_DISABLED: "OwnData todavía no habilitó la API comercial. Completá los datos a mano.",
+      API_KEY_INVALID: "Revisá la configuración de OwnData en el servidor. Completá los datos a mano.",
+      API_KEY_REVOKED: "La clave de OwnData fue revocada. Actualizá la configuración del servidor.",
+      API_KEY_EXPIRED: "La clave de OwnData venció. Actualizá la configuración del servidor.",
+      DAILY_QUOTA_REACHED: "Se alcanzó la cuota OwnData. Completá los datos a mano; no se reintentó la consulta.",
+      REGISTERED_RUC_NOT_FOUND: "No encontramos este RUC. Completá los datos a mano.",
+    };
+    const retryAfter = value.error.retryAfter ?? value.retryAfter;
+    throw new OwnDataLookupError(code, status, messages[code] ?? "OwnData no está disponible para esta consulta. Completá los datos a mano.", code === "DAILY_QUOTA_REACHED" && Number.isSafeInteger(retryAfter) && Number(retryAfter) >= 0 ? Number(retryAfter) : undefined);
+  }
+  const data = value.data;
+  const meta = value.meta;
+  const provenance = meta?.provenance as Record<string, unknown> | undefined;
+  const quota = meta?.quota as Record<string, unknown> | undefined;
+  const base = typeof data?.ruc === "number" && Number.isSafeInteger(data.ruc) ? String(data.ruc) : data?.ruc;
+  const dv = typeof data?.dv === "number" && Number.isInteger(data.dv) ? String(data.dv) : data?.dv;
+  const fullRuc = data?.fullRuc;
+  const requestedMatches = typeof base === "string" && (requested.includes("-") ? requested === fullRuc : requested === base);
+  const sourcePage = provenance?.sourcePage;
+  const sourcePageValid = typeof sourcePage === "string" && (sourcePage.startsWith("https://") || (meta?.environment === "test" && sourcePage.startsWith("urn:")));
+  const quotaValid = quota && ["limit", "used", "remaining", "resetAfter"].every(key => Number.isSafeInteger(quota[key]) && Number(quota[key]) >= 0) && Number(quota.used) <= Number(quota.limit) && Number(quota.remaining) <= Number(quota.limit) && typeof quota.day === "string" && quota.day.length > 0;
+  const valid = typeof base === "string" && /^[1-9][0-9]{0,8}$/.test(base) && typeof dv === "string" && /^[0-9]$/.test(dv) && typeof fullRuc === "string" && fullRuc === `${base}-${dv}` && requestedMatches && typeof data?.nameOfficial === "string" && data.nameOfficial.trim().length > 0 && (!Object.hasOwn(data, "equivalenceRaw") || data.equivalenceRaw === null || typeof data.equivalenceRaw === "string") && (!Object.hasOwn(data, "sourcePartition") || (Number.isSafeInteger(data.sourcePartition) && Number(data.sourcePartition) >= 0 && Number(data.sourcePartition) <= 9)) && (meta?.environment === "test" || meta?.environment === "live") && provenance?.source === "dnit_official_snapshot" && sourcePageValid && typeof provenance.publicationDate === "string" && typeof provenance.importedAt === "string" && typeof provenance.publishedText === "string" && typeof provenance.snapshotHash === "string" && /^[a-f0-9]{64}$/i.test(provenance.snapshotHash) && quotaValid;
+  if (!valid) invalidResponse();
+  const ownData = {
+    ruc: base!, dv: data!.dv as string | number, nameOfficial: data!.nameOfficial as string, equivalenceRaw: (data!.equivalenceRaw ?? null) as string | null,
+    ...(Object.hasOwn(data!, "sourcePartition") ? { sourcePartition: data!.sourcePartition as number } : {}),
+    requestId: safeRequestId(value.requestId), environment: meta!.environment as "test" | "live",
+    quota: { limit: quota!.limit as number, used: quota!.used as number, remaining: quota!.remaining as number, day: quota!.day as string, resetAfter: quota!.resetAfter as number },
+    provenance: { source: "dnit_official_snapshot" as const, sourcePage: sourcePage as string, publicationDate: provenance!.publicationDate as string, publishedText: provenance!.publishedText as string, importedAt: provenance!.importedAt as string, snapshotHash: provenance!.snapshotHash as string },
+  } as OwnDataResult["ownData"];
+  // Keep the legacy status internally for signed snapshots, but make it non-enumerable so it cannot reach JSON/frontend.
+  Object.defineProperty(ownData, "stateRaw", { value: typeof data!.stateRaw === "string" ? data!.stateRaw : null, enumerable: false });
+  return { name: data!.nameOfficial as string, fullRuc: fullRuc as string, reviewRequired: true, ownData };
+}
+
+function createOwnDataRucProvider({ lookup }: { lookup: (ruc: string) => Promise<unknown> }) {
+  return async (ruc: string) => mapOwnDataRucResponse(await lookup(ruc), ruc);
+}
+
+/** Adaptador local: el contrato público no depende de status/stateRaw del proveedor. */
 export function ownDataAdapters() {
-  const create = Reflect.get(ownCodingUtils, "createOwnDataRucProvider") as ProviderFactory | undefined;
-  const map = Reflect.get(ownCodingUtils, "mapOwnDataRucResponse") as ResponseMapper | undefined;
-  return typeof create === "function" && typeof map === "function" ? { create, map } : null;
+  return { create: createOwnDataRucProvider as ProviderFactory, map: mapOwnDataRucResponse as ResponseMapper };
 }
 
 export function ownDataConfig(env: Record<string, string | undefined> = process.env) {
@@ -46,14 +107,14 @@ export function ownDataRucValid(ruc: unknown): ruc is string {
 export async function lookupOwnData(ruc: string, options: {
   env?: Record<string, string | undefined>;
   fetch?: typeof fetch;
-  adapters?: ReturnType<typeof ownDataAdapters>;
+  adapters?: ReturnType<typeof ownDataAdapters> | null;
 } = {}): Promise<OwnDataResult> {
   if (!ownDataRucValid(ruc)) throw new OwnDataLookupError("INVALID_RUC_FORMAT", 400, "Ingresá un RUC de 1 a 9 dígitos, sin cero inicial y con DV opcional explícito.");
   const config = ownDataConfig(options.env);
   if (!config) throw new OwnDataLookupError("OWNDATA_NOT_CONFIGURED", 503, "OwnData no está configurado. Completá los datos a mano.");
   const adapters = options.adapters === undefined ? ownDataAdapters() : options.adapters;
   if (!adapters) throw new OwnDataLookupError("OWNDATA_ADAPTER_UNAVAILABLE", 503, "La integración OwnData no está disponible. Completá los datos a mano.");
-  const provider = adapters.create({ lookup: async (requested) => {
+  const provider = createOwnDataRucProvider({ lookup: async (requested) => {
     const response = await (options.fetch ?? fetch)(`${config.base}/api/v1/ruc/${encodeURIComponent(requested)}`, {
       headers: { "X-API-Key": config.key, Accept: "application/json" },
       signal: AbortSignal.timeout(6000), cache: "no-store", redirect: "error",
@@ -72,6 +133,9 @@ export async function lookupOwnData(ruc: string, options: {
     }
     const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
     if (!response.ok && !envelope?.error) throw new Error("Unexpected HTTP status");
+    if (envelope?.meta?.environment && envelope.meta.environment !== config.environment) {
+      throw new OwnDataLookupError("API_KEY_ENVIRONMENT_MISMATCH", 503, "OwnData respondió desde otro ambiente. Completá los datos a mano.");
+    }
     return envelope;
   } });
   try {

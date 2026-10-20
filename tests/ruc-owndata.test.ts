@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { SignJWT } from "jose";
 import { clientRucPatch, signRucConfirmation } from "../lib/server/ruc-confirmation";
-import { lookupOwnData, ownDataAdapters, ownDataConfig, OwnDataLookupError, ownDataRucValid, type OwnDataResult } from "../lib/server/ruc-owndata";
+import { lookupOwnData, mapOwnDataRucResponse, ownDataAdapters, ownDataConfig, OwnDataLookupError, ownDataRucValid, type OwnDataResult } from "../lib/server/ruc-owndata";
 
 // Fixture CONTRACTUAL DEMO. No contribuyente, publicación ni consulta real.
 export const demoEnvelope = {
@@ -13,6 +13,30 @@ export const demoResult: OwnDataResult = {
   name: demoEnvelope.data.nameOfficial, fullRuc: demoEnvelope.data.fullRuc, reviewRequired: true,
   ownData: { ...demoEnvelope.data, environment: "test", quota: demoEnvelope.meta.quota, provenance: { ...demoEnvelope.meta.provenance, source: "dnit_official_snapshot" } },
 };
+
+test("el parser no depende de status/stateRaw y nunca los publica", () => {
+  for (const metadata of [{ status: "ACTIVO" }, { status: "INACTIVO" }, { status: "SUSPENDIDO" }, { stateRaw: "LEGACY" }, {}]) {
+    const envelope = { ...demoEnvelope, data: { ...demoEnvelope.data, ...metadata } };
+    const result = mapOwnDataRucResponse(envelope, "1234567-0");
+    assert.equal(result.fullRuc, "1234567-0");
+    assert.equal(result.ownData.nameOfficial, "RAZÓN SOCIAL DEMO EAS");
+    assert.equal(Object.prototype.propertyIsEnumerable.call(result.ownData, "status"), false);
+    assert.equal(Object.prototype.propertyIsEnumerable.call(result.ownData, "stateRaw"), false);
+    assert.equal("status" in result.ownData, false);
+    assert.equal(JSON.stringify(result).includes("ACTIVO"), false);
+    assert.equal(JSON.stringify(result).includes("stateRaw"), false);
+  }
+  const { equivalenceRaw: _ignored, ...withoutOptionalEquivalence } = demoEnvelope.data;
+  assert.equal(mapOwnDataRucResponse({ ...demoEnvelope, data: withoutOptionalEquivalence }, "1234567-0").ownData.equivalenceRaw, null);
+});
+
+test("el parser rechaza únicamente identidad, nombre, procedencia o metadata inválidos", () => {
+  assert.throws(() => mapOwnDataRucResponse({ ...demoEnvelope, data: { ...demoEnvelope.data, nameOfficial: "" } }, "1234567-0"));
+  assert.throws(() => mapOwnDataRucResponse({ ...demoEnvelope, data: { ...demoEnvelope.data, fullRuc: "1234567-9" } }, "1234567-0"));
+  assert.throws(() => mapOwnDataRucResponse({ ...demoEnvelope, meta: { ...demoEnvelope.meta, provenance: { ...demoEnvelope.meta.provenance, sourcePage: "http://insecure.example" } } }, "1234567-0"));
+  assert.throws(() => mapOwnDataRucResponse({ ...demoEnvelope, meta: { ...demoEnvelope.meta, quota: { ...demoEnvelope.meta.quota, remaining: 99 } } }, "1234567-0"));
+  assert.throws(() => mapOwnDataRucResponse(demoEnvelope, "1234567-9"));
+});
 
 test("configuración incompleta/insegura y kit antiguo: manual, cero llamadas", async () => {
   for (const env of [{}, { OWNDATA_API_URL: "https://example.invalid", OWNDATA_API_KEY: "qa-only" }, { OWNDATA_API_URL: "http://example.invalid", OWNDATA_API_KEY: "qa-only", OWNDATA_ENVIRONMENT: "test" }, { OWNDATA_API_URL: "https://user:secret@example.invalid", OWNDATA_API_KEY: "qa-only", OWNDATA_ENVIRONMENT: "test" }]) {
@@ -80,7 +104,7 @@ test("transporte OwnData con helpers canónicos: identidad exacta, snapshot, cuo
   assert.deepEqual(result.ownData.provenance, demoEnvelope.meta.provenance);
   assert.throws(() => adapters.map(demoEnvelope, "1234567-9"));
   assert.throws(() => adapters.map({ ...demoEnvelope, meta: {} }, "1234567-0"));
-  for (const [code, status, expected] of [["DAILY_QUOTA_REACHED", 429, 429], ["REGISTERED_RUC_NOT_FOUND", 404, 404], ["API_KEY_INVALID", 401, 503], ["COMMERCIAL_API_DISABLED", 503, 503]] as const) {
+  for (const [code, status, expected] of [["DAILY_QUOTA_REACHED", 429, 429], ["REGISTERED_RUC_NOT_FOUND", 404, 404], ["API_KEY_INVALID", 401, 503], ["API_KEY_REVOKED", 401, 503], ["API_KEY_EXPIRED", 401, 503], ["COMMERCIAL_API_DISABLED", 503, 503]] as const) {
     calls = 0;
     await assert.rejects(lookupOwnData("1234567-0", { env, adapters, fetch: async () => { calls++; return Response.json({ error: { code, message: "INTERNAL SECRET qa-secret-not-real" }, retryAfter: 45 }, { status }); } }), (error: unknown) => {
       assert.ok(error instanceof OwnDataLookupError); assert.equal(error.status, expected); assert.equal(error.code, code);
