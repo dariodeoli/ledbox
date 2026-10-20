@@ -3,8 +3,10 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { McpAuthProvider } from "./auth";
 import { createMcpServer } from "./server";
+import type { AdminContext } from "@/lib/server/tenancy";
+import type { McpReadHandlers } from "./readers";
 
-type McpSession = { server: ReturnType<typeof createMcpServer>; transport: WebStandardStreamableHTTPServerTransport; lastSeenAt: number };
+type McpSession = { server: ReturnType<typeof createMcpServer>; transport: WebStandardStreamableHTTPServerTransport; lastSeenAt: number; actorId: string; context: AdminContext };
 const sessions = new Map<string, McpSession>();
 const SESSION_IDLE_TTL_MS = 30 * 60 * 1000;
 const MAX_MCP_SESSIONS = 1_000;
@@ -18,7 +20,7 @@ function pruneExpiredSessions(now = Date.now()) {
   }
 }
 
-export type McpHttpDependencies = { authenticate: McpAuthProvider };
+export type McpHttpDependencies = { authenticate: McpAuthProvider; readers?: McpReadHandlers };
 
 /** Authenticates every HTTP request, including requests on established MCP
  * sessions. Sessions contain protocol state only, never tenant data. */
@@ -44,18 +46,19 @@ export async function handleMcpHttpRequest(request: Request, dependencies: McpHt
       return new Response("MCP session is required", { status: 400 });
     }
     if (sessions.size >= MAX_MCP_SESSIONS) return new Response("MCP session capacity reached", { status: 503 });
-    const server = createMcpServer();
+    let session!: McpSession;
+    const server = createMcpServer(() => session.context, dependencies.readers);
     let initializedSessionId: string | undefined;
     let transport!: WebStandardStreamableHTTPServerTransport;
     transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: randomUUID,
       onsessioninitialized: (id) => {
         initializedSessionId = id;
-        sessions.set(id, { server, transport, lastSeenAt: Date.now() });
+        sessions.set(id, session);
       },
       onsessionclosed: (id) => { sessions.delete(id); },
     });
-    session = { server, transport, lastSeenAt: Date.now() };
+    session = { server, transport, lastSeenAt: Date.now(), actorId: auth.context.user.id, context: auth.context };
     await server.connect(transport);
     const response = await transport.handleRequest(request);
     // Defensive fallback for SDK releases that set the ID before invoking the callback.
@@ -64,6 +67,8 @@ export async function handleMcpHttpRequest(request: Request, dependencies: McpHt
   }
 
   if (!session || !sessionId) return new Response("MCP session not found", { status: 404 });
+  if (session.actorId !== auth.context.user.id) return new Response("MCP session belongs to another actor", { status: 403 });
+  session.context = auth.context;
   session.lastSeenAt = Date.now();
   return session.transport.handleRequest(request);
 }
