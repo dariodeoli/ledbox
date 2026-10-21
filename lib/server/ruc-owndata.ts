@@ -2,6 +2,8 @@ import type { AdminClientRucSnapshot } from "@/lib/admin-types";
 
 export type OwnDataResult = {
   name: string;
+  /** Vista opcional solicitada explícitamente para personas confirmadas. */
+  namePresentationFull?: string;
   fullRuc: string;
   reviewRequired: true;
   ownData: Omit<AdminClientRucSnapshot, "fullRuc" | "lookedUpAt" | "confirmedAt"> & {
@@ -25,7 +27,7 @@ export class OwnDataLookupError extends Error {
   constructor(public code: string, public status: number, message: string, public retryAfter?: number) { super(message); }
 }
 
-type Envelope = { data?: Record<string, unknown>; meta?: Record<string, unknown>; error?: { code?: unknown; retryAfter?: unknown }; requestId?: unknown; retryAfter?: unknown };
+type Envelope = { data?: Record<string, unknown>; meta?: Record<string, unknown>; namePresentation?: { values?: { full?: unknown } }; error?: { code?: unknown; retryAfter?: unknown }; requestId?: unknown; retryAfter?: unknown };
 
 function safeRequestId(value: unknown) {
   return typeof value === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(value) ? value : undefined;
@@ -41,7 +43,7 @@ export function mapOwnDataRucResponse(envelope: unknown, requested: string): Own
   if (value.error && typeof value.error === "object") {
     const candidate = value.error.code;
     const code = typeof candidate === "string" && SAFE_ERROR_CODES.has(candidate) ? candidate : "OWNDATA_INVALID_RESPONSE";
-    const status = code === "REGISTERED_RUC_NOT_FOUND" ? 404 : code === "DAILY_QUOTA_REACHED" ? 429 : ["API_KEY_INVALID", "API_KEY_REVOKED", "API_KEY_EXPIRED", "API_KEY_REQUIRED", "API_KEY_ENVIRONMENT_MISMATCH", "ENVIRONMENT_MISMATCH"].includes(code) ? 503 : code === "INVALID_RUC_FORMAT" ? 400 : code === "PLAN_REQUIRED" || code === "INSUFFICIENT_SCOPE" ? 503 : 503;
+    const status = code === "REGISTERED_RUC_NOT_FOUND" ? 404 : code === "DAILY_QUOTA_REACHED" ? 429 : ["API_KEY_INVALID", "API_KEY_REVOKED", "API_KEY_EXPIRED", "API_KEY_REQUIRED", "API_KEY_ENVIRONMENT_MISMATCH", "ENVIRONMENT_MISMATCH"].includes(code) ? 401 : ["PLAN_REQUIRED", "INSUFFICIENT_SCOPE"].includes(code) ? 403 : ["INVALID_RUC_FORMAT", "INVALID_RUC_DV", "INVALID_NAME_OPTIONS"].includes(code) ? 400 : 503;
     const messages: Record<string, string> = {
       COMMERCIAL_API_DISABLED: "OwnData todavía no habilitó la API comercial. Completá los datos a mano.",
       API_KEY_INVALID: "Revisá la configuración de OwnData en el servidor. Completá los datos a mano.",
@@ -75,7 +77,8 @@ export function mapOwnDataRucResponse(envelope: unknown, requested: string): Own
   } as OwnDataResult["ownData"];
   // Keep the legacy status internally for signed snapshots, but make it non-enumerable so it cannot reach JSON/frontend.
   Object.defineProperty(ownData, "stateRaw", { value: typeof data!.stateRaw === "string" ? data!.stateRaw : null, enumerable: false });
-  return { name: data!.nameOfficial as string, fullRuc: fullRuc as string, reviewRequired: true, ownData };
+  const presented = value.namePresentation?.values?.full;
+  return { name: data!.nameOfficial as string, ...(typeof presented === "string" && presented.trim() ? { namePresentationFull: presented.trim() } : {}), fullRuc: fullRuc as string, reviewRequired: true, ownData };
 }
 
 function createOwnDataRucProvider({ lookup }: { lookup: (ruc: string) => Promise<unknown> }) {
@@ -88,7 +91,7 @@ export function ownDataAdapters() {
 }
 
 export function ownDataConfig(env: Record<string, string | undefined> = process.env) {
-  const base = env.OWNDATA_API_URL;
+  const base = env.OWNDATA_API_ORIGIN ?? env.OWNDATA_API_URL;
   const key = env.OWNDATA_API_KEY;
   const environment = env.OWNDATA_ENVIRONMENT;
   if (!base || !key || !["test", "live"].includes(environment ?? "")) return null;
@@ -108,6 +111,7 @@ export async function lookupOwnData(ruc: string, options: {
   env?: Record<string, string | undefined>;
   fetch?: typeof fetch;
   adapters?: ReturnType<typeof ownDataAdapters> | null;
+  subjectKind?: "individual" | "legal_entity" | "unknown";
 } = {}): Promise<OwnDataResult> {
   if (!ownDataRucValid(ruc)) throw new OwnDataLookupError("INVALID_RUC_FORMAT", 400, "Ingresá un RUC de 1 a 9 dígitos, sin cero inicial y con DV opcional explícito.");
   const config = ownDataConfig(options.env);
@@ -115,7 +119,15 @@ export async function lookupOwnData(ruc: string, options: {
   const adapters = options.adapters === undefined ? ownDataAdapters() : options.adapters;
   if (!adapters) throw new OwnDataLookupError("OWNDATA_ADAPTER_UNAVAILABLE", 503, "La integración OwnData no está disponible. Completá los datos a mano.");
   const provider = createOwnDataRucProvider({ lookup: async (requested) => {
-    const response = await (options.fetch ?? fetch)(`${config.base}/api/v1/ruc/${encodeURIComponent(requested)}`, {
+    const endpoint = new URL(`${config.base}/api/v1/ruc/${encodeURIComponent(requested)}`);
+    if (options.subjectKind === "individual") {
+      endpoint.searchParams.set("nameMethods", "full");
+      endpoint.searchParams.set("subjectKind", "individual");
+    } else if (options.subjectKind === "legal_entity") {
+      endpoint.searchParams.set("nameMethods", "full");
+      endpoint.searchParams.set("subjectKind", "legal_entity");
+    }
+    const response = await (options.fetch ?? fetch)(endpoint.href, {
       headers: { "X-API-Key": config.key, Accept: "application/json" },
       signal: AbortSignal.timeout(6000), cache: "no-store", redirect: "error",
     });
@@ -147,7 +159,7 @@ export async function lookupOwnData(ruc: string, options: {
     // Mensajes del mapper son propios del kit; el cliente nunca recibe el Error original.
     const e = error as { code?: string; status?: number; retryAfter?: number };
     const code = typeof e?.code === "string" && /^[A-Z_]{1,80}$/.test(e.code) ? e.code : "OWNDATA_TRANSPORT_ERROR";
-    const status = e?.status === 404 ? 404 : e?.status === 429 ? 429 : e?.status === 400 ? 400 : e?.status === 503 || e?.status === 401 || e?.status === 403 ? 503 : 502;
+    const status = e?.status === 404 ? 404 : e?.status === 429 ? 429 : e?.status === 400 ? 400 : e?.status === 401 ? 401 : e?.status === 403 ? 403 : e?.status === 503 ? 503 : 502;
     const providerMessages: Record<string, string> = {
       COMMERCIAL_API_DISABLED: "OwnData todavía no habilitó la API comercial. Completá los datos a mano.",
       FREE_API_DISABLED: "La API gratuita de OwnData está deshabilitada. Completá los datos a mano.",

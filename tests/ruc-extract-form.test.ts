@@ -18,16 +18,12 @@ function harness() {
     useRef: (initial: unknown) => { const i = ri++; return refs[i] ?? (refs[i] = { current: initial }); },
     useEffect: () => {},
     adminSend: () => { calls++; return new Promise((r) => { resolve = r; }); },
-    ...Object.fromEntries(["AdminButton", "AdminNote", "TextField", "RucField"].map((x) => [x, x])),
+    ...Object.fromEntries(["AdminButton", "AdminNote", "CheckboxField", "TextField", "RucField"].map((x) => [x, x])),
     formatNumber: String, formatDateTime: String,
-    representativeName: (value: string) => {
-      const [surname, given, ...rest] = value.split(",").map((part) => part.trim()).filter(Boolean);
-      return surname && given && rest.length === 0 ? `${given} ${surname}` : "";
-    },
   });
-  const draw = (ruc = "1234567-0") => { si = ri = 0; return render({ ruc, legalName: "", snapshot: null, confirmed: false, onChange: (p: unknown) => changes.push(p) }); };
-  return { draw, changes, calls: () => calls, finish: async (name = "RAZÓN FICTICIA") => {
-    resolve({ ok: true, data: { name, fullRuc: "1234567-0", confirmationToken: "signed-test", ownData: { provenance: {}, quota: {} } } });
+  const draw = (ruc = "1234567-0") => { si = ri = 0; return render({ ruc, legalName: "", snapshot: null, onChange: (p: unknown) => changes.push(p) }); };
+  return { draw, changes, calls: () => calls, finish: async (name = "RAZÓN FICTICIA", namePresentationFull?: string) => {
+    resolve({ ok: true, data: { name, ...(namePresentationFull ? { namePresentationFull } : {}), fullRuc: "1234567-0", confirmationToken: "signed-test", ownData: { provenance: {}, quota: {} } } });
     await Promise.resolve(); await Promise.resolve();
   } };
 }
@@ -35,12 +31,16 @@ type Node = { type?: string; props?: Record<string, any> };
 function nodes(tree: any): Node[] { return Array.isArray(tree) ? tree.flatMap(nodes) : tree?.props ? [tree, ...nodes(tree.props.children)] : []; }
 function extract(tree: any) { return nodes(tree).find((n) => n.type === "AdminButton" && n.props?.children.includes("Extraer datos del RUC"))!; }
 
-test("Extraer consulta al clic, bloquea doble clic y aplica solo identidad fiscal editable", async () => {
+function apply(tree: any) { return nodes(tree).find((n) => n.type === "AdminButton" && n.props?.children.includes("Aplicar datos fiscales"))!; }
+
+test("Extraer consulta al clic, bloquea doble clic y aplica solo después de la confirmación explícita", async () => {
   const h = harness(); let tree = h.draw();
   assert.equal(h.calls(), 0);
   const button = extract(tree); button.props!.onClick(); button.props!.onClick();
   assert.equal(h.calls(), 1);
   await h.finish(); tree = h.draw();
+  assert.equal(h.changes.filter((change: any) => change?.rucConfirmationToken).length, 0);
+  apply(tree).props!.onClick();
   assert.equal(h.changes.length, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(h.changes[0])), { ruc: "1234567-0", legalName: "RAZÓN FICTICIA", rucConfirmationToken: "signed-test", rucSnapshot: null });
 });
@@ -50,8 +50,8 @@ test("editar A→B→A mientras consulta descarta el resultado aunque el RUC fin
   nodes(tree).find((n) => n.type === "RucField")!.props!.onChange("7654321-0");
   tree = h.draw("7654321-0"); nodes(tree).find((n) => n.type === "RucField")!.props!.onChange("1234567-0");
   h.draw(); await h.finish(); tree = h.draw();
-  assert.equal(nodes(tree).some((n) => n.type === "AdminButton" && n.props?.children.includes("Confirmar RUC y razón social")), false);
-  assert.equal(h.changes.length, 2);
+  assert.equal(nodes(tree).some((n) => n.type === "AdminButton" && n.props?.children.includes("Aplicar datos fiscales")), false);
+  assert.equal(h.changes.filter((change: any) => change?.rucConfirmationToken).length, 0);
 });
 
 test("el formulario de extracción no expone la procedencia técnica del snapshot", () => {
@@ -65,14 +65,19 @@ test("el formulario de extracción no expone la procedencia técnica del snapsho
   assert.match(source, /aria-label="Snapshot fiscal confirmado"/);
 });
 
-test("una persona devuelta como apellido, nombres prellena el representante en orden legible", async () => {
+test("una persona confirmada usa la vista de OwnData y prellena el representante en orden legible", async () => {
   const h = harness();
-  extract(h.draw()).props!.onClick();
-  await h.finish("DE OLIVEIRA ORTIGOZA, DARIO ALFONSO");
+  let tree = h.draw();
+  nodes(tree).find((n) => n.type === "CheckboxField")!.props!.onChange(true);
+  tree = h.draw();
+  extract(tree).props!.onClick();
+  await h.finish("DE OLIVEIRA ORTIGOZA, DARIO ALFONSO", "Dario Alfonso De Oliveira Ortigoza");
+  tree = h.draw();
+  apply(tree).props!.onClick();
   assert.deepEqual(JSON.parse(JSON.stringify(h.changes[0])), {
     ruc: "1234567-0",
     legalName: "DE OLIVEIRA ORTIGOZA, DARIO ALFONSO",
-    legalRepresentative: "DARIO ALFONSO DE OLIVEIRA ORTIGOZA",
+    legalRepresentative: "Dario Alfonso De Oliveira Ortigoza",
     rucConfirmationToken: "signed-test",
     rucSnapshot: null,
   });

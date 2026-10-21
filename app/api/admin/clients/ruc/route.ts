@@ -14,13 +14,14 @@ export async function POST(request: Request) {
   if (!auth.ok) return auth.response;
   const body = await readJson(request);
   if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Consulta inválida.", manualEntryAllowed: true }, { status: 400 });
-  const { numero, confirmLookup } = body as Record<string, unknown>;
+  const { numero, confirmLookup, subjectKind } = body as Record<string, unknown>;
   if (confirmLookup !== true) return Response.json({ error: "Confirmá la consulta OwnData: puede consumir cuota del proveedor.", manualEntryAllowed: true }, { status: 400 });
+  if (subjectKind !== undefined && subjectKind !== "individual" && subjectKind !== "legal_entity" && subjectKind !== "unknown") return Response.json({ error: "Tipo de titular inválido.", code: "INVALID_NAME_OPTIONS", manualEntryAllowed: true }, { status: 400 });
   const { organizationId, user } = auth.context;
   const limited = await rateLimit(`ruc:ownData:${organizationId}:${user.id}`, 10);
   if (!limited.allowed) return Response.json({ error: "Alcanzaste el límite de consultas. Completá a mano.", code: "RATE_LIMITED", manualEntryAllowed: true }, { status: 429, headers: { "Retry-After": String(limited.retryAfter), "Cache-Control": "private, no-store" } });
   try {
-    const result = await lookupOwnData(typeof numero === "string" ? numero.trim() : "");
+    const result = await lookupOwnData(typeof numero === "string" ? numero.trim() : "", { subjectKind: subjectKind as "individual" | "legal_entity" | "unknown" | undefined });
     const confirmation = await signRucConfirmation(result, organizationId, user.id);
     await recordAudit({ context: auth.context, action: "update", entity: "Organization", entityId: organizationId, summary: "Consultó OwnData para revisar identidad fiscal (sin aplicar al cliente)", detail: { fields: { source: result.ownData.provenance.source, publicationDate: result.ownData.provenance.publicationDate, lookedUpAt: confirmation.lookedUpAt, environment: result.ownData.environment, quotaUsed: result.ownData.quota.used, costKnown: false } } });
     // Serializador público explícito: estados fiscales del proveedor pueden cambiar y
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
     const { ruc, dv, nameOfficial, equivalenceRaw, sourcePartition, environment, quota, provenance, requestId } = result.ownData;
     return Response.json({
       name: result.name,
+      ...(result.namePresentationFull ? { namePresentationFull: result.namePresentationFull } : {}),
       fullRuc: result.fullRuc,
       reviewRequired: true,
       ownData: { ruc, dv, nameOfficial, equivalenceRaw, ...(sourcePartition !== undefined ? { sourcePartition } : {}), environment, quota, provenance, ...(requestId ? { requestId } : {}) },

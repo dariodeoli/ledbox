@@ -30,6 +30,18 @@ test("el parser no depende de status/stateRaw y nunca los publica", () => {
   assert.equal(mapOwnDataRucResponse({ ...demoEnvelope, data: withoutOptionalEquivalence }, "1234567-0").ownData.equivalenceRaw, null);
 });
 
+test("la vista de persona usa namePresentation.values.full solo con confirmación explícita", async () => {
+  const env = { OWNDATA_API_ORIGIN: "https://example.invalid", OWNDATA_API_KEY: "qa-only", OWNDATA_ENVIRONMENT: "test" };
+  const presentation = { values: { full: "Dario Alfonso De Oliveira Ortigoza" }, status: "parsed" };
+  const fetcher: typeof fetch = async (url) => {
+    assert.equal(new URL(String(url)).search, "?nameMethods=full&subjectKind=individual");
+    return Response.json({ ...demoEnvelope, data: { ...demoEnvelope.data, nameOfficial: "DE OLIVEIRA ORTIGOZA,DARIO ALFONSO" }, namePresentation: presentation });
+  };
+  const result = await lookupOwnData("1234567-0", { env, subjectKind: "individual", fetch: fetcher });
+  assert.equal(result.name, "DE OLIVEIRA ORTIGOZA,DARIO ALFONSO");
+  assert.equal(result.namePresentationFull, "Dario Alfonso De Oliveira Ortigoza");
+});
+
 test("el parser rechaza únicamente identidad, nombre, procedencia o metadata inválidos", () => {
   assert.throws(() => mapOwnDataRucResponse({ ...demoEnvelope, data: { ...demoEnvelope.data, nameOfficial: "" } }, "1234567-0"));
   assert.throws(() => mapOwnDataRucResponse({ ...demoEnvelope, data: { ...demoEnvelope.data, fullRuc: "1234567-9" } }, "1234567-0"));
@@ -88,7 +100,7 @@ test("transporte OwnData con helpers canónicos: identidad exacta, snapshot, cuo
   const module = process.env.OWNDATA_TEST_UTILS_MODULE ? await import(process.env.OWNDATA_TEST_UTILS_MODULE) : null;
   const adapters = module ? { create: module.createOwnDataRucProvider, map: module.mapOwnDataRucResponse } : ownDataAdapters();
   if (!adapters) { t.skip("Pin actual sin helpers OwnData; gate manual verificado arriba"); return; }
-  const env = { OWNDATA_API_URL: "https://example.invalid", OWNDATA_API_KEY: "qa-secret-not-real", OWNDATA_ENVIRONMENT: "test" };
+  const env = { OWNDATA_API_ORIGIN: "https://example.invalid", OWNDATA_API_KEY: "qa-secret-not-real", OWNDATA_ENVIRONMENT: "test" };
   let calls = 0;
   const fetchFixture: typeof fetch = async (url, options) => {
     calls++;
@@ -104,7 +116,7 @@ test("transporte OwnData con helpers canónicos: identidad exacta, snapshot, cuo
   assert.deepEqual(result.ownData.provenance, demoEnvelope.meta.provenance);
   assert.throws(() => adapters.map(demoEnvelope, "1234567-9"));
   assert.throws(() => adapters.map({ ...demoEnvelope, meta: {} }, "1234567-0"));
-  for (const [code, status, expected] of [["DAILY_QUOTA_REACHED", 429, 429], ["REGISTERED_RUC_NOT_FOUND", 404, 404], ["API_KEY_INVALID", 401, 503], ["API_KEY_REVOKED", 401, 503], ["API_KEY_EXPIRED", 401, 503], ["COMMERCIAL_API_DISABLED", 503, 503]] as const) {
+  for (const [code, status, expected] of [["DAILY_QUOTA_REACHED", 429, 429], ["REGISTERED_RUC_NOT_FOUND", 404, 404], ["API_KEY_INVALID", 401, 401], ["API_KEY_REVOKED", 401, 401], ["API_KEY_EXPIRED", 401, 401], ["INSUFFICIENT_SCOPE", 403, 403], ["PLAN_REQUIRED", 403, 403], ["COMMERCIAL_API_DISABLED", 503, 503]] as const) {
     calls = 0;
     await assert.rejects(lookupOwnData("1234567-0", { env, adapters, fetch: async () => { calls++; return Response.json({ error: { code, message: "INTERNAL SECRET qa-secret-not-real" }, retryAfter: 45 }, { status }); } }), (error: unknown) => {
       assert.ok(error instanceof OwnDataLookupError); assert.equal(error.status, expected); assert.equal(error.code, code);

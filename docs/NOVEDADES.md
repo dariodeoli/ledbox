@@ -1,3 +1,7 @@
+# 2.1.152
+
+- OwnData: la consulta server-to-server usa `OWNDATA_API_ORIGIN`, soporta `namePresentation.values.full` para personas confirmadas, conserva la razón social oficial y aplica datos solo tras confirmación explícita. Los errores de clave y plan conservan sus estados HTTP contractuales.
+
 # 2.1.151
 
 - Clientes: la extracción fiscal queda compacta, sin tarjetas técnicas de ambiente/cuota/procedencia; las personas devueltas como «apellido, nombres» prellenan el representante en orden legible.

@@ -6,19 +6,10 @@ import { formatDateTime } from "@/lib/admin-format";
 import type { AdminClientRucSnapshot } from "@/lib/admin-types";
 import type { OwnDataResult } from "@/lib/server/ruc-owndata";
 import { AdminButton, AdminNote } from "../AdminUI";
-import { RucField, TextField } from "../AdminFields";
+import { CheckboxField, RucField, TextField } from "../AdminFields";
 
 type RucProposal = OwnDataResult & { lookedUpAt: string; confirmationToken: string };
 type FiscalPatch = { ruc?: string; legalName?: string; legalRepresentative?: string; rucConfirmationToken?: string; rucSnapshot?: AdminClientRucSnapshot | null };
-
-/** OwnData devuelve personas como «APELLIDO, NOMBRES». La ficha los muestra
- * en el orden de lectura habitual, sin tocar la razón social oficial firmada. */
-function representativeName(value: string) {
-  const [surname, given, ...rest] = value.split(",").map((part) => part.trim()).filter(Boolean);
-  if (!surname || !given || rest.length > 0 || /\bS\.?\s*A\.?\b|\bS\.?\s*R\.?\s*L\.?\b|\bEAS\b/i.test(given)) return "";
-  if (!/^[\p{L} .'-]+$/u.test(surname) || !/^[\p{L} .'-]+$/u.test(given)) return "";
-  return `${given} ${surname}`.replace(/\s+/g, " ").trim();
-}
 
 export function ClientFiscalSnapshot({ snapshot }: { snapshot: AdminClientRucSnapshot | null }) {
   if (!snapshot) return <AdminNote>Sin snapshot oficial confirmado; identidad fiscal manual.</AdminNote>;
@@ -41,6 +32,8 @@ export function ClientFiscalFields({ ruc, legalName, snapshot, onChange }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [proposal, setProposal] = useState<RucProposal | null>(null);
+  const [individualConfirmed, setIndividualConfirmed] = useState(false);
+  const [applied, setApplied] = useState(false);
   const inFlight = useRef(false);
   const revision = useRef(0);
   const mounted = useRef(true);
@@ -51,6 +44,7 @@ export function ClientFiscalFields({ ruc, legalName, snapshot, onChange }: {
   function manual(patch: FiscalPatch) {
     revision.current++;
     setProposal(null);
+    setApplied(false);
     setError("");
     onChange({ ...patch, rucConfirmationToken: "", rucSnapshot: null });
   }
@@ -63,7 +57,8 @@ export function ClientFiscalFields({ ruc, legalName, snapshot, onChange }: {
     setBusy(true);
     setError("");
     setProposal(null);
-    const result = await adminSend<RucProposal>("/api/admin/clients/ruc", { numero: requested.trim(), confirmLookup: true });
+    setApplied(false);
+    const result = await adminSend<RucProposal>("/api/admin/clients/ruc", { numero: requested.trim(), confirmLookup: true, subjectKind: individualConfirmed ? "individual" : "unknown" });
     inFlight.current = false;
     if (!mounted.current) return;
     setBusy(false);
@@ -78,11 +73,19 @@ export function ClientFiscalFields({ ruc, legalName, snapshot, onChange }: {
       return;
     }
     setProposal(result.data);
-    // La razón social conserva el valor oficial firmado. Si el proveedor devuelve
-    // una persona en formato «APELLIDO, NOMBRES», prellenamos el representante
-    // en el orden habitual; empresa, fantasía y contactos no se tocan.
-    const legalRepresentative = representativeName(result.data.name);
-    onChange({ ruc: result.data.fullRuc, legalName: result.data.name, ...(legalRepresentative ? { legalRepresentative } : {}), rucConfirmationToken: result.data.confirmationToken, rucSnapshot: null });
+  }
+
+  function applyProposal() {
+    if (!proposal) return;
+    onChange({
+      ruc: proposal.fullRuc,
+      legalName: proposal.name,
+      ...(proposal.namePresentationFull ? { legalRepresentative: proposal.namePresentationFull } : {}),
+      rucConfirmationToken: proposal.confirmationToken,
+      rucSnapshot: null,
+    });
+    setProposal(null);
+    setApplied(true);
   }
 
   return <>
@@ -94,12 +97,14 @@ export function ClientFiscalFields({ ruc, legalName, snapshot, onChange }: {
         }
       }}
       hint="Ingresá el documento y presioná Enter para consultar. También podés completar los datos manualmente." />
+    <CheckboxField checked={individualConfirmed} onChange={(checked) => { setIndividualConfirmed(checked); setProposal(null); setApplied(false); }} text="Confirmo que el titular es una persona (mostrar nombres antes de apellidos)" />
     <AdminButton type="button" icon="search" disabled={!ruc.trim() || busy} busy={busy} onClick={() => void lookup()}>Extraer datos del RUC</AdminButton>
     <AdminNote>La consulta a OwnData puede consumir tu cuota. Revisá o editá los datos antes de guardar.</AdminNote>
     <TextField label="Razón social oficial" maxLength={300} value={legalName} onChange={(value) => manual({ legalName: value })}
       hint="Entrada manual disponible. La consulta completa la identidad fiscal; no cambia fantasía ni contactos." />
     {error ? <AdminNote tone="error">{error}</AdminNote> : null}
-    {proposal ? <AdminNote>Datos fiscales cargados automáticamente; podés editarlos antes de guardar.</AdminNote> : null}
+    {proposal ? <><AdminNote>Resultado listo para revisar. No se aplicó todavía a este cliente.</AdminNote><AdminButton type="button" variant="primary" icon="check" onClick={applyProposal}>Aplicar datos fiscales</AdminButton></> : null}
+    {applied ? <AdminNote>Datos fiscales aplicados; podés editarlos antes de guardar.</AdminNote> : null}
     {!proposal && !snapshot ? <AdminNote>Sin snapshot oficial confirmado. Los datos fiscales pueden cargarse manualmente.</AdminNote> : null}
 
   </>;

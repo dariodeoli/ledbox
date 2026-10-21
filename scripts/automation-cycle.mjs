@@ -94,7 +94,7 @@ async function supersedePublishedFailedReady(cwd, config, state, { hub, signal }
 async function checks(cwd, sha, config, signal, runner) {
   const version = readJson(join(cwd, "package.json")).version;
   const directory = join(config.evidenceDir, sha); mkdirSync(directory, { recursive: true });
-  const env = { ...process.env, DATABASE_URL: "", OWNDATA_API_KEY: "", OWNDATA_API_URL: "", OWNDATA_ENVIRONMENT: "", SOURCE_COMMIT: sha, GITHUB_SHA: sha, LEDBOX_BUILD_SHA: sha };
+  const env = { ...process.env, DATABASE_URL: "", OWNDATA_API_KEY: "", OWNDATA_API_ORIGIN: "", OWNDATA_API_URL: "", OWNDATA_ENVIRONMENT: "", SOURCE_COMMIT: sha, GITHUB_SHA: sha, LEDBOX_BUILD_SHA: sha };
   const commands = {};
   let complete = false;
   const scripts = readJson(join(cwd, "package.json")).scripts ?? {};
