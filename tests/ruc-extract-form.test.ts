@@ -31,14 +31,12 @@ type Node = { type?: string; props?: Record<string, any> };
 function nodes(tree: any): Node[] { return Array.isArray(tree) ? tree.flatMap(nodes) : tree?.props ? [tree, ...nodes(tree.props.children)] : []; }
 function extract(tree: any) { return nodes(tree).find((n) => n.type === "AdminButton" && n.props?.children.includes("Extraer datos del RUC"))!; }
 
-test("Extraer consulta al clic, bloquea doble clic y no aplica datos hasta confirmar", async () => {
+test("Extraer consulta al clic, bloquea doble clic y aplica solo identidad fiscal editable", async () => {
   const h = harness(); let tree = h.draw();
   assert.equal(h.calls(), 0);
   const button = extract(tree); button.props!.onClick(); button.props!.onClick();
   assert.equal(h.calls(), 1);
   await h.finish(); tree = h.draw();
-  assert.equal(h.changes.length, 0);
-  nodes(tree).find((n) => n.type === "AdminButton" && n.props?.children.includes("Confirmar RUC y razón social"))!.props!.onClick();
   assert.equal(h.changes.length, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(h.changes[0])), { ruc: "1234567-0", legalName: "RAZÓN FICTICIA", rucConfirmationToken: "signed-test", rucSnapshot: null });
 });

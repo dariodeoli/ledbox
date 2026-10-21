@@ -92,6 +92,6 @@ test("clientes escritorio: sin links de contacto en la grilla y con la tabla má
   const css = repoFile("app/globals.css");
   const regla = /\.admin-table--clientes \{ --clientes-cols: ([^;]+); --admin-cols: var\(--clientes-cols\); --admin-table-min: ([\d.]+)rem; \}/.exec(css);
   assert.ok(regla, "falta la plantilla de columnas de clientes");
-  assert.equal(regla[1].trim().split(/ (?![^(]*\))/).length, 7, "siete columnas, con tipo integrado y contacto independiente");
+  assert.equal(regla[1].trim().split(/ (?![^(]*\))/).length, 8, "ocho columnas: empresa/contacto, representante legal y métricas alineadas");
   assert.equal(Number(regla[2]) <= 64, true, "el ancho mínimo no crece");
 });
