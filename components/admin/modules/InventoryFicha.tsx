@@ -1081,7 +1081,9 @@ export function InventoryFicha({
       {/* Cronología durable: movimientos, devoluciones, conteos, incidentes y actividad auditada. */}
       <TabPanel active={tab === "cronologia"} id={panelId("cronologia")} tab={tabId("cronologia")}>
         <div className="admin-stack">
-          <InventoryProductTimeline inventoryId={item.id} />
+          <AdminDialogSection title="Historial" stack>
+            <InventoryProductTimeline inventoryId={item.id} />
+          </AdminDialogSection>
           {isCombo ? null : <AdminDialogSection title="Incidentes" stack>
             <InventoryIncidentsPanel inventoryId={item.id} writable={writable} onChanged={onChanged} />
           </AdminDialogSection>}
