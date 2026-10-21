@@ -5138,6 +5138,11 @@ a.admin-stage-link:hover { border-color: var(--a-accent); color: var(--a-text-st
 .admin-evento-assign-moves dt { color: var(--a-muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .admin-evento-assign-moves dd { margin: 0; text-align: right; }
 .admin-evento-assign-actions { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 6px; padding-top: 6px; border-top: 1px solid var(--a-line); }
+.admin-evento-external-needs { display: grid; gap: 10px; min-width: 0; padding: 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel-2); }
+.admin-evento-external-needs-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.admin-evento-external-needs-list > li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel); }
+.admin-evento-external-needs-list > li > div:first-child { display: grid; gap: 3px; min-width: 0; flex: 1 1 18rem; }
+.admin-evento-external-needs-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .admin-evento-people { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .admin-evento-person { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--a-line); border-radius: var(--a-radius); background: var(--a-panel); }
 .admin-evento-person-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

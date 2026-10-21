@@ -820,11 +820,191 @@ function EquiposTab(props: EventoFichaProps) {
         </ul>
       </AdminDataState>
 
+      <ExternalNeedsPanel
+        eventId={event.id}
+        startsAt={event.setupAt ?? event.startsAt}
+        endsAt={event.strikeAt ?? event.endsAt}
+        inventoryItems={inventoryItems}
+        onSearchInventory={onSearchInventory}
+        writable={writable}
+      />
+
       <h3 className="admin-subtitle">Remitos</h3>
       <RemitosPanel eventId={event.id} writable={writable} reloadKey={incidentsKey} />
 
       <h3 className="admin-subtitle">Incidentes de inventario</h3>
       <InventoryIncidentsPanel eventId={event.id} writable={writable} reloadKey={incidentsKey} onChanged={onIncidentsChanged} />
     </>
+  );
+}
+
+type ExternalNeed = {
+  id: string;
+  inventoryId: string;
+  requestedQuantity: number;
+  startsAt: string;
+  endsAt: string;
+  status: "OPEN" | "CONFIRMED" | "CANCELLED";
+  revision: number;
+  notes: string | null;
+  inventory: { id: string; name: string; sku: string | null };
+  preferredSupplier: { id: string; name: string } | null;
+};
+
+type ExternalNeedForm = { inventoryId: string; quantity: string; startsAt: string; endsAt: string; notes: string };
+
+export function ExternalNeedsPanel({
+  eventId,
+  startsAt,
+  endsAt,
+  inventoryItems,
+  onSearchInventory,
+  writable,
+}: {
+  eventId: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  inventoryItems: AdminInventoryOption[];
+  onSearchInventory: (query: string) => void;
+  writable: boolean;
+}) {
+  const [needs, setNeeds] = useState<ExternalNeed[]>([]);
+  const [form, setForm] = useState<ExternalNeedForm>({ inventoryId: "", quantity: "1", startsAt: inputDateTime(startsAt), endsAt: inputDateTime(endsAt), notes: "" });
+  const [editing, setEditing] = useState<ExternalNeed | null>(null);
+  const [selectedInventory, setSelectedInventory] = useState<{ value: string; label: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  async function reload() {
+    setLoading(true);
+    const result = await adminApiGet<{ needs?: ExternalNeed[] }>(`/api/admin/events/${encodeURIComponent(eventId)}/external-needs`, { fresh: true });
+    setLoading(false);
+    if (!result.ok) { setError(result.error); return; }
+    setNeeds(result.data.needs ?? []);
+    setError("");
+  }
+
+  useEffect(() => {
+    setForm({ inventoryId: "", quantity: "1", startsAt: inputDateTime(startsAt), endsAt: inputDateTime(endsAt), notes: "" });
+    setEditing(null);
+    void reload();
+    // `reload` intentionally follows the event identity; dates only seed a new form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
+
+  const choices = inventoryItems.map((entry) => ({ value: entry.id, label: `${entry.name}${entry.sku ? ` · ${entry.sku}` : ""}` }));
+  if (form.inventoryId && !choices.some((choice) => choice.value === form.inventoryId)) {
+    const existing = needs.find((need) => need.inventoryId === form.inventoryId)?.inventory;
+    const chosen = selectedInventory?.value === form.inventoryId ? selectedInventory : existing ? { value: existing.id, label: `${existing.name}${existing.sku ? ` · ${existing.sku}` : ""}` } : null;
+    if (chosen) choices.push(chosen);
+  }
+
+  function reset() {
+    setEditing(null);
+    setSelectedInventory(null);
+    setForm({ inventoryId: "", quantity: "1", startsAt: inputDateTime(startsAt), endsAt: inputDateTime(endsAt), notes: "" });
+    setError("");
+  }
+
+  function edit(need: ExternalNeed) {
+    setEditing(need);
+    setSelectedInventory({ value: need.inventory.id, label: `${need.inventory.name}${need.inventory.sku ? ` · ${need.inventory.sku}` : ""}` });
+    setForm({ inventoryId: need.inventoryId, quantity: String(need.requestedQuantity), startsAt: inputDateTime(need.startsAt), endsAt: inputDateTime(need.endsAt), notes: need.notes ?? "" });
+    setError("");
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true); setError(""); setNotice("");
+    const body = {
+      inventoryId: form.inventoryId,
+      requestedQuantity: Number(form.quantity),
+      startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : "",
+      endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : "",
+      notes: form.notes.trim() || null,
+    };
+    const result = editing
+      ? await adminSend<{ need: ExternalNeed }>(`/api/admin/events/${encodeURIComponent(eventId)}/external-needs`, {
+          id: editing.id,
+          expectedRevision: editing.revision,
+          changes: body,
+        }, "PATCH", { idempotencyKey: true })
+      : await adminSend<{ need: ExternalNeed }>(`/api/admin/events/${encodeURIComponent(eventId)}/external-needs`, body, "POST", { idempotencyKey: true });
+    setBusy(false);
+    if (!result.ok) { setError(result.error); return; }
+    setNotice(editing ? "Necesidad externa actualizada; sigue pendiente y no reservada." : "Necesidad externa registrada; queda pendiente y no reservada.");
+    reset();
+    await reload();
+  }
+
+  async function cancelNeed(need: ExternalNeed) {
+    setBusy(true); setError(""); setNotice("");
+    const result = await adminSend<{ need: ExternalNeed }>(`/api/admin/events/${encodeURIComponent(eventId)}/external-needs`, {
+      id: need.id,
+      expectedRevision: need.revision,
+      changes: { status: "CANCELLED" },
+    }, "PATCH", { idempotencyKey: true });
+    setBusy(false);
+    if (!result.ok) { setError(result.error); return; }
+    setNotice("Necesidad cancelada. No se modificó el stock ni la disponibilidad.");
+    await reload();
+  }
+
+  return (
+    <section className="admin-evento-external-needs" aria-label="Necesidades de suministro externo">
+      <div className="admin-evento-tab-head">
+        <div>
+          <h3 className="admin-dialog-section-title">Suministro externo</h3>
+          <p className="admin-muted">Solicitudes por evento, separadas del stock propio y consignado.</p>
+        </div>
+        <AdminBadge tone="warn">No reservado</AdminBadge>
+      </div>
+      <AdminNote tone="warn">Registrar una necesidad no confirma proveedor, cantidad recibida ni disponibilidad. Tampoco crea unidades, reservas o costos.</AdminNote>
+      {writable ? (
+        <form className="admin-inline-form" onSubmit={submit}>
+          <Combobox
+            onSearch={onSearchInventory}
+            required
+            value={form.inventoryId}
+            onChange={(value) => { setSelectedInventory(choices.find((choice) => choice.value === value) ?? null); setForm({ ...form, inventoryId: value }); }}
+            label="Producto o equipo solicitado"
+            options={choices}
+          />
+          <NumberField strictInteger ariaLabel="Cantidad externa solicitada" title="Cantidad solicitada" className="admin-qty-input" maxLength={6} required value={form.quantity} onChange={(value) => setForm({ ...form, quantity: value })} />
+          <DateTimeField ariaLabel="Inicio de necesidad externa" title="Inicio" required value={form.startsAt} onChange={(value) => setForm({ ...form, startsAt: value })} />
+          <DateTimeField ariaLabel="Fin de necesidad externa" title="Fin" required value={form.endsAt} onChange={(value) => setForm({ ...form, endsAt: value })} />
+          <TextField ariaLabel="Nota de necesidad externa" title="Nota (opcional)" maxLength={1000} value={form.notes} onChange={(value) => setForm({ ...form, notes: value })} placeholder="Nota operativa" />
+          <AdminButton type="submit" icon={editing ? "check" : "plus"} busy={busy}>{editing ? "Guardar necesidad" : "Registrar necesidad"}</AdminButton>
+          {editing ? <AdminButton type="button" icon="close" onClick={reset} disabled={busy}>Cancelar edición</AdminButton> : null}
+        </form>
+      ) : null}
+      {error ? <AdminNote tone="error">{error}</AdminNote> : null}
+      {notice ? <AdminNote tone="ok">{notice}</AdminNote> : null}
+      {loading ? <p className="admin-muted" role="status">Cargando necesidades externas…</p> : needs.length === 0 ? <p className="admin-muted">No hay necesidades externas registradas para este evento.</p> : (
+        <ul className="admin-evento-external-needs-list">
+          {needs.map((need) => (
+            <li key={need.id}>
+              <div>
+                <strong>{need.inventory.name}</strong>{need.inventory.sku ? <span className="admin-code">{need.inventory.sku}</span> : null}
+                <span>×{formatNumber(need.requestedQuantity)} · {rangeStamp(need.startsAt, need.endsAt)}</span>
+                {need.preferredSupplier ? <small className="admin-muted">Tercero sugerido: {need.preferredSupplier.name}</small> : null}
+                {need.notes ? <small className="admin-muted">{need.notes}</small> : null}
+              </div>
+              <AdminBadge tone={need.status === "CANCELLED" ? "neutral" : need.status === "CONFIRMED" ? "ok" : "warn"}>
+                {need.status === "CANCELLED" ? "Cancelada" : need.status === "CONFIRMED" ? "Confirmada · sin cobertura" : "Pendiente"}
+              </AdminBadge>
+              {writable && need.status === "OPEN" ? (
+                <div className="admin-evento-external-needs-actions">
+                  <AdminButton type="button" icon="edit" onClick={() => edit(need)} disabled={busy}>Editar</AdminButton>
+                  <AdminButton type="button" icon="close" onClick={() => void cancelNeed(need)} busy={busy}>Cancelar necesidad</AdminButton>
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
