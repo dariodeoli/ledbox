@@ -2,14 +2,23 @@
 
 import { useEffect, useRef, useState } from "react";
 import { adminSend } from "@/lib/admin-api";
-import { formatDateTime, formatNumber } from "@/lib/admin-format";
+import { formatDateTime } from "@/lib/admin-format";
 import type { AdminClientRucSnapshot } from "@/lib/admin-types";
 import type { OwnDataResult } from "@/lib/server/ruc-owndata";
 import { AdminButton, AdminNote } from "../AdminUI";
 import { RucField, TextField } from "../AdminFields";
 
 type RucProposal = OwnDataResult & { lookedUpAt: string; confirmationToken: string };
-type FiscalPatch = { ruc?: string; legalName?: string; rucConfirmationToken?: string; rucSnapshot?: AdminClientRucSnapshot | null };
+type FiscalPatch = { ruc?: string; legalName?: string; legalRepresentative?: string; rucConfirmationToken?: string; rucSnapshot?: AdminClientRucSnapshot | null };
+
+/** OwnData devuelve personas como «APELLIDO, NOMBRES». La ficha los muestra
+ * en el orden de lectura habitual, sin tocar la razón social oficial firmada. */
+function representativeName(value: string) {
+  const [surname, given, ...rest] = value.split(",").map((part) => part.trim()).filter(Boolean);
+  if (!surname || !given || rest.length > 0 || /\bS\.?\s*A\.?\b|\bS\.?\s*R\.?\s*L\.?\b|\bEAS\b/i.test(given)) return "";
+  if (!/^[\p{L} .'-]+$/u.test(surname) || !/^[\p{L} .'-]+$/u.test(given)) return "";
+  return `${given} ${surname}`.replace(/\s+/g, " ").trim();
+}
 
 export function ClientFiscalSnapshot({ snapshot }: { snapshot: AdminClientRucSnapshot | null }) {
   if (!snapshot) return <AdminNote>Sin snapshot oficial confirmado; identidad fiscal manual.</AdminNote>;
@@ -22,12 +31,11 @@ export function ClientFiscalSnapshot({ snapshot }: { snapshot: AdminClientRucSna
   </dl>;
 }
 
-/** Flujo fiscal: Enter o botón consulta, completa la propuesta y deja revisar/editar antes de guardar. */
-export function ClientFiscalFields({ ruc, legalName, snapshot, confirmed, onChange }: {
+/** Flujo fiscal: Enter o botón consulta, completa identidad y deja editar antes de guardar. */
+export function ClientFiscalFields({ ruc, legalName, snapshot, onChange }: {
   ruc: string;
   legalName: string;
   snapshot: AdminClientRucSnapshot | null;
-  confirmed: boolean;
   onChange: (patch: FiscalPatch) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -70,13 +78,13 @@ export function ClientFiscalFields({ ruc, legalName, snapshot, confirmed, onChan
       return;
     }
     setProposal(result.data);
-    // La consulta sólo prellena identidad fiscal; nunca cambia nombre comercial,
-    // empresa, representante ni contactos. El usuario conserva la revisión final
-    // en el formulario antes de guardar.
-    onChange({ ruc: result.data.fullRuc, legalName: result.data.name, rucConfirmationToken: result.data.confirmationToken, rucSnapshot: null });
+    // La razón social conserva el valor oficial firmado. Si el proveedor devuelve
+    // una persona en formato «APELLIDO, NOMBRES», prellenamos el representante
+    // en el orden habitual; empresa, fantasía y contactos no se tocan.
+    const legalRepresentative = representativeName(result.data.name);
+    onChange({ ruc: result.data.fullRuc, legalName: result.data.name, ...(legalRepresentative ? { legalRepresentative } : {}), rucConfirmationToken: result.data.confirmationToken, rucSnapshot: null });
   }
 
-  const source = proposal?.ownData.provenance ?? snapshot?.provenance;
   return <>
     <RucField label="RUC / CI" maxLength={30} value={ruc} onChange={(value) => manual({ ruc: value })}
       onKeyDown={(event) => {
@@ -89,27 +97,10 @@ export function ClientFiscalFields({ ruc, legalName, snapshot, confirmed, onChan
     <AdminButton type="button" icon="search" disabled={!ruc.trim() || busy} busy={busy} onClick={() => void lookup()}>Extraer datos del RUC</AdminButton>
     <AdminNote>La consulta a OwnData puede consumir tu cuota. Revisá o editá los datos antes de guardar.</AdminNote>
     <TextField label="Razón social oficial" maxLength={300} value={legalName} onChange={(value) => manual({ legalName: value })}
-      hint="Entrada manual disponible. La consulta solo propone RUC y razón social; no cambia fantasía ni contactos." />
+      hint="Entrada manual disponible. La consulta completa la identidad fiscal; no cambia fantasía ni contactos." />
     {error ? <AdminNote tone="error">{error}</AdminNote> : null}
-    {proposal ? <div className="admin-form-group admin-field--wide">
-      <h3 className="admin-form-group-title">Revisar resultado fiscal</h3>
-      <dl className="admin-dialog-facts">
-        <div><dt>RUC propuesto</dt><dd>{proposal.fullRuc}</dd></div>
-        <div><dt>Razón social propuesta</dt><dd>{proposal.name}</dd></div>
-        <div><dt>Ambiente</dt><dd>{proposal.ownData.environment === "test" ? "Prueba" : "Real"}</dd></div>
-        <div><dt>Cuota utilizada / límite</dt><dd>{formatNumber(proposal.ownData.quota.used)} / {formatNumber(proposal.ownData.quota.limit)}</dd></div>
-        <div><dt>Cuota restante</dt><dd>{formatNumber(proposal.ownData.quota.remaining)}</dd></div>
-        <div><dt>Costo monetario</dt><dd>No informado por el proveedor</dd></div>
-      </dl>
-      {confirmed ? <AdminNote>Datos fiscales propuestos y listos para guardar; podés editarlos antes.</AdminNote> : null}
-    </div> : null}
-    {source ? <dl className="admin-dialog-facts admin-field--wide" aria-label="Procedencia fiscal">
-      <div><dt>Fuente</dt><dd>Snapshot oficial DNIT · {source.sourcePage}</dd></div>
-      <div><dt>Publicación oficial</dt><dd>{source.publicationDate}</dd></div>
-      <div><dt>Importado</dt><dd>{formatDateTime(source.importedAt)}</dd></div>
-      <div><dt>Consultado</dt><dd>{formatDateTime(proposal?.lookedUpAt ?? snapshot?.lookedUpAt)}</dd></div>
-      {snapshot?.confirmedAt ? <div><dt>Confirmado</dt><dd>{formatDateTime(snapshot.confirmedAt)}</dd></div> : null}
-    </dl> : <AdminNote>Sin snapshot oficial confirmado. Los datos fiscales pueden cargarse manualmente.</AdminNote>}
+    {proposal ? <AdminNote>Datos fiscales cargados automáticamente; podés editarlos antes de guardar.</AdminNote> : null}
+    {!proposal && !snapshot ? <AdminNote>Sin snapshot oficial confirmado. Los datos fiscales pueden cargarse manualmente.</AdminNote> : null}
 
   </>;
 }

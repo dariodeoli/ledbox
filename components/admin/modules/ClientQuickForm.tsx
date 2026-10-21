@@ -242,7 +242,7 @@ export function ClientQuickFields({
   );
   const fiscal = (
     <ClientFiscalFields ruc={values.ruc} legalName={values.legalName} snapshot={values.rucSnapshot}
-      confirmed={Boolean(values.rucConfirmationToken)} onChange={onChange} />
+      onChange={onChange} />
   );
   const billingEmail = <EmailField label="Correo de facturación" value={values.billingEmail} onChange={(billingEmail) => onChange({ billingEmail })} error={errors?.billingEmail} />;
   const location = (

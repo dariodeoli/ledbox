@@ -106,7 +106,7 @@ test("lista y alta de Clientes separan empresa, representante legal y contacto; 
   assert.match(form, /Nombre del encargado/);
   assert.match(fiscal, /event\.key === "Enter"/);
   assert.match(fiscal, /if \(inFlight\.current \|\| !ruc\.trim\(\)\) return/);
-  assert.match(fiscal, /onChange\(\{ ruc: result\.data\.fullRuc, legalName: result\.data\.name, rucConfirmationToken/);
+  assert.match(fiscal, /onChange\(\{ ruc: result\.data\.fullRuc, legalName: result\.data\.name,[\s\S]{0,220}rucConfirmationToken/);
   assert.doesNotMatch(fiscal, /Confirmar RUC y razón social/);
   assert.match(module, /Empresa \/ contacto comercial/);
   assert.match(module, /Representante legal/);

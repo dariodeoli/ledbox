@@ -1,3 +1,11 @@
+# 2.1.151
+
+- Clientes: la extracción fiscal queda compacta, sin tarjetas técnicas de ambiente/cuota/procedencia; las personas devueltas como «apellido, nombres» prellenan el representante en orden legible.
+
+# 2.1.150
+
+- Clientes: la extracción fiscal mantiene la evidencia del snapshot internamente, pero oculta la procedencia técnica del formulario para reducir ruido visual.
+
 # 2.1.149
 
 - Inventario: se muestran verificación y cronología unificada por producto, incluyendo conteos, movimientos, incidentes y auditoría.

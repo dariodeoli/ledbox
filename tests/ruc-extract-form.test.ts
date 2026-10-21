@@ -20,10 +20,14 @@ function harness() {
     adminSend: () => { calls++; return new Promise((r) => { resolve = r; }); },
     ...Object.fromEntries(["AdminButton", "AdminNote", "TextField", "RucField"].map((x) => [x, x])),
     formatNumber: String, formatDateTime: String,
+    representativeName: (value: string) => {
+      const [surname, given, ...rest] = value.split(",").map((part) => part.trim()).filter(Boolean);
+      return surname && given && rest.length === 0 ? `${given} ${surname}` : "";
+    },
   });
   const draw = (ruc = "1234567-0") => { si = ri = 0; return render({ ruc, legalName: "", snapshot: null, confirmed: false, onChange: (p: unknown) => changes.push(p) }); };
-  return { draw, changes, calls: () => calls, finish: async () => {
-    resolve({ ok: true, data: { name: "RAZÓN FICTICIA", fullRuc: "1234567-0", confirmationToken: "signed-test", ownData: { provenance: {}, quota: {} } } });
+  return { draw, changes, calls: () => calls, finish: async (name = "RAZÓN FICTICIA") => {
+    resolve({ ok: true, data: { name, fullRuc: "1234567-0", confirmationToken: "signed-test", ownData: { provenance: {}, quota: {} } } });
     await Promise.resolve(); await Promise.resolve();
   } };
 }
@@ -48,4 +52,28 @@ test("editar A→B→A mientras consulta descarta el resultado aunque el RUC fin
   h.draw(); await h.finish(); tree = h.draw();
   assert.equal(nodes(tree).some((n) => n.type === "AdminButton" && n.props?.children.includes("Confirmar RUC y razón social")), false);
   assert.equal(h.changes.length, 2);
+});
+
+test("el formulario de extracción no expone la procedencia técnica del snapshot", () => {
+  const source = readFileSync("components/admin/modules/ClientFiscalFields.tsx", "utf8");
+  const form = source.slice(source.indexOf("export function ClientFiscalFields"));
+  assert.equal(form.includes('aria-label="Procedencia fiscal"'), false);
+  assert.equal(form.includes("source.sourcePage"), false);
+  assert.equal(form.includes("source.publicationDate"), false);
+  assert.equal(form.includes("source.importedAt"), false);
+  assert.equal(form.includes("proposal?.lookedUpAt"), false);
+  assert.match(source, /aria-label="Snapshot fiscal confirmado"/);
+});
+
+test("una persona devuelta como apellido, nombres prellena el representante en orden legible", async () => {
+  const h = harness();
+  extract(h.draw()).props!.onClick();
+  await h.finish("DE OLIVEIRA ORTIGOZA, DARIO ALFONSO");
+  assert.deepEqual(JSON.parse(JSON.stringify(h.changes[0])), {
+    ruc: "1234567-0",
+    legalName: "DE OLIVEIRA ORTIGOZA, DARIO ALFONSO",
+    legalRepresentative: "DARIO ALFONSO DE OLIVEIRA ORTIGOZA",
+    rucConfirmationToken: "signed-test",
+    rucSnapshot: null,
+  });
 });
