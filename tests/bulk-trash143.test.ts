@@ -17,16 +17,28 @@ function source(path: string, mocks: Record<string, unknown>, globals = {}) {
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
 function harness(perform = async (_type: any, row: any) => ({ row, status: "success", message: "ok" }), store = new Map<string, string>()) {
   let at = 0; const values: any[] = [], dependencies: any[] = [], cleanups: any[] = [], effects: (() => void)[] = [];
+  const history: any[] = []; let historySequence = 0;
   const react = { ...React,
     useState(initial: any) { const i = at++; if (!(i in values)) values[i] = typeof initial === "function" ? initial() : initial; return [values[i], (next: any) => { values[i] = typeof next === "function" ? next(values[i]) : next; }]; },
     useRef(initial: any) { const i = at++; return values[i] ??= { current: initial }; },
     useEffect(fn: any, deps: any[]) { const i = at++; if (!dependencies[i] || deps.some((v, n) => v !== dependencies[i][n])) { dependencies[i] = deps; effects.push(() => { cleanups[i]?.(); cleanups[i] = fn(); }); } },
   };
-  const mod = source("components/admin/TrashBulk.tsx", { react, "@/lib/bulk-trash": rules, "@/lib/admin-bulk-trash": { performBulkTrash: perform }, "@/lib/admin-format": { formatNumber: String }, "@/lib/trash-shared": trash, "./AdminFields": {}, "./AdminUI": {}, "./modules/InventoryParts": {} }, { window: { sessionStorage: { getItem: (key: string) => store.get(key), setItem: (key: string, value: string) => store.set(key, value) } } });
+  const adminApi = {
+    newIdempotencyKey: () => `test-key-${++historySequence}`,
+    adminApiGet: async (path: string) => ({ ok: true, data: { runs: history.filter(run => path.includes(`type=${run.type}`)).map(run => ({ outcomes: run.outcomes })) } }),
+    adminSend: async (path: string, body: any, method = "POST") => {
+      if (path !== "/api/admin/trash/bulk-runs") return { ok: true, data: {} };
+      if (method === "POST") { const run = { id: `run-${historySequence}`, type: body.type, action: body.action, outcomes: [] as any[] }; history.unshift(run); return { ok: true, data: { run } }; }
+      const run = history.find(item => item.id === body.runId);
+      if (run) run.outcomes = body.outcomes.map((outcome: any) => ({ id: outcome.row.id, name: outcome.row.name, status: outcome.status === "success" ? "succeeded" : outcome.status, message: outcome.message }));
+      return { ok: true, data: {} };
+    },
+  };
+  const mod = source("components/admin/TrashBulk.tsx", { react, "@/lib/bulk-trash": rules, "@/lib/admin-bulk-trash": { performBulkTrash: perform }, "@/lib/admin-api": adminApi, "@/lib/admin-format": { formatNumber: String }, "@/lib/trash-shared": trash, "./AdminFields": {}, "./AdminUI": {}, "./modules/InventoryParts": {} }, { window: { sessionStorage: { getItem: (key: string) => store.get(key), setItem: (key: string, value: string) => store.set(key, value) } } });
   let options: any = { type: "Client", organizationId: "a", scopeKey: "active", enabled: true, visibleRows: [row("1"), row("2")], loadAllRows: async () => [row("1"), row("2"), row("3")], onChanged() {} };
   function render(changes = {}) { options = { ...options, ...changes }; at = 0; const result = mod.useBulkTrash(options); while (effects.length) effects.shift()!(); return result; }
   render();
-  return { render, store, unmount() { cleanups.forEach(fn => fn?.()); } };
+  return { render, store, history, unmount() { cleanups.forEach(fn => fn?.()); } };
 }
 const row = (id: string) => ({ id, name: id, archivedAt: null });
 test("el informe de lote exporta un renglón por resultado y etiqueta cada estado", () => {
@@ -71,6 +83,9 @@ test("uncertain mutation stops remaining rows and blocks retries until fresh rer
 test("late successful mutation cannot remove selection belonging to next company or continue old loop", async () => {
   const pending = deferred<any>(); let calls = 0; const h = harness(async (_type, selected) => { calls++; return pending.promise; });
   h.render().selectVisible(); h.render().setAction("archive"); const work = h.render().apply();
+  // El flujo ahora persiste primero el reporte durable; dejar que inicie el POST
+  // antes de cambiar de empresa verifica que una respuesta tardía quede aislada.
+  await new Promise(resolve => setTimeout(resolve, 0));
   h.render({ organizationId: "b" }); h.render().selectVisible(); pending.resolve({ row: row("1"), status: "success", message: "ok" }); await work;
   assert.equal(calls, 1); assert.equal(h.render().count, 2); assert.equal(h.render().busy, false);
 });

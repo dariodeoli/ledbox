@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { kpiState } from "@/components/admin/kpi-state";
-import { adminSend, useAdminResource } from "@/lib/admin-api";
+import { adminApiGet, adminSend, newIdempotencyKey, useAdminResource } from "@/lib/admin-api";
 import { formatDateTime, formatNumber } from "@/lib/admin-format";
 import { canManageTrash } from "@/lib/admin-policy";
 import {
@@ -71,6 +71,20 @@ function EliminadosView() {
   const filtersActive = type !== "ALL" || by !== "ALL" || Boolean(from) || Boolean(to);
   const selectionScope = `${type}|${by}|${from}|${to}`;
   useEffect(() => { setSelected(new Set()); setRestoreReport([]); }, [selectionScope]);
+  useEffect(() => {
+    let active = true;
+    void adminApiGet<{ runs?: Array<{ operation: string; outcomes?: Array<{ id: string; name?: string; status: string; message?: string }> }> }>("/api/admin/trash/bulk-runs", { fresh: true }).then(result => {
+      if (!active || !result.ok) return;
+      const rows = result.data.runs?.find(run => run.operation.endsWith(":restore") && Array.isArray(run.outcomes))?.outcomes ?? [];
+      const report = rows.map(row => {
+        const [, ...idParts] = row.id.split(":");
+        const id = idParts.join(":");
+        return { candidate: { key: row.id, id, name: row.name || id, restorable: row.status !== "blocked" }, status: row.status === "succeeded" ? "success" as const : row.status === "blocked" ? "blocked" as const : row.status === "unknown" ? "unknown" as const : "failed" as const, message: row.message || "Resultado registrado." };
+      }).filter(row => row.candidate.id);
+      if (report.length) setRestoreReport(report);
+    });
+    return () => { active = false; };
+  }, []);
   const eligibleRows = rows.filter((item) => isTrashEntityType(item.type) && !item.anonymized);
   const selectedRows = rows.filter((item) => selected.has(`${item.type}:${item.id}`));
 
@@ -89,15 +103,30 @@ function EliminadosView() {
   async function restoreSelected() {
     if (restoring || !selectedRows.length) return;
     setRestoring(true); setConfirmRestore(false); setMessage(null); setRestoreReport([]);
+    const candidates = selectedRows.map((item) => ({
+      key: `${item.type}:${item.id}`, id: item.id, name: item.name,
+      restorable: isTrashEntityType(item.type) && !item.anonymized,
+    }));
+    const historyKey = newIdempotencyKey();
+    const reportType = selectedRows.every(item => item.type === selectedRows[0].type) ? selectedRows[0].type : "ALL";
+    const started = await adminSend<{ run: { id: string } }>("/api/admin/trash/bulk-runs", { type: reportType, action: "restore", ids: candidates.map(row => row.key) }, "POST", { idempotencyKey: historyKey });
+    if (!started.ok) { setRestoring(false); setMessage({ tone: "error", text: `No se inició la restauración porque no se pudo crear su historial: ${started.error}` }); return; }
+    const accumulated: RestoreOutcome[] = [];
     const outcomes = await restoreTrashBatch(selectedRows.map((item) => ({
       key: `${item.type}:${item.id}`, id: item.id, name: item.name,
       restorable: isTrashEntityType(item.type) && !item.anonymized,
     })), async (candidate) => {
       const item = selectedRows.find((row) => `${row.type}:${row.id}` === candidate.key)!;
       const result = await runTrashAction(item.type as TrashEntityType, item.id, "restore");
-      return result.ok ? { ok: true } : { ok: false, uncertain: result.uncertain, error: result.error };
+      const attempt = result.ok ? { ok: true as const } : { ok: false as const, uncertain: result.uncertain, error: result.error };
+      accumulated.push({ candidate, status: result.ok ? "success" : result.uncertain ? "unknown" : "failed", message: result.ok ? "Volvió a archivados." : result.uncertain ? "Resultado por confirmar; no se reintentó." : result.error });
+      const saved = await adminSend("/api/admin/trash/bulk-runs", { runId: started.data.run.id, outcomes: accumulated.map(row => ({ row: { id: row.candidate.key, name: row.candidate.name }, status: row.status, message: row.message })) }, "PATCH", { idempotencyKey: newIdempotencyKey() });
+      return saved.ok ? attempt : { ok: false as const, uncertain: true, error: "La acción se procesó o pudo procesarse, pero no se pudo guardar su historial. Revisá la papelera antes de repetir." };
     });
     setRestoreReport(outcomes);
+    const finalReport = outcomes.map(row => ({ row: { id: row.candidate.key, name: row.candidate.name }, status: row.status, message: row.message }));
+    const completed = outcomes.length === candidates.length && outcomes.every(row => row.status !== "unknown");
+    await adminSend("/api/admin/trash/bulk-runs", { runId: started.data.run.id, outcomes: finalReport, complete: completed }, "PATCH", { idempotencyKey: newIdempotencyKey() });
     setSelected((previous) => {
       const next = new Set(previous);
       for (const outcome of outcomes) if (outcome.status === "success") next.delete(outcome.candidate.key);

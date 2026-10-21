@@ -4,7 +4,7 @@ import { db } from "./db";
 import type { AdminContext } from "./tenancy";
 import { readIdempotencyKey, requestHashOf } from "./idempotency";
 
-export type BulkRowOutcome = { id: string; status: "succeeded" | "failed" | "unknown"; message?: string };
+export type BulkRowOutcome = { id: string; name?: string; status: "succeeded" | "blocked" | "failed" | "unknown"; message?: string };
 
 export function idempotencyForBulkRun(request: Request, body: Record<string, unknown>) {
   const key = readIdempotencyKey(request, body);

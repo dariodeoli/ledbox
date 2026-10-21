@@ -5,6 +5,7 @@ import { performBulkTrash } from "@/lib/admin-bulk-trash";
 import { formatNumber } from "@/lib/admin-format";
 import { csvFilename, downloadCsv } from "@/lib/admin-export";
 import { TRASH_ENTITIES } from "@/lib/trash-shared";
+import { adminApiGet, adminSend, newIdempotencyKey } from "@/lib/admin-api";
 import { TextAreaField } from "./AdminFields";
 import { AdminButton, AdminDialog, AdminNote } from "./AdminUI";
 import { RowCheck } from "./modules/InventoryParts";
@@ -26,6 +27,15 @@ export function useBulkTrash(options: BulkTrashOptions) {
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; generation.current++; }; }, []);
   useEffect(() => { generation.current++; setItems(new Map()); setExcluded(new Set()); setPinnedScope(options.scopeKey); setReport([]); setAction(null); setError(""); setLoadingAll(false); setBusy(false); setUncertainIds(new Set());
     try { const saved = JSON.parse(window.sessionStorage.getItem(reportKey) ?? "[]") as BulkTrashOutcome[]; if (Array.isArray(saved)) { const valid = saved.filter(row => row?.row?.id && ["success", "blocked", "failed", "unknown"].includes(row.status)); setReport(valid); setUncertainIds(new Set(valid.filter(row => row.status === "unknown").map(row => row.row.id))); } } catch { /* Un informe ilegible no ejecuta acciones. */ }
+    let active = true;
+    if (options.organizationId) void adminApiGet<{ runs?: Array<{ outcomes?: Array<{ id: string; name?: string; status: string; message?: string }> }> }>(`/api/admin/trash/bulk-runs?type=${encodeURIComponent(options.type)}`, { fresh: true }).then(result => {
+      if (!active || !result.ok) return;
+      const outcomes = result.data.runs?.[0]?.outcomes;
+      if (!Array.isArray(outcomes)) return;
+      const valid = outcomes.filter(row => row && typeof row.id === "string" && ["succeeded", "blocked", "failed", "unknown"].includes(row.status)).map(row => ({ row: { id: row.id, name: row.name || row.id, archivedAt: null }, status: row.status === "succeeded" ? "success" as const : row.status === "blocked" ? "blocked" as const : row.status === "unknown" ? "unknown" as const : "failed" as const, message: row.message || "Resultado registrado." }));
+      if (valid.length) { setReport(valid); setUncertainIds(new Set(valid.filter(row => row.status === "unknown").map(row => row.row.id))); }
+    });
+    return () => { active = false; };
   }, [options.organizationId]);
   const selectionScopeChanged = items.size > 0 && pinnedScope !== options.scopeKey;
   const selected = [...items.values()].filter(row => !excluded.has(row.id));
@@ -53,14 +63,31 @@ export function useBulkTrash(options: BulkTrashOptions) {
     const captured = options, capturedAction = action, rows = [...selected], run = ++generation.current;
     running.current = true; setBusy(true); setReport([]); setError("");
     const results: BulkTrashOutcome[] = [];
+    const reportKey = newIdempotencyKey();
+    let historyRunId = "";
+    const started = await adminSend<{ run: { id: string } }>("/api/admin/trash/bulk-runs", { type: captured.type, action: capturedAction, ids: rows.map(row => row.id) }, "POST", { idempotencyKey: reportKey });
+    if (!started.ok) {
+      running.current = false;
+      setBusy(false);
+      setError(`No se inició el lote porque no se pudo crear su historial: ${started.error}`);
+      return;
+    }
+    historyRunId = started.data.run.id;
     try {
       for (const row of rows) {
         if (!mounted.current || run !== generation.current || captured.organizationId !== current.current.organizationId || !current.current.enabled) break;
         persistReport([...results, { row, status: "unknown", message: "Intento iniciado; consultar estado si se perdió la respuesta. No se reanudará automáticamente." }]);
         const result = await performBulkTrash(captured.type, row, capturedAction, reason);
         results.push(result); persistReport(results); if (result.status === "unknown" && mounted.current && captured.organizationId === current.current.organizationId) setUncertainIds(previous => new Set(previous).add(row.id)); if (mounted.current && captured.organizationId === current.current.organizationId) setReport([...results]);
+        const saved = await adminSend("/api/admin/trash/bulk-runs", { runId: historyRunId, outcomes: results.map(item => ({ row: item.row, status: item.status, message: item.message })) }, "PATCH", { idempotencyKey: `${reportKey}:${results.length}` });
+        if (!saved.ok) { if (mounted.current && captured.organizationId === current.current.organizationId) setError(`El lote se detuvo: el resultado de «${row.name}» se aplicó pero no se pudo guardar en el historial. Revisá el registro antes de repetir.`); break; }
         if (result.status === "success" && mounted.current && captured.organizationId === current.current.organizationId) setItems(previous => { const next = new Map(previous); next.delete(row.id); return next; });
         if (result.status === "unknown") break;
+      }
+      const complete = results.length === rows.length;
+      if (complete) {
+        const saved = await adminSend("/api/admin/trash/bulk-runs", { runId: historyRunId, outcomes: results.map(item => ({ row: item.row, status: item.status, message: item.message })), complete: true }, "PATCH", { idempotencyKey: `${reportKey}:complete` });
+        if (!saved.ok && mounted.current && captured.organizationId === current.current.organizationId) setError(`El lote terminó, pero no se pudo cerrar su historial: ${saved.error}`);
       }
     } finally {
       running.current = false;
