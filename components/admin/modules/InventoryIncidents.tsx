@@ -38,6 +38,70 @@ const FILTERS = [
 
 type Action = { incident: AdminInventoryIncident; to: "IN_REPAIR" | "RESOLVED" | "WRITTEN_OFF" };
 
+type UnitTrace = {
+  unit: { id: string; code: string; status: string; inventory: { id: string; name: string; sku: string | null } };
+  incidents: AdminInventoryIncident[];
+  history: Array<{ incidentId: string; action: string; actorName: string | null; summary: string; occurredAt: string }>;
+};
+
+function UnitTraceDialog({ unitId, onClose }: { unitId: string; onClose: () => void }) {
+  const resource = useAdminResource(
+    `/api/admin/inventory/incidents?unitTrace=${encodeURIComponent(unitId)}`,
+    (payload) => payload as unknown as UnitTrace,
+  );
+  const trace = resource.data;
+
+  return (
+    <AdminDialog
+      title={trace ? `Historial · ${trace.unit.code}` : "Historial de unidad"}
+      icon="inventory"
+      size="lg"
+      description={trace ? `${trace.unit.inventory.name}${trace.unit.inventory.sku ? ` · ${trace.unit.inventory.sku}` : ""} · Estado actual: ${trace.unit.status}` : "Trazabilidad de daños y reparaciones de esta unidad."}
+      onClose={onClose}
+    >
+      <AdminDataState
+        loading={resource.loading}
+        error={resource.error}
+        onRetry={resource.reload}
+        empty={!trace || trace.history.length === 0}
+        emptyTitle="Sin movimientos registrados"
+        emptyIcon="inventory"
+        emptyHint="Los cambios futuros de esta unidad aparecerán aquí con fecha y responsable."
+        rows={3}
+      >
+        {trace ? (
+          <div className="admin-form">
+            <AdminDialogSection title="Incidentes de la unidad">
+              {trace.incidents.map((incident) => (
+                <AdminNote key={incident.id}>
+                  <strong>{KIND_LABEL[incident.kind]} · {STATUS_LABEL[incident.status]}</strong>
+                  {` · ${formatDateTime(incident.openedAt)}`}
+                  {incident.resolvedAt ? ` · cierre ${formatDateTime(incident.resolvedAt)}` : ""}
+                  {incident.cost != null ? ` · ${formatMoney(incident.cost)}` : ""}
+                  {incident.notes ? <><br />{incident.notes}</> : null}
+                </AdminNote>
+              ))}
+            </AdminDialogSection>
+            <AdminDialogSection title="Cronología auditada">
+              <ol className="admin-timeline" aria-label={`Cronología de ${trace.unit.code}`}>
+                {trace.history.map((entry, index) => (
+                  <li className="admin-timeline-step" key={`${entry.incidentId}:${entry.action}:${entry.occurredAt}:${index}`}>
+                    <span className="admin-timeline-when">{formatDateTime(entry.occurredAt)}</span>
+                    <span className="admin-timeline-body">
+                      <strong>{entry.summary}</strong>
+                      <small>{entry.actorName || "Responsable no registrado"}</small>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </AdminDialogSection>
+          </div>
+        ) : null}
+      </AdminDataState>
+    </AdminDialog>
+  );
+}
+
 const ACTION_COPY = {
   IN_REPAIR: { title: "Enviar a reparación", submit: "A reparación", help: "La unidad o cantidad sigue fuera de lo libre mientras se repara." },
   RESOLVED: { title: "Marcar como resuelto", submit: "Resuelto", help: "La unidad o cantidad vuelve a estar libre para alquilar." },
@@ -121,6 +185,7 @@ export function InventoryIncidentsPanel({
 }) {
   const [filter, setFilter] = useState("open");
   const [action, setAction] = useState<Action | null>(null);
+  const [traceUnitId, setTraceUnitId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const query = `status=${filter}${eventId ? `&eventId=${encodeURIComponent(eventId)}` : ""}${inventoryId ? `&inventoryId=${encodeURIComponent(inventoryId)}` : ""}&r=${reloadKey}`;
   const resource = useAdminResource(
@@ -185,6 +250,11 @@ export function InventoryIncidentsPanel({
                 <AdminCell end className="admin-cell--actions">
                   {writable && open ? (
                     <span className="admin-actions">
+                      {incident.unitId ? (
+                        <AdminButton aria-label={`Ver trazabilidad: ${label}`} onClick={() => setTraceUnitId(incident.unitId)}>
+                          Historial
+                        </AdminButton>
+                      ) : null}
                       {incident.status === "OPEN" && incident.kind !== "MISSING" ? (
                         <AdminButton aria-label={`Enviar a reparación: ${label}`} onClick={() => setAction({ incident, to: "IN_REPAIR" })}>
                           A reparación
@@ -198,7 +268,11 @@ export function InventoryIncidentsPanel({
                       </AdminButton>
                     </span>
                   ) : (
-                    <span className="admin-muted">—</span>
+                    incident.unitId ? (
+                      <AdminButton aria-label={`Ver trazabilidad: ${label}`} onClick={() => setTraceUnitId(incident.unitId)}>
+                        Historial
+                      </AdminButton>
+                    ) : <span className="admin-muted">—</span>
                   )}
                 </AdminCell>
               </AdminRow>
@@ -218,6 +292,7 @@ export function InventoryIncidentsPanel({
           }}
         />
       ) : null}
+      {traceUnitId ? <UnitTraceDialog unitId={traceUnitId} onClose={() => setTraceUnitId(null)} /> : null}
     </div>
   );
 }
