@@ -2,17 +2,15 @@
 import { InventoryOriginFields } from "./InventoryOriginFields";
 import { STOCK_ORIGIN_LABELS, type StockOrigin } from "@/lib/inventory-stock-origin";
 import { InventoryCountPanel } from "./InventoryCountPanel";
+import { InventoryProductTimeline, InventoryProductVerification } from "./InventoryProductHistory";
 
 import { tierLabel, tierPreview, previewDays, tiersForAudience, type PriceTier } from "@/lib/price-tiers";
 import { useEffect, useId, useMemo, useState } from "react";
 import {
-  damageSummary,
   formatDateShort,
   formatDateTime,
   formatMoney,
   formatNumber,
-  inventoryAssignmentCountdown,
-  inventoryAssignmentState,
   inventoryKindLabel,
   inventoryStatusLabel,
   statusTone,
@@ -1071,99 +1069,23 @@ export function InventoryFicha({
         </TabPanel>
       )}
 
-      {/* Verificación (E4): sin conteos todavía; no se muestra ninguna fecha inventada. */}
+      {/* Verificación física: usa la sesión persistida más reciente del producto. */}
       {isCombo ? null : (
         <TabPanel active={tab === "verificacion"} id={panelId("verificacion")} tab={tabId("verificacion")}>
           <AdminDialogSection title="Verificación" stack>
-            <AdminEmpty
-              icon="check"
-              title="Verificación: próximamente (E4)"
-              hint="Acá va a figurar cuándo se contó este producto por última vez y quién lo hizo. Todavía no hay conteos registrados."
-            />
+            <InventoryProductVerification inventoryId={item.id} />
           </AdminDialogSection>
         </TabPanel>
       )}
 
-      {/* Cronología: hasta E4 reúne lo que ya existe (incidentes y asignaciones/cambios). */}
+      {/* Cronología durable: movimientos, devoluciones, conteos, incidentes y actividad auditada. */}
       <TabPanel active={tab === "cronologia"} id={panelId("cronologia")} tab={tabId("cronologia")}>
-        <AdminNote>La cronología unificada de este producto (alquileres, devoluciones y conteos) llega en E4: próximamente. Mientras tanto, acá están los incidentes y el historial que ya se registran.</AdminNote>
-      {isCombo ? null : (
-        <AdminDialogSection title="Incidentes" stack>
-          <InventoryIncidentsPanel inventoryId={item.id} writable={writable} onChanged={onChanged} />
-        </AdminDialogSection>
-      )}
-
-      <AdminDialogSection title="Historial" stack>
-        {item.assignments.length === 0 ? (
-          <AdminEmpty
-            icon="inventory"
-            title="Sin asignaciones"
-            hint="Los equipos se asignan a los eventos con cantidad y rango de fechas desde el módulo Eventos, o se reservan al aprobar un presupuesto con ítems vinculados."
-          />
-        ) : (
-          <AdminTable
-            view="inventario-asignaciones"
-            label={`Asignaciones de ${item.name}`}
-            columns={[
-              { label: "Evento" },
-              { label: "Rango" },
-              { label: "Cantidad", end: true },
-              { label: "Salida" },
-              { label: "Devolución" },
-              { label: "Estado" },
-              { label: "Daños" },
-            ]}
-          >
-            {item.assignments.map((assignment) => {
-              const state = inventoryAssignmentState(assignment);
-              const countdown = inventoryAssignmentCountdown(assignment);
-              const damages = damageSummary(assignment.damagedQuantity, assignment.missingQuantity);
-              const startsAt = assignment.startsAt ?? assignment.event.startsAt;
-              const endsAt = assignment.endsAt ?? assignment.event.endsAt ?? startsAt;
-              return (
-                <AdminRow key={assignment.id}>
-                  <AdminCell title={assignment.event.name}>{assignment.event.name}</AdminCell>
-                  <AdminCell title={startsAt && endsAt ? rangeStamp(startsAt, endsAt) : "Sin fechas"}>{rangeStamp(startsAt, endsAt)}</AdminCell>
-                  <AdminCell end title={`${formatNumber(assignment.quantity)} unidades`}>
-                    {formatNumber(assignment.quantity)}
-                  </AdminCell>
-                  <AdminCell title={assignment.checkedOutAt ? `Salida: ${stamp(assignment.checkedOutAt)}` : undefined}>{stamp(assignment.checkedOutAt)}</AdminCell>
-                  <AdminCell title={assignment.checkedInAt ? `Devolución: ${stamp(assignment.checkedInAt)}` : undefined}>{stamp(assignment.checkedInAt)}</AdminCell>
-                  <AdminCell title={countdown ? countdown.title : "Asignación cerrada"}>
-                    <AdminBadge tone={state.tone}>{state.label}</AdminBadge>
-                    {countdown ? (
-                      <AdminCountdown value={countdown.at} short className="admin-countdown--inline" title={`${countdown.title}: ${item.name}`} />
-                    ) : null}
-                  </AdminCell>
-                  <AdminCell title={damages ? `${damages}${assignment.damageNotes ? ` · ${assignment.damageNotes}` : ""}` : "Sin daños ni faltantes"}>
-                    {damages ?? "—"}
-                  </AdminCell>
-                </AdminRow>
-              );
-            })}
-          </AdminTable>
-        )}
-        {canReadAudit ? (
-          audit.error ? (
-            <AdminNote tone="error">{audit.error}</AdminNote>
-          ) : audit.loading ? (
-            <AdminNote>Cargando los cambios registrados…</AdminNote>
-          ) : (audit.data ?? []).length === 0 ? (
-            <AdminNote>Todavía no hay cambios registrados para este producto.</AdminNote>
-          ) : (
-            <ul className="admin-ficha-audit" aria-label={`Cambios registrados de ${item.name}`}>
-              {(audit.data ?? []).map((row) => (
-                <li key={row.id}>
-                  <span className="admin-ficha-audit-what">{row.summary}</span>
-                  <small>
-                    {row.actorName} · {formatDateTime(row.createdAt)}
-                  </small>
-                </li>
-              ))}
-            </ul>
-          )
-        ) : null}
-      </AdminDialogSection>
+        <div className="admin-stack">
+          <InventoryProductTimeline inventoryId={item.id} />
+          {isCombo ? null : <AdminDialogSection title="Incidentes" stack>
+            <InventoryIncidentsPanel inventoryId={item.id} writable={writable} onChanged={onChanged} />
+          </AdminDialogSection>}
+        </div>
       </TabPanel>
     </AdminDialog>
   );
