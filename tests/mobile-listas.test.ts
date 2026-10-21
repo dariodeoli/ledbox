@@ -86,8 +86,10 @@ test("clientes escritorio: sin links de contacto en la grilla y con la tabla má
   const detail = repoFile("components/admin/modules/ClienteFichaModule.tsx");
   assert.match(detail, /<ClientLinks client=\{client\} name=\{name\}/, "la ficha mantiene los links");
   assert.match(detail, /mailto:/, "la ficha mantiene el correo");
-  // Tipo se integra en la identidad; contacto conserva su columna independiente.
+  // Tipo se integra en la identidad; empresa y contacto comercial comparten una celda y el representante legal tiene columna propia.
   assert.match(row, /<ClientIdentityView client=\{client\} \/>/, "la celda conserva responsable y segmento");
+  assert.match(module, /Empresa \/ contacto comercial/);
+  assert.match(module, /Representante legal/);
   assert.match(repoFile("components/admin/ClientIdentity.tsx"), /identity\.category/, "el tipo sigue visible dentro de la identidad");
   const css = repoFile("app/globals.css");
   const regla = /\.admin-table--clientes \{ --clientes-cols: ([^;]+); --admin-cols: var\(--clientes-cols\); --admin-table-min: ([\d.]+)rem; \}/.exec(css);

@@ -79,6 +79,7 @@ test("la tarjeta móvil de clientes conserva teléfono/correo al unificar identi
   assert.match(helper, /return phone \|\| email \|\| ""/);
   const cards = source.slice(source.indexOf("const clientCards:"), source.indexOf("const totals ="));
   assert.match(cards, /const primaryContact = clientContactLine\(client\)/);
-  assert.match(cards, /subtitle: \[primaryContact,/);
+  assert.match(cards, /subtitle: \[client\.company \? `Empresa:/);
+  assert.match(cards, /primaryContact \? `Comercial:/);
   assert.match(cards, /ClientIdentityView client=\{client\}/);
 });
