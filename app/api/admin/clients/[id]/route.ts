@@ -137,7 +137,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
 /** Campos que se auditan al editar un cliente (sin el binario del logo). */
 const CLIENT_AUDIT_FIELDS = [
-  "tradeName", "legalName", "billingEmail", "city", "department", "address", "addressReference", "locationUrl", "contacts", "rucSnapshot",
+  "tradeName", "legalName", "legalRepresentative", "billingEmail", "city", "department", "address", "addressReference", "locationUrl", "contacts", "rucSnapshot",
   "name",
   "company",
   "type",

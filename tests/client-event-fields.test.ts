@@ -37,6 +37,25 @@ test("fantasía empresarial independiente: 200 caracteres, sin conversión de hi
   assert.deepEqual(parseClientFields({ tradeName: "", department: null }), { ok: true, data: { tradeName: null, department: null } });
 });
 
+test("representante legal se valida y persiste separado de empresa, fantasía y contacto comercial", () => {
+  const parsed = parseClientFields({
+    company: "Empresa de prueba S.A.",
+    legalRepresentative: "  Ana   Pérez ",
+    tradeName: "Tienda demo",
+    contactName: "Luis Comercial",
+  });
+  assert.equal(parsed.ok, true);
+  if (parsed.ok) assert.deepEqual(parsed.data, {
+    company: "Empresa de prueba S.A.",
+    legalRepresentative: "Ana Pérez",
+    tradeName: "Tienda demo",
+    contactName: "Luis Comercial",
+  });
+  assert.deepEqual(parseClientFields({ legalRepresentative: "" }), { ok: true, data: { legalRepresentative: null } });
+  assert.equal(parseClientFields({ legalRepresentative: "x".repeat(FIELD_LIMITS.name + 1) }).ok, false);
+  assert.equal(parseClientFields({ legalRepresentative: 42 }).ok, false);
+});
+
 test("contactos por función normalizados sin inferir campos principales", () => {
   const result = parseClientFields({ billingEmail: "  FACTURA@EXAMPLE.COM ", contacts: [{ name: " Ana  Pérez ", role: "Compras", phone: "+595 981123456", email: "ANA@EXAMPLE.COM" }] });
   assert.equal(result.ok, true);

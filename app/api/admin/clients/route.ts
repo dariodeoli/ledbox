@@ -48,7 +48,7 @@ export async function GET(request: Request) {
   }
   const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
   if (query.length > 200) return jsonError("La búsqueda admite hasta 200 caracteres.", 400);
-  const searchFields = ["name", "tradeName", "legalName", "company", "ruc", "email", "phone", "contactName", "contactEmail", "contactPhone", "billingEmail", "whatsapp"] as const;
+  const searchFields = ["name", "tradeName", "legalName", "legalRepresentative", "company", "ruc", "email", "phone", "contactName", "contactEmail", "contactPhone", "billingEmail", "whatsapp"] as const;
   // Filtrar en la base ANTES del límite: también encuentra clientes antiguos.
   const search = query ? { OR: searchFields.map((field) => ({ [field]: { contains: query, mode: "insensitive" as const } })) } : {};
   // Se pide uno de más para saber, sin contar, si la lista quedó truncada.
@@ -116,7 +116,7 @@ export async function GET(request: Request) {
 
 /** Campos que se auditan al crear un cliente (sin el binario del logo). */
 const CLIENT_AUDIT_FIELDS = [
-  "tradeName", "legalName", "billingEmail", "city", "department", "address", "addressReference", "locationUrl", "contacts", "rucSnapshot",
+  "tradeName", "legalName", "legalRepresentative", "billingEmail", "city", "department", "address", "addressReference", "locationUrl", "contacts", "rucSnapshot",
   "name",
   "company",
   "type",

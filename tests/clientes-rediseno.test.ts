@@ -95,6 +95,25 @@ test("lista de Clientes: KPIs-filtro, segmentos reales, búsqueda y una acción 
   assert.match(module, /if \(writable\) items\.push\(\{ label: "Editar"/, "Editar solo con permiso");
 });
 
+test("lista y alta de Clientes separan empresa, representante legal y contacto; RUC se consulta con Enter", () => {
+  const module = repoFile("components/admin/modules/ClientesModule.tsx");
+  const form = repoFile("components/admin/modules/ClientQuickForm.tsx");
+  const fiscal = repoFile("components/admin/modules/ClientFiscalFields.tsx");
+  const css = repoFile("app/globals.css");
+  assert.match(form, /label="Representante legal"/);
+  assert.match(form, /label="Empresa"/);
+  assert.match(form, /Nombre fantasía \/ comercial/);
+  assert.match(form, /Nombre del encargado/);
+  assert.match(fiscal, /event\.key === "Enter"/);
+  assert.match(fiscal, /if \(inFlight\.current \|\| !ruc\.trim\(\)\) return/);
+  assert.match(fiscal, /onChange\(\{ ruc: result\.data\.fullRuc, legalName: result\.data\.name, rucConfirmationToken/);
+  assert.doesNotMatch(fiscal, /Confirmar RUC y razón social/);
+  assert.match(module, /Empresa \/ contacto comercial/);
+  assert.match(module, /Representante legal/);
+  assert.match(module, /cardView = narrow \|\| view === "grid"/);
+  assert.match(css, /\.admin-table--clientes \{ --clientes-cols: minmax\(12rem,[^}]*minmax\(9rem,/);
+});
+
 test("lista de Clientes: el link mayorista sale de un agregado acotado por empresa", () => {
   const route = repoFile("app/api/admin/clients/route.ts");
   assert.match(route, /catalogAccessToken\.groupBy\(\{[\s\S]{0,200}where: \{ organizationId, clientId: \{ in: clientIds \}, revokedAt: null \}/);

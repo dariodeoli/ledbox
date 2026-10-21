@@ -22,7 +22,7 @@ export function ClientFiscalSnapshot({ snapshot }: { snapshot: AdminClientRucSna
   </dl>;
 }
 
-/** Flujo fiscal del cliente: consulta explícita → revisar → aplicar → guardar token. */
+/** Flujo fiscal: Enter o botón consulta, completa la propuesta y deja revisar/editar antes de guardar. */
 export function ClientFiscalFields({ ruc, legalName, snapshot, confirmed, onChange }: {
   ruc: string;
   legalName: string;
@@ -70,13 +70,24 @@ export function ClientFiscalFields({ ruc, legalName, snapshot, confirmed, onChan
       return;
     }
     setProposal(result.data);
+    // La consulta sólo prellena identidad fiscal; nunca cambia nombre comercial,
+    // empresa, representante ni contactos. El usuario conserva la revisión final
+    // en el formulario antes de guardar.
+    onChange({ ruc: result.data.fullRuc, legalName: result.data.name, rucConfirmationToken: result.data.confirmationToken, rucSnapshot: null });
   }
 
   const source = proposal?.ownData.provenance ?? snapshot?.provenance;
   return <>
-    <RucField label="RUC / CI" maxLength={30} value={ruc} onChange={(value) => manual({ ruc: value })} />
+    <RucField label="RUC / CI" maxLength={30} value={ruc} onChange={(value) => manual({ ruc: value })}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+          event.preventDefault();
+          void lookup();
+        }
+      }}
+      hint="Ingresá el documento y presioná Enter para consultar. También podés completar los datos manualmente." />
     <AdminButton type="button" icon="search" disabled={!ruc.trim() || busy} busy={busy} onClick={() => void lookup()}>Extraer datos del RUC</AdminButton>
-    <AdminNote>Consulta en OwnData al pulsar Extraer; puede consumir tu cuota. Revisá el resultado antes de aplicarlo.</AdminNote>
+    <AdminNote>La consulta a OwnData puede consumir tu cuota. Revisá o editá los datos antes de guardar.</AdminNote>
     <TextField label="Razón social oficial" maxLength={300} value={legalName} onChange={(value) => manual({ legalName: value })}
       hint="Entrada manual disponible. La consulta solo propone RUC y razón social; no cambia fantasía ni contactos." />
     {error ? <AdminNote tone="error">{error}</AdminNote> : null}
@@ -90,8 +101,7 @@ export function ClientFiscalFields({ ruc, legalName, snapshot, confirmed, onChan
         <div><dt>Cuota restante</dt><dd>{formatNumber(proposal.ownData.quota.remaining)}</dd></div>
         <div><dt>Costo monetario</dt><dd>No informado por el proveedor</dd></div>
       </dl>
-      {confirmed ? <AdminNote>Resultado confirmado en este formulario; se aplica al guardar el cliente.</AdminNote> :
-        <AdminButton type="button" icon="check" onClick={() => onChange({ ruc: proposal.fullRuc, legalName: proposal.name, rucConfirmationToken: proposal.confirmationToken, rucSnapshot: null })}>Confirmar RUC y razón social</AdminButton>}
+      {confirmed ? <AdminNote>Datos fiscales propuestos y listos para guardar; podés editarlos antes.</AdminNote> : null}
     </div> : null}
     {source ? <dl className="admin-dialog-facts admin-field--wide" aria-label="Procedencia fiscal">
       <div><dt>Fuente</dt><dd>Snapshot oficial DNIT · {source.sourcePage}</dd></div>

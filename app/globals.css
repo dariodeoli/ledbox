@@ -2082,7 +2082,7 @@ a.admin-company:hover { border-color: var(--a-line-2); background: var(--a-panel
 /* Clientes (rediseño): tabla esencial —cliente, tipo, contacto, eventos,
    contratado, saldo, última actividad y una acción visible + «•••»—. La fila
    entera abre la ficha con un enlace extendido (`.admin-row-link::after`). */
-.admin-table--clientes { --clientes-cols: minmax(12rem, 2fr) minmax(8.5rem, 1.3fr) 4.5rem 7rem 7rem 6rem 10.5rem; --admin-cols: var(--clientes-cols); --admin-table-min: 58rem; }
+.admin-table--clientes { --clientes-cols: minmax(12rem, 1.8fr) minmax(11rem, 1.5fr) minmax(9rem, 1.2fr) 3.5rem 6.5rem 6rem 5.5rem 9rem; --admin-cols: var(--clientes-cols); --admin-table-min: 64rem; }
 .admin-table--clientes .admin-table-row { position: relative; cursor: pointer; }
 .admin-table--clientes .admin-cell--actions { overflow: visible; }
 @media (min-width: 1380px) { .admin-table--clientes .admin-cell--actions { position: relative; z-index: 1; } }

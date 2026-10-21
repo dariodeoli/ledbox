@@ -879,6 +879,8 @@ model Client {
   tradeName           String?
   /// Razón social oficial o manual, independiente de fantasía y contacto.
   legalName           String?
+  /// Representante legal declarado, separado del nombre comercial y contacto operativo.
+  legalRepresentative String?
   billingEmail        String?
   city                String?
   department          String?

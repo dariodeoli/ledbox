@@ -33,6 +33,7 @@ export type ClientQuickValues = {
   phone: string;
   email: string;
   company: string;
+  legalRepresentative: string;
   type: string;
   ruc: string;
   contactName: string;
@@ -62,6 +63,7 @@ export const EMPTY_CLIENT_QUICK: ClientQuickValues = {
   phone: "",
   email: "",
   company: "",
+  legalRepresentative: "",
   type: "FINAL",
   ruc: "",
   contactName: "",
@@ -76,6 +78,7 @@ export const EMPTY_CLIENT_QUICK: ClientQuickValues = {
 /** Avisos del front con el mismo mensaje que revalida el API (regla única). */
 export type ClientQuickErrors = {
   tradeName: string | null;
+  legalRepresentative: string | null;
   billingEmail: string | null;
   locationUrl: string | null;
   contacts: string | null;
@@ -92,6 +95,7 @@ export type ClientQuickErrors = {
 export function clientQuickErrors(values: ClientQuickValues): ClientQuickErrors {
   return {
     tradeName: values.tradeName.length > 200 ? "El nombre comercial admite hasta 200 caracteres." : null,
+    legalRepresentative: values.legalRepresentative && !personNameValid(values.legalRepresentative) ? FIELD_MESSAGES.name : null,
     billingEmail: values.billingEmail && !emailValid(values.billingEmail) ? FIELD_MESSAGES.email : null,
     locationUrl: values.locationUrl && !locationLinkValid(values.locationUrl) ? "Usá un enlace http o https sin credenciales." : null,
     contacts: values.contacts.length > 20 ? "Podés cargar hasta 20 contactos." : values.contacts.some((contact) =>
@@ -128,6 +132,7 @@ export function clientQuickPayload(values: ClientQuickValues) {
     locationUrl: values.locationUrl || null,
     contacts: values.contacts.map((contact) => ({ name: contact.name.trim(), role: contact.role?.trim() || null, phone: contact.phone || null, email: contact.email || null })),
     company: values.company || null,
+    legalRepresentative: values.legalRepresentative.trim() || null,
     ruc: values.ruc || null,
     phone: values.phone || null,
     email: values.email || null,
@@ -218,6 +223,11 @@ export function ClientQuickFields({
       placeholder="Ej.: Samsung Paraguay"
       hint="Opcional: empresa a la que pertenece el cliente."
     />
+  );
+  const legalRepresentative = (
+    <TextField label="Representante legal" maxLength={FIELD_LIMITS.name} value={values.legalRepresentative}
+      onChange={(value) => onChange({ legalRepresentative: value })} placeholder="Nombre y apellido" error={errors?.legalRepresentative}
+      hint="Persona que representa legalmente a la empresa; separada del contacto comercial." />
   );
   const type = (
     <SegmentedField
@@ -334,6 +344,11 @@ export function ClientQuickFields({
   if (layout === "sections") {
     return (
       <>
+        <AdminDialogSection title="Identificación fiscal">
+          {fiscal}
+          {company}
+          {legalRepresentative}
+        </AdminDialogSection>
         <AdminDialogSection title="Datos">
           {tradeName}
           {phone}
@@ -343,16 +358,14 @@ export function ClientQuickFields({
           {contactPerson}
           {whatsapp}
         </AdminDialogSection>
-        <AdminDialogSection title="Datos fiscales" collapsible defaultOpen={moreOpen} hint="RUC, razón social y facturación">
-          {fiscal}
+        <AdminDialogSection title="Facturación" collapsible defaultOpen={moreOpen} hint="facturación y razón social">
           {billingEmail}
         </AdminDialogSection>
         <AdminDialogSection title="Ubicación" collapsible defaultOpen={moreOpen} hint="ciudad, dirección y mapa">
           {location}
         </AdminDialogSection>
-        <AdminDialogSection title="Más opciones" collapsible defaultOpen={moreOpen} hint="tipo de cliente, empresa, redes y otros contactos">
+        <AdminDialogSection title="Más opciones" collapsible defaultOpen={moreOpen} hint="tipo de cliente, redes y otros contactos">
           {type}
-          {company}
           {historicName}
           {web}
           {functionContacts}
@@ -370,6 +383,7 @@ export function ClientQuickFields({
       <AdminDisclosure title="Más datos" hint="datos fiscales, ubicación y contactos" defaultOpen={moreOpen}>
         {historicName}
         {company}
+        {legalRepresentative}
         {type}
         {fiscal}
         {billingEmail}

@@ -171,6 +171,7 @@ export type AdminClientRef = {
   /** Identidad histórica: documentos usan clientDisplayName; el panel usa clientPresentation. */
   tradeName?: string | null;
   legalName?: string | null;
+  legalRepresentative?: string | null;
   type: string;
   email: string | null;
   phone: string | null;
@@ -225,6 +226,7 @@ export type AdminClientOption = {
   company: string | null;
   tradeName?: string | null;
   legalName?: string | null;
+  legalRepresentative?: string | null;
   type: string;
   active: boolean;
   contactName?: string | null;

@@ -813,6 +813,7 @@ export function RucField({
   ariaLabel,
   value,
   onChange,
+  onKeyDown,
   hint,
   error,
   success,
@@ -831,6 +832,7 @@ export function RucField({
   ariaLabel?: string;
   value: string;
   onChange: (value: string) => void;
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
   hint?: string;
   error?: string | null;
   success?: string | null;
@@ -860,6 +862,7 @@ export function RucField({
         value={rucInput(value, maxLength)}
         maxLength={maxLength}
         onChange={(event) => onChange(rucInput(event.target.value, maxLength))}
+        onKeyDown={onKeyDown}
         required={required}
         placeholder={placeholder}
         disabled={disabled}

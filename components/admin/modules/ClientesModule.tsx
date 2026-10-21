@@ -92,6 +92,7 @@ const EMPTY_FORM = {
   ...EMPTY_CLIENT_QUICK,
   name: "",
   company: "",
+  legalRepresentative: "",
   type: "FINAL",
   ruc: "",
   phone: "",
@@ -123,6 +124,7 @@ function formFromClient(client: AdminClientRow): ClientForm {
     rucConfirmationToken: "",
     name: client.name,
     company: client.company ?? "",
+    legalRepresentative: client.legalRepresentative ?? "",
     type: client.type === "RESELLER" ? "RESELLER" : "FINAL",
     ruc: client.ruc ?? "",
     phone: client.phone ?? "",
@@ -343,7 +345,7 @@ export function ClientesModule() {
         </>
       ),
       titleTooltip: `${client.name}${client.company ? ` · ${client.company}` : ""}${client.ruc ? ` · RUC ${client.ruc}` : ""}`,
-      subtitle: [primaryContact, clientLegalName(client) && clientLegalName(client) !== name ? clientLegalName(client) : null].filter(Boolean).join(" · ") || null,
+      subtitle: [client.company ? `Empresa: ${client.company}` : null, primaryContact ? `Comercial: ${primaryContact}` : null, client.legalRepresentative ? `Rep. legal: ${client.legalRepresentative}` : null, clientLegalName(client) && clientLegalName(client) !== name ? `Razón social: ${clientLegalName(client)}` : null].filter(Boolean).join(" · ") || null,
       badges: [
         ...(client.archivedAt ? [{ label: "Archivado", tone: "neutral" as const }] : client.active ? [] : [{ label: "Inactivo", tone: "neutral" as const }]),
         ...(client.contactName
@@ -714,7 +716,8 @@ export function ClientesModule() {
             label="Clientes"
             columns={[
               { label: "Cliente" },
-              { label: "Contacto" },
+              { label: "Empresa / contacto comercial" },
+              { label: "Representante legal" },
               { label: "Eventos", end: true },
               { label: "Contratado", end: true },
               { label: "Saldo", end: true },
@@ -754,7 +757,13 @@ export function ClientesModule() {
                         <AdminIcon name="alert" size={11} />
                       </AdminBadge>
                     )}{" "}
-                    {contact || "—"}
+                    <span className="admin-cell-stack">
+                      <strong>{client.company || "—"}</strong>
+                      <span className="admin-cell-sub">{contact || "Sin contacto comercial"}</span>
+                    </span>
+                  </AdminCell>
+                  <AdminCell title={client.legalRepresentative || "Sin representante legal cargado"}>
+                    {client.legalRepresentative || <span className="admin-muted">—</span>}
                   </AdminCell>
                   <AdminCell end title={`${client._count.events} eventos`}>
                     {formatNumber(client._count.events)}

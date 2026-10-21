@@ -34,6 +34,7 @@ export type ClientFieldPatch = {
   company?: string | null;
   tradeName?: string | null;
   legalName?: string | null;
+  legalRepresentative?: string | null;
   billingEmail?: string | null;
   city?: string | null;
   department?: string | null;
@@ -93,7 +94,7 @@ export function parseClientFields(body: unknown, existingCity?: string | null): 
   // Validar antes de normalizar: un tipo erróneo nunca expresa borrar/ignorar.
   // Los límites se rechazan, no se recortan (incluidos los campos históricos).
   const textLimits = {
-    name: 200, company: FIELD_LIMITS.company, ruc: 30, notes: FIELD_LIMITS.notes,
+    name: 200, company: FIELD_LIMITS.company, legalRepresentative: FIELD_LIMITS.name, ruc: 30, notes: FIELD_LIMITS.notes,
     contactName: FIELD_LIMITS.name, contactRole: FIELD_LIMITS.name,
     email: FIELD_LIMITS.email, contactEmail: FIELD_LIMITS.email, billingEmail: FIELD_LIMITS.email,
     phone: 30, contactPhone: 30, whatsapp: 30,
@@ -158,6 +159,11 @@ export function parseClientFields(body: unknown, existingCity?: string | null): 
   }
 
   if (record.company !== undefined) data.company = optionalText(record.company) ?? null;
+  if (record.legalRepresentative !== undefined) {
+    const legalRepresentative = normalizePersonName(typeof record.legalRepresentative === "string" ? record.legalRepresentative : "");
+    if (legalRepresentative && !personNameValid(legalRepresentative)) return { ok: false, error: FIELD_MESSAGES.name };
+    data.legalRepresentative = legalRepresentative || null;
+  }
   // RUC: si el texto trae el patrón paraguayo se guarda limpio (`80012345-6`);
   // si no, se conserva tal cual (C.I. u otro documento). Soft: no rechaza.
   if (record.ruc !== undefined) data.ruc = rucDocument(record.ruc);
