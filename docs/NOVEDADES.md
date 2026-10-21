@@ -1,3 +1,10 @@
+# 2.1.149
+
+- Inventario: se muestran verificación y cronología unificada por producto, incluyendo conteos, movimientos, incidentes y auditoría.
+- Eventos: se pueden registrar, editar y cancelar necesidades externas por evento sin convertirlas en stock, reserva ni costo confirmado.
+- Papelera: los informes de acciones masivas y restauraciones quedan guardados por empresa y actor para recuperarlos al volver al módulo.
+- Clientes: cédula/RUC queda primero; Enter consulta y precarga identidad fiscal editable, con empresa, representante legal, nombre personalizado y contacto comercial separados.
+
 # Novedades para el dueño
 
 # 2.1.148
